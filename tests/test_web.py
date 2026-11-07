@@ -126,3 +126,23 @@ def test_failures_are_not_cached() -> None:
     with pytest.raises(LookupFailed):
         fetcher(URL, {"q": "a"})
     assert fetcher(URL, {"q": "a"}) == "fine"
+
+
+def test_fetch_bytes_returns_the_raw_file_and_is_rate_limited() -> None:
+    def handler(_request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=b"\x00\x01zip")
+
+    clock = FakeClock()
+    fetcher = _fetcher(httpx2.MockTransport(handler), clock)
+    assert fetcher.fetch_bytes(URL) == b"\x00\x01zip"
+    fetcher.fetch_bytes(URL)
+    assert clock.sleeps  # the second request waited its turn
+
+
+def test_fetch_bytes_reports_an_error_status() -> None:
+    def handler(_request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(404)
+
+    fetcher = _fetcher(httpx2.MockTransport(handler), FakeClock())
+    with pytest.raises(LookupFailed, match="404"):
+        fetcher.fetch_bytes(URL)

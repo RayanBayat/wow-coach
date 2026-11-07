@@ -19,6 +19,9 @@ from wow_coach.errors import LookupFailed
 # Tests pass a fake one, so they never touch the network.
 Fetch = Callable[[str, Mapping[str, str]], str]
 
+# A download function takes a URL and returns the raw bytes (used for the addon zip).
+FetchBytes = Callable[[str], bytes]
+
 DEFAULT_TTL_SECONDS = 3600.0
 DEFAULT_MIN_INTERVAL_SECONDS = 0.5  # at most two requests per second per site
 REQUEST_TIMEOUT_SECONDS = 10.0
@@ -75,9 +78,19 @@ class PoliteFetcher:
             if cached is not None and self._clock() - cached[0] < self._ttl:
                 return cached[1]
             self._wait_for_turn(urlsplit(url).netloc)
-            body = self._download(url, params)
+            body = self._download(url, params).text
             self._cache[key] = (self._clock(), body)
             return body
+
+    def fetch_bytes(self, url: str) -> bytes:
+        """Return the raw bytes of ``url`` (for files like zips). Not cached.
+
+        Raises:
+            LookupFailed: On a timeout, a network problem or an error status.
+        """
+        with self._lock:
+            self._wait_for_turn(urlsplit(url).netloc)
+            return self._download(url, {}).content
 
     def _wait_for_turn(self, site: str) -> None:
         """Sleep if the last request to this site was too recent, then note the new time."""
@@ -88,7 +101,7 @@ class PoliteFetcher:
                 self._sleep(wait)
         self._last_request[site] = self._clock()
 
-    def _download(self, url: str, params: Mapping[str, str]) -> str:
+    def _download(self, url: str, params: Mapping[str, str]) -> httpx2.Response:
         try:
             response = self._client.get(url, params=dict(params))
             response.raise_for_status()
@@ -98,4 +111,4 @@ class PoliteFetcher:
             raise LookupFailed(f"HTTP {error.response.status_code}") from error
         except httpx2.TransportError as error:
             raise LookupFailed("network error") from error
-        return response.text
+        return response

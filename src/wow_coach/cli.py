@@ -1,4 +1,4 @@
-"""The ``wow-coach`` command line: status, watch, mcp, check and wiki.
+"""The ``wow-coach`` command line: setup, status, watch, mcp, check and wiki.
 
 Every command accepts ``--wow-dir PATH`` (the game folder that contains ``WTF/``).
 Without it we use the ``WOW_COACH_WOW_DIR`` variable, then the folder saved by
@@ -7,6 +7,7 @@ Without it we use the ``WOW_COACH_WOW_DIR`` variable, then the folder saved by
 
 import argparse
 import contextlib
+import importlib.metadata
 import os
 import sys
 import time
@@ -21,8 +22,9 @@ from wow_coach.report import format_history, format_status
 from wow_coach.savedvars import find_saved_variables, load_characters
 from wow_coach.server import main as run_mcp_server
 from wow_coach.server import pick_character
+from wow_coach.setup import SetupChoices, SetupWorld, run_setup
 from wow_coach.watch import watch
-from wow_coach.web import Fetch, PoliteFetcher, build_user_agent
+from wow_coach.web import Fetch, FetchBytes, PoliteFetcher, build_user_agent
 from wow_coach.wiki import DEFAULT_MAX_CHARS, answer_read_wiki_page, answer_search_wiki
 
 HISTORY_EVENTS_SHOWN = 10
@@ -45,6 +47,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "your character; these commands let you and any AI app read it.",
     )
     commands = parser.add_subparsers(dest="command", metavar="COMMAND", required=True)
+    setup = commands.add_parser(
+        "setup",
+        parents=[shared],
+        help="get everything ready: find the game, install the addon, create the notebook",
+    )
+    setup.add_argument("--yes", action="store_true", help="ask no questions, take the defaults")
+    setup.add_argument(
+        "--claude-code",
+        action="store_true",
+        help="also install the Claude Code agent and skill (then run: claude --agent wow-coach)",
+    )
+    setup.add_argument("--skip-addon", action="store_true", help="do not install the addon")
     status = commands.add_parser(
         "status", parents=[shared], help="print the character's status and recent history"
     )
@@ -76,6 +90,35 @@ def _wiki(arguments: argparse.Namespace, fetch: Fetch | None) -> int:
         print("wow-coach: give a search text, or --page TITLE to read a page", file=sys.stderr)
         return 2
     return 0
+
+
+def _ask_the_player(question: str) -> str:
+    """Ask a question in the terminal; no answer (input closed) counts as an empty one."""
+    try:
+        return input(question)
+    except EOFError:
+        return ""
+
+
+def _setup(arguments: argparse.Namespace, download: FetchBytes | None) -> int:
+    choices = SetupChoices(
+        wow_dir_flag=arguments.wow_dir,
+        assume_yes=arguments.yes,
+        claude_code=arguments.claude_code,
+        skip_addon=arguments.skip_addon,
+    )
+    world = SetupWorld(
+        environ=os.environ,
+        candidates=None,
+        home=Path.home(),
+        package_version=importlib.metadata.version("wow-coach"),
+        download=PoliteFetcher(build_user_agent()).fetch_bytes if download is None else download,
+        ask=_ask_the_player,
+        interactive=sys.stdin.isatty(),
+        now=time.time(),
+        out=sys.stdout,
+    )
+    return run_setup(choices, world)
 
 
 def _status(wow_dir_flag: Path | None, character: str | None) -> int:
@@ -112,14 +155,19 @@ def _check(wow_dir_flag: Path | None) -> int:
     )
 
 
-def main(argv: Sequence[str] | None = None, fetch: Fetch | None = None) -> int:
+def main(
+    argv: Sequence[str] | None = None,
+    fetch: Fetch | None = None,
+    download: FetchBytes | None = None,
+) -> int:
     """Run the command line and return the exit code (0 means success).
 
-    ``fetch`` replaces the web download (tests only).
+    ``fetch`` and ``download`` replace the web downloads of text and of files (tests only).
     """
     arguments = _build_parser().parse_args(argv)
     flag: Path | None = getattr(arguments, "wow_dir", None)
     commands: dict[str, Callable[[], int]] = {
+        "setup": lambda: _setup(arguments, download),
         "status": lambda: _status(flag, arguments.character),
         "watch": lambda: _watch(flag),
         "mcp": lambda: _mcp(flag),

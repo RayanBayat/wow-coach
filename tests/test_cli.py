@@ -1,6 +1,9 @@
 """Tests for the ``wow-coach`` command line."""
 
+import importlib.metadata
+import io
 import os
+import zipfile
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -8,6 +11,15 @@ import pytest
 
 from wow_coach import cli
 from wow_coach.cli import main
+
+
+def addon_zip_bytes() -> bytes:
+    version = importlib.metadata.version("wow-coach")
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("CoachLink/CoachLink.toc", f"## Version: {version}\n")
+    return buffer.getvalue()
+
 
 FIXTURE = Path(__file__).parent / "fixtures" / "CoachLink.lua"
 
@@ -122,3 +134,22 @@ def test_wiki_reads_a_page_and_a_section(capsys: pytest.CaptureFixture[str]) -> 
 def test_wiki_without_anything_to_do_explains(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["wiki"], fetch=_fake_wiki) == 2
     assert "--page" in capsys.readouterr().err
+
+
+def test_setup_command_runs_with_fake_downloads(
+    wow_dir: Path,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("WOW_COACH_NOTES_FILE", str(tmp_path / "notes.md"))
+    monkeypatch.setattr("pathlib.Path.home", lambda: tmp_path / "home")
+
+    def fake_download(_url: str) -> bytes:
+        return addon_zip_bytes()
+
+    assert main(["setup", "--wow-dir", str(wow_dir), "--yes"], download=fake_download) == 0
+    out = capsys.readouterr().out
+    assert "Step 1 of 5" in out
+    assert (wow_dir / "Interface" / "AddOns" / "CoachLink" / "CoachLink.toc").is_file()
+    assert not (tmp_path / "home").exists()  # no --claude-code, so ~/.claude is untouched
