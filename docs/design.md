@@ -18,9 +18,9 @@ and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
 | Piece | Where | Language | Job |
 |---|---|---|---|
 | CoachLink addon | `addon/CoachLink/` | Lua | Builds the snapshot and history, saves them, shows the copy window |
-| `wow-coach` program | `src/wow_coach/` | Python 3.14 | Finds and reads the saved file; commands `status`, `watch`, `check`, `mcp`, `wiki`; the MCP server; coach notes; game lookups |
+| `wow-coach` program | `src/wow_coach/` | Python 3.14 | Finds and reads the saved file; commands `status`, `characters`, `progress`, `watch`, `check`, `mcp`, `wiki`; the MCP server; player notes and character journals; game lookups |
 | Coach skill | `src/wow_coach/assets/skills/wow-coach/SKILL.md` | Markdown | Tells an AI how to coach, including how to plan toward a goal |
-| Coach agent | `src/wow_coach/assets/agents/wow-coach.md` | Markdown | A Claude Code agent: runs a whole session (checks setup, starts live mode, greets, plans, says goodbye) and brings its own MCP server |
+| Coach agent | `src/wow_coach/assets/agents/wow-coach.md` | Markdown | A Claude Code agent: runs a whole session (checks setup, starts live mode, asks which character to continue, greets, plans, says goodbye) and brings its own MCP server |
 | Tests | `tests/`, `addon/tests/` | Python, Lua | Python tests, and a Lua test run with a fake WoW API |
 
 ## Settings, setup and the packaged Claude files
@@ -163,6 +163,30 @@ Checked against the game's own `Blizzard_CombatLog.lua` SavedVariables file:
 - The first `/coach` after you update the addon still saves with the old code, because the
   save runs before the reload.
 
+## The coach's memory: player notes and character journals
+
+The coach keeps two kinds of Markdown file in the data folder (code: `notes.py`):
+
+| File | Holds | Tools |
+|---|---|---|
+| `coach-notes.md` (the **player notes**) | The person: how much detail they want, click-by-click steps, Questie or not, solo or group, computer notes. Shared by all characters. Same file as in 0.4.0, so an existing notebook keeps working | `save_player_notes` |
+| `characters/<Name-Realm>.md` (a **character journal**) | One character: choices (spec, professions), `## Goals` and plans, progress log, open advice | `save_coach_notes` |
+
+- `read_coach_notes(character)` returns both, with headings, and says when the journal does not
+  exist yet. Setup creates only the player notes; the coach creates a journal the first time
+  it coaches a character.
+- Journal file names come from `Name-Realm` with the characters `<>:"/\|?*` and control
+  characters replaced by `_` (spaces stay), so they work on Windows, macOS and Linux.
+  `WOW_COACH_NOTES_FILE` moves the player notes file, and the `characters` folder moves with it.
+- A character is found by its name or `Name-Realm`, case-insensitive. Without a name the most
+  recently saved character is used.
+- `list_characters` shows each character's first bullet under `## Goals` (or "no journal yet").
+  The progress numbers come from the addon's `progress` list, not from the journals:
+  `progress_summary` (code: `format_progress` in `report.py`) groups points less than 30
+  minutes apart into one play session, starts a session at its login event (from `history`)
+  because a session often has just one save point, and estimates XP per hour of play from that.
+- Each file is limited to 100 KB. Saving replaces the whole file.
+
 ## Game lookups (Warcraft Wiki)
 
 The MCP server (and the `wow-coach wiki` command) can look up game facts so the coach does not
@@ -238,6 +262,7 @@ revisited.
   automation, so it is allowed under Blizzard's addon rules like any other addon.
 - Every part of the snapshot is read inside a protected call. If one game function breaks in a
   patch, that part is listed under `errors` and the rest still saves.
-- The program only reads the saved file. Its only write is the coach notes file.
+- The program only reads the saved file. Its only writes are the player notes file and the
+  character journals.
 - The addon uploads nothing. The program never sends your character anywhere. Its only
   internet use is the wiki lookups above, which send just the words being looked up.

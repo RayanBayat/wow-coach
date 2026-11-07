@@ -10,7 +10,7 @@ Combine it with [Way 2](connect-an-ai-app.md) so the agent can read your charact
 
 ## Shortcut for Claude Code
 
-Run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup --claude-code`.
+Run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.5.0 wow-coach setup --claude-code`.
 It copies the skill (and the ready-made coach agent, see
 [the Claude Code agent](claude-code-agent.md)) into `~/.claude`. For other agents, follow the
 steps below.
@@ -58,9 +58,11 @@ The skill tells the agent to:
 1. Read your character with the MCP tools if they are connected, or from a sheet you paste
    (`/coach copy`), or by asking you.
 2. Ask your preferences the first time (detail level, step-by-step clicks, Questie or not, solo
-   or group, pace) and write them in the coach's notebook.
+   or group, pace) and write them in the player notes. Each character also gets its own
+   journal for choices, goals and plans.
 3. Teach in short steps and check your quests, gear and spells each time.
-4. Update the notebook so it remembers next time.
+4. Ask which character to coach (a numbered list, or clickable options in Claude Code), and
+   update that character's journal so it remembers next time.
 
 ## Live mode (Claude Code)
 
@@ -85,7 +87,7 @@ Claude as a message, so Claude reacts. Each line ends with the reason:
 To start it, say to Claude: `start live mode`. Claude runs this command with the Monitor tool:
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach watch
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.5.0 wow-coach watch
 ```
 
 Monitors last at most 30 minutes. The skill tells Claude to restart it while the game runs.

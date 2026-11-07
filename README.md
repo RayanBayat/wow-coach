@@ -20,7 +20,7 @@ to code.
 |---|---|---|---|---|
 | For | Anyone, with any AI chat | People who use an AI app that supports MCP | People who use an AI agent such as Claude Code | People who use Claude Code (the easiest) |
 | Effort | Lowest: install the addon only | Medium: also install uv and edit one settings file | Medium: also copy one folder; live mode needs Claude Code | One setup command, then one start command |
-| What you get | You type `/coach copy`, paste the text into the chat | The AI reads your character itself and keeps a notebook | The AI answers on its own each time you type `/coach` | A coach that sets everything up, takes your goal and plans how to reach it |
+| What you get | You type `/coach copy`, paste the text into the chat | The AI reads your character itself and remembers each character | The AI answers on its own each time you type `/coach` | A coach that sets everything up, lets you pick which character to continue, takes your goal and plans how to reach it |
 | Guide | [Use with any AI chat](docs/use-with-any-ai-chat.md) | [Connect an AI app](docs/connect-an-ai-app.md) | [Skill and live mode](docs/coach-skill-and-live-mode.md) | [The Claude Code agent](docs/claude-code-agent.md) |
 
 You can start with Way 1 and add the others later.
@@ -29,9 +29,9 @@ You can start with Way 1 and add the others later.
 
 Shortcut: if you have [uv](https://docs.astral.sh/uv/getting-started/installation/), this line
 does steps 1 to 3 for you:
-`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup`
+`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.5.0 wow-coach setup`
 
-1. Download `CoachLink-0.4.0.zip` from the
+1. Download `CoachLink-0.5.0.zip` from the
    [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest).
 2. Unzip it into the game's `Interface\AddOns` folder, so this file exists:
    `World of Warcraft\_forever_\Interface\AddOns\CoachLink\CoachLink.toc`.
@@ -53,10 +53,10 @@ lists the commands.
 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (the
    [Connect an AI app](docs/connect-an-ai-app.md) guide, step 1, shows how).
 2. In a terminal, run this one line. It finds your game, installs the addon, creates your
-   notebook and installs the coach into Claude Code:
+   player notes file and installs the coach into Claude Code:
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup --claude-code
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.5.0 wow-coach setup --claude-code
    ```
 
 3. Restart the game completely if the setup told you to, then start your coach:
@@ -90,6 +90,19 @@ wow-coach wiki "Abigail Shiel" --page "Abigail Shiel"
 - [Troubleshooting](docs/troubleshooting.md)
 - [Glossary](docs/glossary.md)
 - [How it works](docs/design.md)
+
+## What the coach remembers
+
+Each character has its own journal (choices, goals and plans, progress, open advice), and you
+have player notes shared by all characters (how you like to be coached). The addon also keeps
+a progress log per character. The tools the AI uses:
+
+- `list_characters`: your characters, most recently played first, with each one's goal.
+- `character_status`, `recent_history`, `progress_summary`: where a character is, what it did, and how it progressed lately.
+- `read_coach_notes`, `save_coach_notes`, `save_player_notes`: read both kinds of notes, save one character's journal, save the player notes.
+- `search_wiki`, `read_wiki_page`: game facts from the Warcraft Wiki.
+
+In a terminal, `wow-coach characters` and `wow-coach progress` show the same lists.
 
 ## Privacy and safety
 

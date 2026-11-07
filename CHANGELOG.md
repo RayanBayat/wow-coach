@@ -4,6 +4,47 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-11-07
+
+Every character now has its own memory, and each coaching session starts by choosing one.
+
+### Added
+
+- A progress log per character. The addon adds a small point (level, XP, gold, place, quests
+  ready to turn in) every time it saves, at most 500 points, skipping an identical point
+  within 60 seconds. It is optional data: `formatVersion` stays 1, and older saves still work.
+- `progress_summary` (MCP tool) and `wow-coach progress [--character NAME] [--days N]`: when
+  and where you last played, play sessions, levels, XP, gold, XP per hour, quests turned in,
+  deaths, and what changed since the previous session.
+- `wow-coach characters`: your characters, most recently played first, with level, class, zone,
+  when you last played and your goal. The MCP tool `list_characters` shows the same, including
+  the first goal from each character's journal.
+- Character journals: one file per character in the data folder (`characters/<Name-Realm>.md`).
+- `save_player_notes` (MCP tool): saves the player notes shared by all characters.
+- The Claude Code agent now asks which character to continue (clickable options, or a numbered
+  list when the session cannot show them), then greets you with where you were and what
+  changed. It loads the skill itself if it was not preloaded.
+- `wow-coach check` lists the character journals that exist.
+- The skill explains player notes versus journals and choosing a character, with separate
+  templates for both.
+
+### Changed
+
+- **`save_coach_notes` now saves the journal of one character**, not the shared notebook
+  (new optional `character` argument; default is the most recently saved character).
+  `read_coach_notes` returns the player notes and that character's journal, with headings.
+  Your existing notebook (`coach-notes.md`) is kept as the player notes; nothing is moved. Use
+  `save_player_notes` to change it.
+- `wow-coach setup` creates the player notes file only; the coach creates a journal when it
+  first coaches a character.
+- The skill uses `--quiet` for live mode, like the agent.
+- If the addon cannot read the quest log, `quests` is now missing from the snapshot instead of
+  an empty or partial list.
+
+### Notes
+
+- Adding the progress log needs only `/reload` in game; no new addon file was added.
+
 ## [0.4.0] - 2026-11-07
 
 ### Added
