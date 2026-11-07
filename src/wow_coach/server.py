@@ -20,6 +20,7 @@ from pathlib import Path
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
+from wow_coach.config import config_path
 from wow_coach.errors import WowCoachError
 from wow_coach.gamedir import resolve_game_folder
 from wow_coach.notes import notes_path, read_notes, save_notes
@@ -173,7 +174,9 @@ def build_server(
     def with_game_folder(answer: Callable[[Path], str]) -> str:
         """Run ``answer`` with the game folder, or return why it can't be found."""
         try:
-            folder = resolve_game_folder(wow_dir_flag, environ=env).path
+            folder = resolve_game_folder(
+                wow_dir_flag, environ=env, config_file=config_path(environ=env)
+            ).path
         except WowCoachError as error:
             return str(error)
         return answer(folder)

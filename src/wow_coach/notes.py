@@ -12,15 +12,14 @@ These rules are small, so we write them here instead of adding the ``platformdir
 package as a dependency.
 """
 
-import sys
 from collections.abc import Mapping
 from pathlib import Path
 
+from wow_coach.datafolder import data_folder
 from wow_coach.errors import NotesTooLarge
 
 NOTES_FILE_VARIABLE = "WOW_COACH_NOTES_FILE"
 MAX_NOTES_BYTES = 100 * 1024
-_FOLDER = "wow-coach"
 _FILE = "coach-notes.md"
 
 
@@ -40,15 +39,7 @@ def notes_path(
     explicit = environ.get(NOTES_FILE_VARIABLE, "").strip()
     if explicit:
         return Path(explicit).expanduser()
-    platform = sys.platform if platform is None else platform
-    home = Path.home() if home is None else home
-    if platform == "win32":
-        base = Path(environ.get("LOCALAPPDATA") or home / "AppData" / "Local")
-    elif platform == "darwin":
-        base = home / "Library" / "Application Support"
-    else:
-        base = Path(environ.get("XDG_DATA_HOME") or home / ".local" / "share")
-    return base / _FOLDER / _FILE
+    return data_folder(environ=environ, platform=platform, home=home) / _FILE
 
 
 def read_notes(path: Path) -> str:

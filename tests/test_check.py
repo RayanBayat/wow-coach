@@ -1,6 +1,7 @@
 """Tests for ``wow-coach check`` (friendly troubleshooting output)."""
 
 import io
+import json
 import os
 from collections.abc import Mapping
 from pathlib import Path
@@ -23,7 +24,11 @@ def check(
     candidates: list[Path] | None = None,
 ) -> tuple[int, str]:
     out = io.StringIO()
-    env = {"WOW_COACH_NOTES_FILE": "/notes/coach-notes.md", **(environ or {})}
+    env = {
+        "WOW_COACH_NOTES_FILE": "/notes/coach-notes.md",
+        "WOW_COACH_CONFIG_FILE": os.environ["WOW_COACH_CONFIG_FILE"],
+        **(environ or {}),
+    }
     code = run_check(flag, environ=env, candidates=candidates or [], now=NOW, out=out)
     return code, out.getvalue()
 
@@ -93,3 +98,12 @@ def test_notes_file_location_is_shown(tmp_path: Path) -> None:
     _, text = check(tmp_path)
     # Path() writes it the way this computer does (backslashes on Windows).
     assert str(Path("/notes/coach-notes.md")) in text
+
+
+def test_check_says_when_the_saved_setting_was_used(tmp_path: Path) -> None:
+    install_save(tmp_path / "game")
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"wow_dir": str(tmp_path / "game")}), encoding="utf-8")
+    code, text = check(None, environ={"WOW_COACH_CONFIG_FILE": str(config)})
+    assert code == 0
+    assert "found via the saved setting (wow-coach setup)" in text

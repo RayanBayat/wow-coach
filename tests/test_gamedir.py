@@ -1,5 +1,6 @@
 """Tests for finding the game folder (flag, environment variable, auto-detect)."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -95,3 +96,35 @@ def test_linux_candidates_are_under_home() -> None:
         home / "Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_forever_",
         home / ".wine/drive_c/Program Files (x86)/World of Warcraft/_forever_",
     ]
+
+
+def save_setting(config: Path, folder: Path) -> Path:
+    config.write_text(json.dumps({"wow_dir": str(folder)}), encoding="utf-8")
+    return config
+
+
+def test_saved_setting_wins_over_auto_detect(tmp_path: Path) -> None:
+    saved = make_game(tmp_path / "saved")
+    auto = make_game(tmp_path / "auto")
+    config = save_setting(tmp_path / "config.json", saved)
+    found = resolve_game_folder(None, environ={}, candidates=[auto], config_file=config)
+    assert found.path == saved
+    assert found.how_found == "the saved setting (wow-coach setup)"
+
+
+def test_env_and_flag_win_over_saved_setting(tmp_path: Path) -> None:
+    saved = make_game(tmp_path / "saved")
+    env = make_game(tmp_path / "env")
+    flag = make_game(tmp_path / "flag")
+    config = save_setting(tmp_path / "config.json", saved)
+    from_env = resolve_game_folder(
+        None, environ={ENV_VARIABLE: str(env)}, candidates=[], config_file=config
+    )
+    assert from_env.path == env
+    assert resolve_game_folder(flag, environ={}, candidates=[], config_file=config).path == flag
+
+
+def test_broken_saved_setting_says_to_run_setup_again(tmp_path: Path) -> None:
+    config = save_setting(tmp_path / "config.json", tmp_path / "gone")
+    with pytest.raises(GameFolderNotFound, match="wow-coach setup"):
+        resolve_game_folder(None, environ={}, candidates=[], config_file=config)

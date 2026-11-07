@@ -1,7 +1,8 @@
 """The ``wow-coach`` command line: status, watch, mcp, check and wiki.
 
 Every command accepts ``--wow-dir PATH`` (the game folder that contains ``WTF/``).
-Without it we use the ``WOW_COACH_WOW_DIR`` variable, then look in the usual install places.
+Without it we use the ``WOW_COACH_WOW_DIR`` variable, then the folder saved by
+``wow-coach setup``, then look in the usual install places.
 """
 
 import argparse
@@ -13,6 +14,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from wow_coach.check import run_check
+from wow_coach.config import config_path
 from wow_coach.errors import WowCoachError
 from wow_coach.gamedir import resolve_game_folder
 from wow_coach.report import format_history, format_status
@@ -34,7 +36,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "--wow-dir",
         type=Path,
         metavar="PATH",
-        help="the game folder that contains WTF (default: $WOW_COACH_WOW_DIR, then auto-detect)",
+        help="the game folder that contains WTF (default: $WOW_COACH_WOW_DIR, then the folder "
+        "saved by `wow-coach setup`, then auto-detect)",
     )
     parser = argparse.ArgumentParser(
         prog="wow-coach",
@@ -76,7 +79,7 @@ def _wiki(arguments: argparse.Namespace, fetch: Fetch | None) -> int:
 
 
 def _status(wow_dir_flag: Path | None, character: str | None) -> int:
-    folder = resolve_game_folder(wow_dir_flag).path
+    folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
     characters = load_characters(find_saved_variables(folder))
     chosen = pick_character(characters, character)
     if chosen is None:
@@ -91,7 +94,7 @@ def _status(wow_dir_flag: Path | None, character: str | None) -> int:
 
 
 def _watch(wow_dir_flag: Path | None) -> int:
-    folder = resolve_game_folder(wow_dir_flag).path
+    folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
     # Ctrl+C is how you are supposed to stop watching, so it is not an error.
     with contextlib.suppress(KeyboardInterrupt):
         watch(folder, out=sys.stdout, sleep=time.sleep)

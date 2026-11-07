@@ -8,7 +8,8 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TextIO
 
-from wow_coach.errors import CoachDataMissing, GameFolderNotFound, WowCoachError
+from wow_coach.config import config_path
+from wow_coach.errors import CoachDataMissing, ConfigUnreadable, GameFolderNotFound, WowCoachError
 from wow_coach.gamedir import resolve_game_folder
 from wow_coach.notes import notes_path
 from wow_coach.report import format_age
@@ -79,8 +80,13 @@ def run_check(
         print(text, file=out)
 
     try:
-        found = resolve_game_folder(wow_dir_flag, environ=environ, candidates=candidates)
-    except GameFolderNotFound as error:
+        found = resolve_game_folder(
+            wow_dir_flag,
+            environ=environ,
+            candidates=candidates,
+            config_file=config_path(environ=environ),
+        )
+    except (GameFolderNotFound, ConfigUnreadable) as error:
         say(str(error))
         return 1
     say(f"Game folder: {found.path}")

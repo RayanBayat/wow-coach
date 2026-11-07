@@ -31,3 +31,11 @@ class NotesTooLarge(WowCoachError):  # noqa: N818
 
 class LookupFailed(WowCoachError):  # noqa: N818
     """A website did not give us an answer (timeout, network problem, error status)."""
+
+
+class ConfigUnreadable(WowCoachError):  # noqa: N818
+    """The saved settings file (config.json) is damaged."""
+
+
+class SetupFailed(WowCoachError):  # noqa: N818
+    """A step of ``wow-coach setup`` could not be completed."""

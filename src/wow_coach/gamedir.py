@@ -1,10 +1,11 @@
 """Find the World of Warcraft: Forever folder (the one that contains ``WTF/``).
 
-We look in three places, in this order, and the first hit wins:
+We look in four places, in this order, and the first hit wins:
 
 1. the ``--wow-dir`` option (you typed it, so you meant it),
 2. the ``WOW_COACH_WOW_DIR`` environment variable,
-3. the places the game is normally installed on your operating system.
+3. the folder saved by ``wow-coach setup`` (see ``config.py``),
+4. the places the game is normally installed on your operating system.
 
 The list of "normal places" is a function argument, so tests never depend on the
 computer they run on.
@@ -17,12 +18,14 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from wow_coach.config import load_saved_wow_dir
 from wow_coach.errors import GameFolderNotFound
 
 ENV_VARIABLE = "WOW_COACH_WOW_DIR"
 FIX_HINT = (
-    f"Fix: pass the folder with --wow-dir PATH, or set the {ENV_VARIABLE} environment "
-    "variable. It is the folder that contains the WTF folder."
+    "Fix: run `wow-coach setup` (it asks for the folder and remembers it), or pass the "
+    f"folder with --wow-dir PATH, or set the {ENV_VARIABLE} environment variable. "
+    "It is the folder that contains the WTF folder."
 )
 
 _PRODUCT_FOLDER = "World of Warcraft/_forever_"
@@ -86,12 +89,14 @@ def resolve_game_folder(
     *,
     environ: Mapping[str, str] | None = None,
     candidates: Sequence[Path] | None = None,
+    config_file: Path | None = None,
 ) -> GameFolder:
-    """Pick the game folder: flag, then environment variable, then auto-detect.
+    """Pick the game folder: flag, environment variable, saved setting, then auto-detect.
 
     Args:
         flag: The ``--wow-dir`` value, or None.
         environ: Environment variables (default: the real ones).
+        config_file: The saved settings file to read, or None to ignore saved settings.
         candidates: Folders to auto-detect (default: ``default_candidates()``).
 
     Raises:
@@ -104,6 +109,14 @@ def resolve_game_folder(
     if from_env:
         path = _must_be_a_folder(Path(from_env).expanduser(), f"The {ENV_VARIABLE} variable")
         return GameFolder(path, f"the {ENV_VARIABLE} environment variable")
+    saved = None if config_file is None else load_saved_wow_dir(config_file)
+    if saved is not None:
+        if not saved.is_dir():
+            raise GameFolderNotFound(
+                f"The game folder saved by `wow-coach setup` ({str(saved)!r}) does not exist "
+                "any more. Run `wow-coach setup` again to pick the folder."
+            )
+        return GameFolder(saved, "the saved setting (wow-coach setup)")
     tried = list(default_candidates() if candidates is None else candidates)
     for candidate in tried:
         if (candidate / "WTF").is_dir():
