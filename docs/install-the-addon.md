@@ -8,6 +8,20 @@ putting its folder in the right place.
 
 You need: WoW Forever installed through the Battle.net app, and about 10 minutes.
 
+## The shortcut: let wow-coach do it
+
+If you have [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, this one
+line finds your game folder, downloads the addon, installs it and remembers where your game is
+(it asks you to paste the folder if it cannot find it):
+
+```
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup
+```
+
+**You should see:** five steps, each with an `OK:` line. Quit the game completely and start
+it again if it tells you to. You can run it again at any time; it only changes what is missing
+or old. If you prefer to do it by hand, read on.
+
 ## Step 1: Download the addon
 
 1. Open https://github.com/RayanBayat/wow-coach/releases/latest

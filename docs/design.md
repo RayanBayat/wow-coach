@@ -19,8 +19,25 @@ and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
 |---|---|---|---|
 | CoachLink addon | `addon/CoachLink/` | Lua | Builds the snapshot and history, saves them, shows the copy window |
 | `wow-coach` program | `src/wow_coach/` | Python 3.14 | Finds and reads the saved file; commands `status`, `watch`, `check`, `mcp`, `wiki`; the MCP server; coach notes; game lookups |
-| Coach skill | `src/wow_coach/assets/skills/wow-coach/SKILL.md` | Markdown | Tells an AI how to coach |
+| Coach skill | `src/wow_coach/assets/skills/wow-coach/SKILL.md` | Markdown | Tells an AI how to coach, including how to plan toward a goal |
+| Coach agent | `src/wow_coach/assets/agents/wow-coach.md` | Markdown | A Claude Code agent: runs a whole session (checks setup, starts live mode, greets, plans, says goodbye) and brings its own MCP server |
 | Tests | `tests/`, `addon/tests/` | Python, Lua | Python tests, and a Lua test run with a fake WoW API |
+
+## Settings, setup and the packaged Claude files
+
+- `wow-coach setup` (`setup.py`) finds the game folder, installs or updates the addon from
+  the GitHub release zip of the same version (`CoachLink-<version>.zip`), creates the notebook,
+  and with `--claude-code` copies the agent and skill into `~/.claude`. It refuses zips with
+  entries outside `CoachLink/` (zip slip), swaps the new addon in before deleting the old one,
+  leaves symbolic links (developer copies) alone, and keeps a `.bak` of a different file it
+  replaces. It writes only to the game's `Interface/AddOns/CoachLink`, the data folder and
+  `~/.claude`.
+- The game folder is picked in this order: `--wow-dir`, the `WOW_COACH_WOW_DIR` variable, the
+  folder saved in `config.json` (data folder, override with `WOW_COACH_CONFIG_FILE`), then
+  auto-detect.
+- The agent and skill live inside the package (`src/wow_coach/assets/`) so that `pip` and
+  `uvx` installs carry them. The agent starts the MCP server with `uvx` pinned to the release
+  tag; `tests/test_release_pins.py` fails if that pin or a docs pin is not the project version.
 
 ## Data flow
 

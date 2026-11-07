@@ -13,7 +13,7 @@ facts. Users' docs start at `README.md`.
 |---|---|
 | `addon/CoachLink/` | The WoW addon (Lua 5.1): `CoachLink.toc`, `CoachLink.lua` |
 | `addon/tests/run_addon_test.lua` | Runs the addon against a fake WoW API |
-| `src/wow_coach/` | Python package: Lua-table parser, saved-file finder and loader, report, `cli`, `watch`, `notes`, MCP `server`; game lookups: `web` (polite fetcher), `wiki` (search and read tools), `wikitext` (wiki markup to plain text) |
+| `src/wow_coach/` | Python package: Lua-table parser, saved-file finder and loader, report, `cli`, `watch`, `notes`, saved settings (`config`, `datafolder`), `setup` (the `wow-coach setup` command), packaged-file reader (`assets`), MCP `server`; game lookups: `web` (polite fetcher), `wiki` (search and read tools), `wikitext` (wiki markup to plain text) |
 | `tests/` | pytest. `test_addon_contract.py` runs the Lua test and reads its output with the Python code. `tests/fixtures/wiki/` holds real wiki responses; tests never use the network |
 | `src/wow_coach/assets/` | Claude files shipped inside the package so `wow-coach setup` can copy them: `skills/wow-coach/SKILL.md` (the Agent Skill; folder name must equal `name`) and `agents/wow-coach.md` (the Claude Code agent) |
 | `docs/` | User guides, `design.md` (how it works), `troubleshooting.md`, `glossary.md` |
@@ -46,5 +46,9 @@ luajit addon/tests/run_addon_test.lua
 - **Python:** uv, exact version pins, `mypy --strict`, ruff, test first (TDD).
 - **Commits:** Conventional Commits, one logical change per commit.
 - **Update `CHANGELOG.md`** with every user-visible change, under an `[Unreleased]` heading
-  until released. Releasing = bump the version in `CoachLink.toc` and `pyproject.toml`, move the
-  changelog section under the version, tag `vX.Y.Z`; the release workflow does the rest.
+  until released. Releasing = bump the version in `pyproject.toml`, `CoachLink.toc`, the `@vX.Y.Z` pin
+  in `src/wow_coach/assets/agents/wow-coach.md` and every `@vX.Y.Z` in the docs and skill
+  (`tests/test_release_pins.py` fails if one is missed), run `uv lock`, move the changelog
+  section under the version, tag `vX.Y.Z`; the release workflow does the rest. The setup
+  command downloads `CoachLink-<version>.zip` from that tag's release, so the release must
+  exist before users run setup.

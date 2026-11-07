@@ -24,8 +24,11 @@ The AI app cannot see your game. Paste the text from `/coach copy` into the mess
 
 ## `wow-coach check` says the game folder wasn't found
 
-1. Find the `_forever_` folder (see [Install the addon](install-the-addon.md), step 2).
-2. Set `WOW_COACH_WOW_DIR` to that folder. In an app config it goes in the `env` section
+1. Easiest: run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup`.
+   It asks for the folder, checks it and remembers it. If it says a saved folder does not
+   exist any more (you moved the game), run it again.
+2. Or find the `_forever_` folder (see [Install the addon](install-the-addon.md), step 2)
+   and set `WOW_COACH_WOW_DIR` to that folder. In an app config it goes in the `env` section
    (see [Connect an AI app](connect-an-ai-app.md)). In a terminal: on Windows PowerShell
    `$env:WOW_COACH_WOW_DIR = "D:\Games\World of Warcraft\_forever_"`, on macOS and Linux
    `export WOW_COACH_WOW_DIR="/path/to/_forever_"`.

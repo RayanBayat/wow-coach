@@ -8,6 +8,13 @@ relevant. The format is an open standard: https://agentskills.io/specification
 The wow-coach skill is the same instructions file used in the other ways, in the skill format.
 Combine it with [Way 2](connect-an-ai-app.md) so the agent can read your character.
 
+## Shortcut for Claude Code
+
+Run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup --claude-code`.
+It copies the skill (and the ready-made coach agent, see
+[the Claude Code agent](claude-code-agent.md)) into `~/.claude`. For other agents, follow the
+steps below.
+
 ## Step 1: Get the skill folder
 
 1. Open https://github.com/RayanBayat/wow-coach and click **Code**, then **Download ZIP**.

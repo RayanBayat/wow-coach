@@ -16,16 +16,20 @@ to code.
 
 ## Pick your way
 
-| | Way 1: paste | Way 2: connect an AI app | Way 3: skill and live mode |
-|---|---|---|---|
-| For | Anyone, with any AI chat | People who use an AI app that supports MCP | People who use an AI agent such as Claude Code |
-| Effort | Lowest: install the addon only | Medium: also install uv and edit one settings file | Medium: also copy one folder; live mode needs Claude Code |
-| What you get | You type `/coach copy`, paste the text into the chat | The AI reads your character itself and keeps a notebook | The AI answers on its own each time you type `/coach` |
-| Guide | [Use with any AI chat](docs/use-with-any-ai-chat.md) | [Connect an AI app](docs/connect-an-ai-app.md) | [Skill and live mode](docs/coach-skill-and-live-mode.md) |
+| | Way 1: paste | Way 2: connect an AI app | Way 3: skill and live mode | Way 4: the Claude Code agent |
+|---|---|---|---|---|
+| For | Anyone, with any AI chat | People who use an AI app that supports MCP | People who use an AI agent such as Claude Code | People who use Claude Code (the easiest) |
+| Effort | Lowest: install the addon only | Medium: also install uv and edit one settings file | Medium: also copy one folder; live mode needs Claude Code | One setup command, then one start command |
+| What you get | You type `/coach copy`, paste the text into the chat | The AI reads your character itself and keeps a notebook | The AI answers on its own each time you type `/coach` | A coach that sets everything up, takes your goal and plans how to reach it |
+| Guide | [Use with any AI chat](docs/use-with-any-ai-chat.md) | [Connect an AI app](docs/connect-an-ai-app.md) | [Skill and live mode](docs/coach-skill-and-live-mode.md) | [The Claude Code agent](docs/claude-code-agent.md) |
 
 You can start with Way 1 and add the others later.
 
 ## Quick start (Way 1)
+
+Shortcut: if you have [uv](https://docs.astral.sh/uv/getting-started/installation/), this line
+does steps 1 to 3 for you:
+`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup`
 
 1. Download `CoachLink-0.4.0.zip` from the
    [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest).
@@ -43,6 +47,26 @@ You can start with Way 1 and add the others later.
 
 In game, `/coach` saves your character (the screen reloads for a few seconds) and `/coach help`
 lists the commands.
+
+## Way 4: the Claude Code agent (the easiest if you use Claude Code)
+
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (the
+   [Connect an AI app](docs/connect-an-ai-app.md) guide, step 1, shows how).
+2. In a terminal, run this one line. It finds your game, installs the addon, creates your
+   notebook and installs the coach into Claude Code:
+
+   ```
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup --claude-code
+   ```
+
+3. Restart the game completely if the setup told you to, then start your coach:
+
+   ```
+   claude --agent wow-coach
+   ```
+
+Tell it your goal ("level 20 by Sunday", "100 gold for the mount") and it makes a plan.
+[More in the guide](docs/claude-code-agent.md).
 
 ## Game lookups
 
@@ -62,6 +86,7 @@ wow-coach wiki "Abigail Shiel" --page "Abigail Shiel"
 - [Use with any AI chat](docs/use-with-any-ai-chat.md)
 - [Connect an AI app](docs/connect-an-ai-app.md)
 - [Skill and live mode](docs/coach-skill-and-live-mode.md)
+- [The Claude Code agent](docs/claude-code-agent.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Glossary](docs/glossary.md)
 - [How it works](docs/design.md)

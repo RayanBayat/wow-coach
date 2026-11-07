@@ -59,9 +59,15 @@ uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach check
 **You should see:** lines saying whether your game folder was found and whether a saved
 character exists. The first run takes a minute while things download.
 
-If the game folder is not found, note where `_forever_` is (see
-[the install guide](install-the-addon.md), step 2). Use it in the next step as
-`WOW_COACH_WOW_DIR`. The helper looks by itself in the usual places: Windows
+If the game folder is not found, run this once. It asks you to paste the path of `_forever_`
+(see [the install guide](install-the-addon.md), step 2), checks it and remembers it, so the AI
+app does not need to be told:
+
+```
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup
+```
+
+(As another way, you can give the folder to your app as `WOW_COACH_WOW_DIR`, below.) The helper looks by itself in the usual places: Windows
 `C:\Program Files (x86)\World of Warcraft\_forever_` (or `C:\Program Files\...`, any drive),
 macOS `/Applications/World of Warcraft/_forever_`, and Linux with Wine
 `~/Games/battlenet/drive_c/...` or `~/.wine/drive_c/...`.
@@ -70,7 +76,8 @@ Optional settings (environment variables, which are named values you hand to a p
 
 | Name | Meaning |
 |---|---|
-| `WOW_COACH_WOW_DIR` | The `_forever_` folder, when it is not in a usual place |
+| `WOW_COACH_WOW_DIR` | The `_forever_` folder, when it is not in a usual place. Overrides the folder saved by `wow-coach setup` |
+| `WOW_COACH_CONFIG_FILE` | Where the saved settings (`config.json`, the remembered game folder) live. Default: the same folder as the notebook |
 | `WOW_COACH_NOTES_FILE` | Where the notebook file lives. Default: Windows `%LOCALAPPDATA%\wow-coach\coach-notes.md`, macOS `~/Library/Application Support/wow-coach/coach-notes.md`, Linux `~/.local/share/wow-coach/coach-notes.md` |
 
 ## Step 3: Add it to your app

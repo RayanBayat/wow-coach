@@ -4,6 +4,32 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-11-07
+
+### Added
+
+- A ready-made Claude Code agent. After `wow-coach setup --claude-code`, `claude --agent
+  wow-coach` starts a session that checks your setup, starts live mode when the game runs,
+  reads your character and notebook, and greets you with your progress. It brings its own
+  wow-coach connection. Guide: `docs/claude-code-agent.md`.
+- `wow-coach setup`: finds your game folder, installs or updates the CoachLink addon from the
+  release zip, creates your notebook, and (with `--claude-code`) installs the agent and skill.
+  Plain-language steps with OK or PROBLEM for each; safe to run again. Flags: `--wow-dir`,
+  `--yes`, `--claude-code`, `--skip-addon`.
+- Saved settings: setup remembers the game folder in `config.json` next to the notebook
+  (override the file with `WOW_COACH_CONFIG_FILE`). The game folder is now picked from
+  `--wow-dir`, then `WOW_COACH_WOW_DIR`, then the saved setting, then auto-detect.
+- Goals and plans: the skill has a new "Goals and plans" section (make the goal measurable,
+  research, write a dated plan, today's next steps, track progress), and the notebook
+  template has a "## Goals" section.
+- A test that fails when the agent file, the addon or the docs pin a version other than the
+  project's, so a release cannot ship a stale pin.
+
+### Changed
+
+- The skill moved from `skills/wow-coach/` to `src/wow_coach/assets/skills/wow-coach/` so that
+  installs of the package carry it. Download it from the new path if you used the old link.
+
 ## [0.3.0] - 2026-11-07
 
 ### Added
