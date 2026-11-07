@@ -96,7 +96,7 @@ def test_fresh_setup_installs_everything_and_remembers_the_folder(session: Sessi
     assert (session.addon / "CoachLink.toc").is_file()
     assert session.downloaded == [RELEASE_URL.format(v=VERSION)]
     assert load_saved_wow_dir(config_path(environ=session.environ)) == session.game
-    assert "# Coach notes" in Path(session.environ["WOW_COACH_NOTES_FILE"]).read_text("utf-8")
+    assert "# Player notes" in Path(session.environ["WOW_COACH_NOTES_FILE"]).read_text("utf-8")
     assert "quit WoW completely" in text
     assert "PROBLEM" not in text
     assert "Setup finished. No problems." in text

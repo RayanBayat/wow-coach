@@ -28,10 +28,20 @@ def read_asset_text(relative_path: str) -> str:
     return read_asset(relative_path).decode("utf-8").replace("\r\n", "\n")
 
 
-def notebook_template() -> str:
-    """The empty coach notebook, taken from the template at the end of the skill."""
+def _template_after(heading: str) -> str:
+    """The Markdown code block that follows ``heading`` in the skill's templates section."""
     skill = read_asset_text(SKILL_PATH)
-    after_heading = skill.split("## Notebook template", 1)[1]
+    after_heading = skill.split(heading, 1)[1]
     fence_start = "```markdown\n"
     body = after_heading.split(fence_start, 1)[1]
     return body.split("\n```", 1)[0] + "\n"
+
+
+def notebook_template() -> str:
+    """The empty player notes file, taken from the templates at the end of the skill."""
+    return _template_after("### Player notes template")
+
+
+def journal_template() -> str:
+    """The empty character journal, taken from the templates at the end of the skill."""
+    return _template_after("### Character journal template")

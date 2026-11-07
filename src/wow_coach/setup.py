@@ -4,7 +4,7 @@ The steps, each ending in a clear OK or PROBLEM line:
 
 1. Find the game folder (and remember it).
 2. Install or update the CoachLink addon.
-3. Create the coach's notebook.
+3. Create the player notes file (the coach starts one journal per character later).
 4. Optionally install the Claude Code agent and skill.
 5. Run the same checks as ``wow-coach check``.
 
@@ -250,22 +250,22 @@ def _setup_addon(game: Path, world: SetupWorld, say: Say) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Step 3: the notebook
+# Step 3: the player notes
 # ---------------------------------------------------------------------------
 
 
 def _setup_notebook(world: SetupWorld, say: Say) -> bool:
     notebook = notes_path(environ=world.environ)
     if notebook.is_file():
-        say(f"  OK: your notebook already exists ({notebook}). I did not touch it.")
+        say(f"  OK: your player notes already exist ({notebook}). I did not touch it.")
         return True
     try:
         notebook.parent.mkdir(parents=True, exist_ok=True)
         notebook.write_text(notebook_template(), encoding="utf-8")
     except OSError as error:
-        say(f"  PROBLEM: could not create the notebook {notebook}: {error}")
+        say(f"  PROBLEM: could not create the player notes {notebook}: {error}")
         return False
-    say(f"  OK: created an empty notebook at {notebook}.")
+    say(f"  OK: created an empty player notes file at {notebook}.")
     return True
 
 
@@ -350,7 +350,7 @@ def run_setup(choices: SetupChoices, world: SetupWorld) -> int:
         problems += 1
 
     say()
-    say("Step 3 of 5: your coach notebook")
+    say("Step 3 of 5: your player notes")
     if not _setup_notebook(world, say):
         problems += 1
 
