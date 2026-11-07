@@ -19,7 +19,7 @@ and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
 |---|---|---|---|
 | CoachLink addon | `addon/CoachLink/` | Lua | Builds the snapshot and history, saves them, shows the copy window |
 | `wow-coach` program | `src/wow_coach/` | Python 3.14 | Finds and reads the saved file; commands `status`, `watch`, `check`, `mcp`, `wiki`; the MCP server; coach notes; game lookups |
-| Coach skill | `skills/wow-coach/SKILL.md` | Markdown | Tells an AI how to coach |
+| Coach skill | `src/wow_coach/assets/skills/wow-coach/SKILL.md` | Markdown | Tells an AI how to coach |
 | Tests | `tests/`, `addon/tests/` | Python, Lua | Python tests, and a Lua test run with a fake WoW API |
 
 ## Data flow

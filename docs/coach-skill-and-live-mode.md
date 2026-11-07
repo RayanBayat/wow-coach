@@ -12,10 +12,10 @@ Combine it with [Way 2](connect-an-ai-app.md) so the agent can read your charact
 
 1. Open https://github.com/RayanBayat/wow-coach and click **Code**, then **Download ZIP**.
    Unzip it.
-2. Inside, find the folder `skills/wow-coach`. It contains `SKILL.md`. The folder name must stay
+2. Inside, find the folder `src/wow_coach/assets/skills/wow-coach`. It contains `SKILL.md`. The folder name must stay
    `wow-coach`.
 
-**You should see:** `skills/wow-coach/SKILL.md` on your disk.
+**You should see:** `src/wow_coach/assets/skills/wow-coach/SKILL.md` on your disk.
 
 ## Step 2: Put it where your agent looks
 

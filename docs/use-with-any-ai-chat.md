@@ -34,7 +34,7 @@ see your game by itself.
 The coach instructions are a file that tells the AI how to teach you (short steps, explain
 terms, check your quests and gear). Without them, an AI still answers, but less well.
 
-1. Open https://github.com/RayanBayat/wow-coach/blob/main/skills/wow-coach/SKILL.md
+1. Open https://github.com/RayanBayat/wow-coach/blob/main/src/wow_coach/assets/skills/wow-coach/SKILL.md
 2. Click the **Copy raw file** button (two squares) at the top right of the file view.
 3. Paste it into your chatbot's instructions feature, below.
 
