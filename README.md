@@ -27,7 +27,7 @@ You can start with Way 1 and add the others later.
 
 ## Quick start (Way 1)
 
-1. Download `CoachLink-0.3.0.zip` from the
+1. Download `CoachLink-0.4.0.zip` from the
    [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest).
 2. Unzip it into the game's `Interface\AddOns` folder, so this file exists:
    `World of Warcraft\_forever_\Interface\AddOns\CoachLink\CoachLink.toc`.

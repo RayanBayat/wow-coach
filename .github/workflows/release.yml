@@ -1,6 +1,6 @@
 name: Release
 
-# Runs when you push a tag like v0.3.0. It builds CoachLink-<version>.zip
+# Runs when you push a tag like v0.4.0. It builds CoachLink-<version>.zip
 # and publishes it on the GitHub Releases page.
 
 on:
