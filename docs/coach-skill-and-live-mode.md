@@ -78,7 +78,7 @@ Claude as a message, so Claude reacts. Each line ends with the reason:
 To start it, say to Claude: `start live mode`. Claude runs this command with the Monitor tool:
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.2.0 wow-coach watch
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.3.0 wow-coach watch
 ```
 
 Monitors last at most 30 minutes. The skill tells Claude to restart it while the game runs.

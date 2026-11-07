@@ -4,6 +4,25 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-11-07
+
+### Added
+
+- Game lookups for the coach, so it no longer needs slow web searches for basic facts:
+  - MCP tools `search_wiki` and `read_wiki_page` (Warcraft Wiki). They answer where an NPC
+    stands, what a vendor sells and who gives a quest, mark Forever-only, Classic-only and
+    Retail-only text, and always end with the page link and the license (CC BY-SA 4.0).
+  - `wow-coach wiki QUERY` searches the wiki, and `wow-coach wiki --page TITLE [--section NAME]`
+    reads a page.
+  - Answers are cached for an hour, requests are limited to about two per second, and a wiki
+    that does not answer produces a plain message instead of an error.
+- The coach skill now says to look things up with these tools first, and to cite the link.
+
+### Notes
+
+- Wowhead is not used: its terms of use forbid automated access. The reasons are in
+  `docs/design.md`.
+
 ## [0.2.0] - 2026-11-07
 
 ### Added

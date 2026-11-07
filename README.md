@@ -27,7 +27,7 @@ You can start with Way 1 and add the others later.
 
 ## Quick start (Way 1)
 
-1. Download `CoachLink-0.2.0.zip` from the
+1. Download `CoachLink-0.3.0.zip` from the
    [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest).
 2. Unzip it into the game's `Interface\AddOns` folder, so this file exists:
    `World of Warcraft\_forever_\Interface\AddOns\CoachLink\CoachLink.toc`.
@@ -44,6 +44,18 @@ You can start with Way 1 and add the others later.
 In game, `/coach` saves your character (the screen reloads for a few seconds) and `/coach help`
 lists the commands.
 
+## Game lookups
+
+With Way 2, the AI can also look up game facts quickly instead of searching the web: where an
+NPC stands, what a vendor sells, who gives a quest and what it rewards. It reads the
+[Warcraft Wiki](https://warcraft.wiki.gg) (text under
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)), tells you which parts are
+Forever-only, and gives you the page link. You can try it yourself:
+
+```
+wow-coach wiki "Abigail Shiel" --page "Abigail Shiel"
+```
+
 ## Guides
 
 - [Install the addon](docs/install-the-addon.md)
@@ -56,8 +68,11 @@ lists the commands.
 
 ## Privacy and safety
 
-- The addon and the helper program upload nothing. They only write and read files on your
-  computer.
+- The addon never uploads anything. It only writes a file on your computer.
+- The helper program reads that file and never sends your character anywhere. The one thing it
+  does on the internet is look up game facts: when the AI uses a lookup tool, the search words
+  (for example "Abigail Shiel") are sent to the [Warcraft Wiki](https://warcraft.wiki.gg). Your
+  character data is not part of that.
 - The AI you choose receives what you paste or what it reads, and sends it to its provider, like
   anything else you type there. Your character sheet contains your character name, realm,
   level, zone, quests, gear, spells and gold. It does not contain your account name, password or

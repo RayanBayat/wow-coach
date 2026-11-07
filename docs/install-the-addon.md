@@ -11,9 +11,9 @@ You need: WoW Forever installed through the Battle.net app, and about 10 minutes
 ## Step 1: Download the addon
 
 1. Open https://github.com/RayanBayat/wow-coach/releases/latest
-2. Under **Assets**, click `CoachLink-0.2.0.zip` (the number may be newer).
+2. Under **Assets**, click `CoachLink-0.3.0.zip` (the number may be newer).
 
-**You should see:** a file called `CoachLink-0.2.0.zip` in your Downloads folder.
+**You should see:** a file called `CoachLink-0.3.0.zip` in your Downloads folder.
 
 **If it didn't work:** if your browser says the file is unsafe, check that you came from the
 link above. The zip holds only text files.
@@ -55,7 +55,7 @@ in most file managers the shortcut is Ctrl+H.
 
 ## Step 4: Unzip CoachLink into AddOns
 
-1. Open your Downloads folder and unzip `CoachLink-0.2.0.zip`.
+1. Open your Downloads folder and unzip `CoachLink-0.3.0.zip`.
    - Windows: right-click the zip, **Extract All...**.
    - macOS: double-click the zip.
    - Linux: right-click, Extract, or run `unzip` in a terminal.

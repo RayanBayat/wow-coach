@@ -59,7 +59,7 @@ Code's **Monitor** tool is the one tested). Offer it when a session starts and t
 running; the player can also say "start live mode".
 
 1. Start the watcher with Monitor:
-   - command: `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.2.0 wow-coach watch`
+   - command: `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.3.0 wow-coach watch`
      (if the game is not in a standard place, set the environment variable
      `WOW_COACH_WOW_DIR` to the `_forever_` folder first)
    - description: `WoW /coach saves`
@@ -156,9 +156,19 @@ Forever changed talents, quests and spells. **Old Classic (2019) guides and vide
 often wrong for it.** Only trust sources that say Forever, and check their date: many
 guides were written during the beta (September-October 2026).
 
+Use this order, and always tell the player where an answer came from (give the link):
+
+1. **The `wow-coach` MCP tools `read_wiki_page` and `search_wiki`** (Warcraft Wiki). Fast and
+   Forever-aware: use them for NPC locations, vendor stock and prices, quest givers and
+   rewards. Search first if you do not know the exact page title. Pages say when something is
+   Forever-only, Classic-only or Retail-only; trust the Forever parts and say when only a
+   Retail or Classic fact is available.
+2. **Web search**, when the tools are missing, the wiki has no page, or the wiki did not answer.
+   The table below lists sites worth reading.
+
 | Source | URL | Notes |
 |---|---|---|
-| Wowhead Forever (database: quests, items, NPCs) | https://www.wowhead.com/forever | Fetching worked when tested |
+| Wowhead Forever (database: quests, items, NPCs) | https://www.wowhead.com/forever | Fetching worked when tested; the `wow-coach` tools do not use it because its terms forbid automated access |
 | Warcraft Tavern Forever guides | https://www.warcrafttavern.com/forever/ | Fetching worked when tested |
 | Icy Veins Forever | https://www.icy-veins.com/wow-forever/ | Blocked fetches when tested: use web search |
 | Mobalytics Forever | https://mobalytics.gg/wow-forever | Blocked fetches when tested: use web search |

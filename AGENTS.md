@@ -13,8 +13,8 @@ facts. Users' docs start at `README.md`.
 |---|---|
 | `addon/CoachLink/` | The WoW addon (Lua 5.1): `CoachLink.toc`, `CoachLink.lua` |
 | `addon/tests/run_addon_test.lua` | Runs the addon against a fake WoW API |
-| `src/wow_coach/` | Python package: Lua-table parser, saved-file finder and loader, report, `cli`, `watch`, `notes`, MCP `server` |
-| `tests/` | pytest. `test_addon_contract.py` runs the Lua test and reads its output with the Python code |
+| `src/wow_coach/` | Python package: Lua-table parser, saved-file finder and loader, report, `cli`, `watch`, `notes`, MCP `server`; game lookups: `web` (polite fetcher), `wiki` (search and read tools), `wikitext` (wiki markup to plain text) |
+| `tests/` | pytest. `test_addon_contract.py` runs the Lua test and reads its output with the Python code. `tests/fixtures/wiki/` holds real wiki responses; tests never use the network |
 | `skills/wow-coach/SKILL.md` | The Agent Skill (folder name must equal `name`) |
 | `docs/` | User guides, `design.md` (how it works), `troubleshooting.md`, `glossary.md` |
 | `.github/workflows/` | `ci.yml` (tests) and `release.yml` (builds `CoachLink-<version>.zip` on a `v*` tag) |

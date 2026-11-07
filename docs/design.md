@@ -18,7 +18,7 @@ and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
 | Piece | Where | Language | Job |
 |---|---|---|---|
 | CoachLink addon | `addon/CoachLink/` | Lua | Builds the snapshot and history, saves them, shows the copy window |
-| `wow-coach` program | `src/wow_coach/` | Python 3.14 | Finds and reads the saved file; commands `status`, `watch`, `check`, `mcp`; the MCP server; coach notes |
+| `wow-coach` program | `src/wow_coach/` | Python 3.14 | Finds and reads the saved file; commands `status`, `watch`, `check`, `mcp`, `wiki`; the MCP server; coach notes; game lookups |
 | Coach skill | `skills/wow-coach/SKILL.md` | Markdown | Tells an AI how to coach |
 | Tests | `tests/`, `addon/tests/` | Python, Lua | Python tests, and a Lua test run with a fake WoW API |
 
@@ -124,6 +124,67 @@ Checked against the game's own `Blizzard_CombatLog.lua` SavedVariables file:
 - The first `/coach` after you update the addon still saves with the old code, because the
   save runs before the reload.
 
+## Game lookups (Warcraft Wiki)
+
+The MCP server (and the `wow-coach wiki` command) can look up game facts so the coach does not
+need slow, noisy web searches. Code: `web.py` (downloading), `wiki.py` (the two lookups),
+`wikitext.py` (turning the wiki's source markup into plain text).
+
+How it works, in plain words:
+
+1. `search_wiki` asks the wiki's search API for page titles and shows a cleaned one-line
+   snippet and the link for each.
+2. `read_wiki_page` asks the wiki's parse API for a page's source text, then `wikitext.py`
+   pulls the info box (name, level, location...) out, turns coordinates like
+   `{{co|61|52|Tirisfal Glades}}` into `Tirisfal Glades 61, 52`, turns links into their text,
+   turns tables into `a | b | c` rows, and drops references, HTML and templates it does not know.
+   Version labels are kept: a banner such as `{{Forever only}}` becomes the note "Marked
+   Forever-only on the wiki.", and `{{cw}}` / `{{fw}}` become `[Classic]` / `[Forever]`.
+3. Every answer ends with a `Source:` line.
+
+Rules we follow:
+
+- **Source and license.** Only the Warcraft Wiki (https://warcraft.wiki.gg), through its
+  official MediaWiki API (`api.php`). Its text is CC BY-SA 4.0, so each answer shows the page
+  link and "Warcraft Wiki, CC BY-SA 4.0". The saved responses in `tests/fixtures/wiki/` are
+  short real samples used only to test the parser; they carry the same license and come from
+  the wiki pages named in their file names.
+- **Politeness.** The `User-Agent` is `wow-coach/<version> (+https://github.com/RayanBayat/wow-coach)`.
+  Every call adds `maxlag=5` (the wiki may refuse us when its servers are busy). Answers are
+  cached in memory for 1 hour, requests to one site are at least 0.5 s apart, and every request
+  times out after 10 s. When a request fails the tool returns a plain sentence (for example
+  "Warcraft Wiki didn't answer (timeout). Try again or use web search.") and never crashes.
+- **robots.txt.** The wiki's `robots.txt` (checked 2026-11-07) allows ordinary agents and
+  states `Content-Signal: search=yes, ai-train=no, use=reference`. Lookups for a player's
+  question are reference use. We never train on wiki text, never save it to disk (the cache is
+  memory only) and never copy the wiki in bulk.
+- **Network access is only in `web.py`.** Everything else receives a `fetch` function, so tests
+  use saved responses and never touch the internet.
+
+### Why Wowhead is not included
+
+Wowhead has handy public JSON endpoints (a search suggestion list and a tooltip service), and
+we looked at using them. We decided not to, on 2026-11-07, for two reasons:
+
+- Wowhead's terms of use (https://corp.fanbyte.com/legal/terms, linked from
+  https://www.wowhead.com/forever/tos) say you may not "attempt to access or search the
+  Service or download content from the Service using any engine, software, tool, agent,
+  device or mechanism (including spiders, robots, crawlers, data mining tools or the like)
+  other than the software and/or search agents provided by ZAM or other generally available
+  third-party web browsers". A program that queries Wowhead for an AI is that kind of tool.
+- Wowhead's pages answer automated requests with 403 (bot protection). Getting around that
+  would break the first point and is something this project never does.
+
+So there are no Wowhead tools. If Wowhead publishes an official, permitted API, this can be
+revisited.
+
+### What we never do
+
+- Never get around a site's protection: no headless browsers, no cookie or token tricks, no
+  pretending to be a web browser.
+- Never use a site whose terms forbid automated access.
+- Never hide where an answer came from: every lookup ends with a `Source:` line.
+
 ## Known limits
 
 - The snapshot is only as fresh as the last logout, `/reload` or `/coach`.
@@ -139,4 +200,5 @@ Checked against the game's own `Blizzard_CombatLog.lua` SavedVariables file:
 - Every part of the snapshot is read inside a protected call. If one game function breaks in a
   patch, that part is listed under `errors` and the rest still saves.
 - The program only reads the saved file. Its only write is the coach notes file.
-- Nothing is uploaded by the addon or the program.
+- The addon uploads nothing. The program never sends your character anywhere. Its only
+  internet use is the wiki lookups above, which send just the words being looked up.
