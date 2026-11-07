@@ -742,6 +742,24 @@ check(brokenBox ~= nil and brokenBox.text:find("READ ERRORS", 1, true) ~= nil
 check(brokenBox.text:find("Testchar, level 7", 1, true) ~= nil, "copy text still has the other facts")
 
 
+-- A game version without one of our events must still load the addon.
+installFakeGame()
+local realCreateFrame = CreateFrame
+CreateFrame = function(...)
+    local frame = realCreateFrame(...)
+    frame.RegisterEvent = function(_, eventName)
+        if eventName == "TIME_PLAYED_MSG" then error("unknown event") end
+        registeredEvents[eventName] = true
+    end
+    return frame
+end
+loadAddon()
+SlashCmdList.COACHLINK("")
+check(CoachLinkDB.characters["Testchar-Testrealm"].snapshot.level == 7,
+    "an unknown event name does not stop the addon from loading")
+check(registeredEvents.PLAYER_LOGOUT == true, "the other events are still registered")
+
+
 -------------------------------------------------------------------------------
 -- Test 4: the progress log
 -------------------------------------------------------------------------------

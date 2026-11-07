@@ -402,10 +402,10 @@ local function traitName(configID, node)
     local entry = C_Traits.GetEntryInfo(configID, node.activeEntry.entryID)
     local definition = C_Traits.GetDefinitionInfo(entry.definitionID)
     local name = definition.overrideName
-    if not name or name == "" then
+    if (not name or name == "") and definition.spellID then
         name = C_Spell.GetSpellName(definition.spellID)
     end
-    return name or ("spell " .. tostring(definition.spellID))
+    return name or ("trait " .. tostring(definition.spellID or node.ID))
 end
 
 -- Every node of a trait tree you have at least one rank in.
@@ -1059,7 +1059,12 @@ end
 
 local eventFrame = CreateFrame("Frame")
 for eventName in pairs(handlers) do
-    eventFrame:RegisterEvent(eventName)
+    -- The game throws an error for an event name it doesn't know (a future patch
+    -- could rename one). Skip that event instead of breaking the whole addon.
+    local ok = pcall(eventFrame.RegisterEvent, eventFrame, eventName)
+    if not ok then
+        say("this game version has no " .. eventName .. " event; that part is not saved.")
+    end
 end
 eventFrame:SetScript("OnEvent", function(_, eventName, ...)
     local ok, err = pcall(handlers[eventName], ...)
