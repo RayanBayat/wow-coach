@@ -73,8 +73,13 @@ def run_check(
     candidates: Sequence[Path] | None,
     now: float,
     out: TextIO,
+    closing_line: bool = True,
 ) -> int:
-    """Print the troubleshooting report and return the exit code (0 fine, 1 a problem)."""
+    """Print the troubleshooting report and return the exit code (0 fine, 1 a problem).
+
+    ``closing_line=False`` leaves out the final "Everything looks good" / "Fix the problem"
+    line, for callers (like ``wow-coach setup``) that explain the result in their own words.
+    """
 
     def say(text: str = "") -> None:
         print(text, file=out)
@@ -94,6 +99,7 @@ def run_check(
     all_well = _check_save_file(found.path, now, say)
     notes = notes_path(environ=environ)
     say(f"Coach notes file: {notes} ({'exists' if notes.is_file() else 'not created yet'})")
-    say()
-    say("Everything looks good." if all_well else "Fix the problem above, then run this again.")
+    if closing_line:
+        say()
+        say("Everything looks good." if all_well else "Fix the problem above, then run this again.")
     return 0 if all_well else 1

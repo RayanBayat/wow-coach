@@ -362,14 +362,19 @@ def run_setup(choices: SetupChoices, world: SetupWorld) -> int:
 
     say()
     say("Step 5 of 5: checking that the coach can see your game")
-    run_check(
+    check_code = run_check(
         choices.wow_dir_flag,
         environ=world.environ,
         candidates=world.candidates,
         now=world.now,
         out=world.out,
+        closing_line=False,
     )
-    say("(A missing save file is normal until you log in and type /coach in the game.)")
+    if check_code != 0:
+        # On a fresh install this is expected: the game writes the save file only after
+        # the player logs in and types /coach. Say so, so it doesn't read like a failure.
+        say("  The coach can't see your character yet. That is normal on a new install:")
+        say("  start WoW, log in, and type /coach in the chat box.")
 
     say()
     if problems:

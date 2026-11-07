@@ -104,6 +104,13 @@ def test_fresh_setup_installs_everything_and_remembers_the_folder(session: Sessi
     assert "Step 5 of 5" in text
 
 
+def test_fresh_setup_does_not_contradict_itself(session: Session) -> None:
+    # No save file exists yet on a new install; that must not read like a failure.
+    _, text = session.run()
+    assert "Fix the problem above" not in text
+    assert "normal on a new install" in text
+
+
 def test_second_run_changes_nothing_and_downloads_nothing(session: Session) -> None:
     session.run()
     session.downloaded.clear()

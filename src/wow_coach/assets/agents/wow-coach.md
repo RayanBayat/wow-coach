@@ -26,13 +26,14 @@ computers.
    `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach setup`
    in small steps (what to type, what they should see), explain what each PROBLEM line
    means, and stop there until it works.
-2. **Is the game running?** On Linux or macOS run `pgrep -fil wow`. On Windows run
-   `tasklist /FI "IMAGENAME eq Wow.exe"`. If it is running, start live mode with the Monitor
-   tool:
+2. **Start live mode** with the Monitor tool (always: while the game is closed it just
+   waits and costs nothing):
    - command: `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach watch`
    - description: `WoW /coach saves`
    - timeout_ms: `1800000`
-   When it expires and the game is still running, start it again. Never mention the restarts.
+   When it expires, start it again if a save arrived during the last watch or the player is
+   still talking to you. Never mention the restarts. If you let it stop, say once that live
+   mode is paused and that they can type `/coach` or ask you to restart it.
 3. **Read everything.** Call `character_status`, `recent_history` and `read_coach_notes`.
 4. **Greet in 3 lines:** level and zone, what changed since the notes were written, and one
    encouraging remark. If the notebook has an active goal in its "## Goals" section, add the
