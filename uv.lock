@@ -865,6 +865,7 @@ name = "wow-coach"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
+    { name = "httpx2" },
     { name = "mcp" },
 ]
 
@@ -876,7 +877,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "mcp", specifier = "==2.3.0" }]
+requires-dist = [
+    { name = "httpx2", specifier = "==2.16.0" },
+    { name = "mcp", specifier = "==2.3.0" },
+]
 
 [package.metadata.requires-dev]
 dev = [

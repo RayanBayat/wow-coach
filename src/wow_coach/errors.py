@@ -27,3 +27,7 @@ class GameFolderNotFound(WowCoachError):  # noqa: N818
 
 class NotesTooLarge(WowCoachError):  # noqa: N818
     """The coach notes the AI tried to save are bigger than the allowed size."""
+
+
+class LookupFailed(WowCoachError):  # noqa: N818
+    """A website did not give us an answer (timeout, network problem, error status)."""
