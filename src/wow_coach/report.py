@@ -10,6 +10,7 @@ section quietly disappears when its data is missing or empty.
 import itertools
 from typing import NamedTuple
 
+from wow_coach import report_details, report_items
 from wow_coach.lua_table import LuaValue
 from wow_coach.report_values import (
     DAY,
@@ -35,7 +36,6 @@ __all__ = [
 ]
 
 STALE_AFTER_SECONDS = 30 * 60
-QUALITY_NAMES = {0: "gray", 1: "white", 2: "green", 3: "blue", 4: "purple", 5: "orange"}
 # Skills-tab headers, as the English game client names them. With another client
 # language they don't match, and those lines simply show under Professions.
 WEAPON_SKILLS_CATEGORY = "Weapon Skills"
@@ -47,19 +47,36 @@ LANGUAGES_CATEGORY = "Languages"
 
 
 def format_status(snapshot: Table, *, now: float) -> str:
-    """Build the full Markdown status report for one character snapshot."""
+    """Build the full Markdown status report for one character snapshot.
+
+    The item sections live in ``report_items`` and the other new ones (stats, buffs,
+    reputation...) in ``report_details``; this function puts them in reading order.
+    """
     sections = [
         _header_section(snapshot, now),
+        report_details.character_section(snapshot, now),
         _xp_section(snapshot),
         _gold_section(snapshot),
         _location_section(snapshot),
-        _bags_section(snapshot),
+        report_details.stats_section(snapshot),
+        report_details.auras_section(snapshot),
         _quests_section(snapshot),
         _talents_section(snapshot),
         _professions_section(snapshot),
         _weapon_skills_section(snapshot),
-        _gear_section(snapshot),
-        _spells_section(snapshot),
+        _other_skills_section(snapshot),
+        report_items.recipes_section(snapshot, now),
+        report_items.gear_section(snapshot),
+        report_items.bags_section(snapshot),
+        report_items.bank_section(snapshot, now),
+        report_items.mail_section(snapshot, now),
+        report_details.spells_section(snapshot),
+        report_details.action_bars_section(snapshot),
+        report_details.reputation_section(snapshot),
+        report_details.currencies_section(snapshot),
+        report_details.legacy_section(snapshot),
+        report_details.group_section(snapshot),
+        report_details.mounts_section(snapshot),
         _errors_section(snapshot),
     ]
     return "\n\n".join(section for section in sections if section)
@@ -120,34 +137,49 @@ def _location_section(snapshot: Table) -> str:
     elif x is not None and y is not None:
         place = f"({x:.1f}, {y:.1f})"
     hearth = as_text(snapshot.get("hearth"))
-    parts = [f"**Location:** {place}" if place else "", f"Hearth: {hearth}" if hearth else ""]
+    instance = as_table(snapshot.get("instance"))
+    inside = as_text(instance.get("name"))
+    if inside and (kind := as_text(instance.get("type"))):
+        inside += f" ({kind})"
+    parts = [
+        f"**Location:** {place}" if place else "",
+        f"Inside: {inside}" if inside else "",
+        f"Hearth: {hearth}" if hearth else "",
+    ]
     return "\n".join(part for part in parts if part)
-
-
-def _bags_section(snapshot: Table) -> str:
-    bags = as_table(snapshot.get("bags"))
-    free, total = as_number(bags.get("free")), as_number(bags.get("total"))
-    if free is None or total is None:
-        return ""
-    return f"**Bags:** {number_text(free)}/{number_text(total)} slots free"
 
 
 def _quest_line(quest: Table) -> str:
     level = as_number(quest.get("level"))
     prefix = f"[{number_text(level)}] " if level is not None else ""
     title = as_text(quest.get("title")) or "Untitled quest"
+    tags = []
+    if quest.get("failed") is True:
+        tags.append("FAILED")
+    if (group := as_number(quest.get("suggestedGroup"))) is not None:
+        tags.append(f"group quest for {number_text(group)}")
+    if zone := as_text(quest.get("zone")):
+        tags.append(zone)
+    title += f" ({'; '.join(tags)})" if tags else ""
     if quest.get("complete") is True:
-        return f"- {prefix}{title}, DONE (turn in)"
-    objectives = [as_text(o.get("text")) for o in as_tables(quest.get("objectives"))]
-    shown = ", ".join(text for text in objectives if text)
-    return f"- {prefix}{title}, {shown}" if shown else f"- {prefix}{title}"
+        line = f"- {prefix}{title}, DONE (turn in)"
+    else:
+        objectives = [as_text(o.get("text")) for o in as_tables(quest.get("objectives"))]
+        shown = ", ".join(text for text in objectives if text)
+        line = f"- {prefix}{title}, {shown}" if shown else f"- {prefix}{title}"
+    # The short "Bring 10 ... to ... in Brill." text: it names who to hand the quest in to.
+    if goal := as_text(quest.get("objectivesText")):
+        line += f"\n  - Goal: {' '.join(goal.split())}"
+    return line
 
 
 def _quests_section(snapshot: Table) -> str:
     quests = as_tables(snapshot.get("quests"))
-    if not quests:
-        return ""
-    return "\n".join(["**Quests:**", *(_quest_line(quest) for quest in quests)])
+    lines = [_quest_line(quest) for quest in quests]
+    completed = as_number(snapshot.get("completedQuests"))
+    if completed is not None:
+        lines.append(f"Quests completed so far (all time): {number_text(completed)}")
+    return "\n".join(["**Quests:**", *lines]) if lines else ""
 
 
 def _talents_section(snapshot: Table) -> str:
@@ -221,31 +253,27 @@ def _weapon_skills_section(snapshot: Table) -> str:
     return f"**Weapon skills:** {', '.join(weapons)}" if weapons else ""
 
 
-def _gear_line(item: Table) -> str:
-    slot = as_text(item.get("slot")) or "?"
-    name = as_text(item.get("name")) or "(unknown item)"
-    details = []
-    item_level = as_number(item.get("itemLevel"))
-    if item_level is not None:
-        details.append(f"item level {number_text(item_level)}")
-    quality = as_number(item.get("quality"))
-    if quality is not None:
-        details.append(QUALITY_NAMES.get(int(quality), f"quality {int(quality)}"))
-    suffix = f" ({', '.join(details)})" if details else ""
-    return f"- {slot}: {name}{suffix}"
+def _other_skills_section(snapshot: Table) -> str:
+    """Languages and the skills you simply have (armor types, magic schools...).
 
-
-def _gear_section(snapshot: Table) -> str:
-    gear = as_tables(snapshot.get("gear"))
-    return "\n".join(["**Gear:**", *(_gear_line(item) for item in gear)]) if gear else ""
-
-
-def _spells_section(snapshot: Table) -> str:
-    spells = snapshot.get("spells")
-    names = (
-        [spell for spell in spells if isinstance(spell, str)] if isinstance(spells, list) else []
-    )
-    return f"**Spells:** {', '.join(names)}" if names else ""
+    Grouped by their Skills-tab header: ``Languages: Orcish 300/300; Armor: Cloth``.
+    """
+    groups: dict[str, list[str]] = {}
+    seen: set[str] = set()
+    for skill in as_tables(snapshot.get("professions")):
+        name = as_text(skill.get("name"))
+        rank, max_rank = as_number(skill.get("rank")), as_number(skill.get("maxRank"))
+        category = as_text(skill.get("category"))
+        is_simple = max_rank is not None and max_rank <= 1
+        if not name or name in seen or not (is_simple or category == LANGUAGES_CATEGORY):
+            continue
+        seen.add(name)
+        shown = name
+        if not is_simple and rank is not None and max_rank is not None:
+            shown += f" {number_text(rank)}/{number_text(max_rank)}"
+        groups.setdefault(category or "Other", []).append(shown)
+    parts = [f"{category}: {', '.join(names)}" for category, names in groups.items()]
+    return f"**Other skills:** {'; '.join(parts)}" if parts else ""
 
 
 def _errors_section(snapshot: Table) -> str:

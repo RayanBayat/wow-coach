@@ -95,3 +95,33 @@ def test_addon_output_has_a_progress_point(addon_output: Path) -> None:
     assert point["level"] == 7
     assert point["subZone"] == "Brill"
     assert point["questsDone"] == 1
+
+
+def test_addon_output_reports_everything_on_the_character(addon_output: Path) -> None:
+    character = load_characters(addon_output)["Testchar-Testrealm"]
+
+    status = format_status(character.snapshot, now=FAKE_NOW)
+
+    for expected in (
+        "**Faction:** Horde",
+        "**Time played:** 2 h 0 min",
+        "- Health: 150/180",
+        "- Arcane Intellect (buff, 25 min left)",
+        "  - Goal: Bring 10 Tirisfal Pumpkins to Farmer Solliden in Brill.",
+        "Quests completed so far (all time): 3",
+        "- Tailoring 23/75, 2 recipes",
+        "- Main hand: Gnarled Staff (item level 9, green, +1 Intellect, +2 Stamina, "
+        "durability 50/60)",
+        "- Linen Cloth x8 (white, Tradeskill / Cloth, sells for 13c each)",
+        "Gray (junk) items sell for 8c in total",
+        "**Bank** (seen just now): Bank Tab 1 28 slots (27 free)",
+        "- Tough Jerky x4",
+        "**Mail** (seen just now): 1 letter",
+        "- Frost: Frostbolt (Rank 1), Fireball",
+        "- Main bar: 1 Frostbolt, 2 Fireball, 12 Hearthstone",
+        "- Undercity: Friendly 500/6000",
+        "**Currencies:** Legacy Token 3",
+        "- Perks: Quick Learner (Adventure, 1/1)",
+        "**Mounts:** Skeletal Horse",
+    ):
+        assert expected in status, f"{expected!r} missing from:\n{status}"

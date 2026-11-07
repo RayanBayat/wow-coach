@@ -118,7 +118,7 @@ def test_full_status_contains_every_section() -> None:
         "- talents: attempt to index nil",
     ]:
         assert expected in text
-    assert "Orcish" not in text
+    assert "**Other skills:** Other: Language: Orcish" in text
     assert "stale" not in text
 
 
@@ -242,10 +242,13 @@ def test_weapon_skills_get_their_own_line() -> None:
     assert "- Defense" not in text
 
 
-def test_languages_and_one_rank_skills_are_left_out() -> None:
+def test_languages_and_one_rank_skills_share_one_line() -> None:
     text = format_status(REAL_SKILLS, now=NOW)
-    for hidden in ("Orcish", "Frost", "Cloth"):
-        assert hidden not in text
+    assert (
+        "**Other skills:** Class Skills: Frost; Armor Proficiencies: Cloth; "
+        "Languages: Language: Orcish 300/300"
+    ) in text
+    assert "- Language: Orcish" not in text  # not listed as a profession
 
 
 def test_skill_with_unknown_category_counts_as_profession() -> None:

@@ -34,7 +34,7 @@ def test_fixture_through_savedvars_and_report(tmp_path: Path) -> None:
     assert "- [1] Rude Awakening, DONE (turn in)" in status
     assert "- [5] The Damned, 3/8 Scarlet Initiate slain" in status
     assert "Talents" not in status  # empty table is skipped
-    assert "Common" not in status  # language filtered out
+    assert "- Language: Common" not in status  # a language is not a profession
     assert 'Gnarled "Rotwood" Staff (item level 10, white)' in status
     assert "**Spells:** Fireball, Frost Armor, Frostbolt" in status
     assert "talents: attempt to index a nil value" in status
