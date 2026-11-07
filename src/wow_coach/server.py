@@ -272,10 +272,13 @@ def build_server(
         """Get the full current status of a WoW character as Markdown.
 
         Use this whenever the player asks what to do next, what to upgrade, or about
-        their quests, talents, gear, gold or location. It covers level, XP, gold,
-        location, bags, quests, talents, professions, gear and spells. Check the
-        "saved ... ago" line: data is only as fresh as the last logout, /reload or
-        /coach, and may be stale.
+        their quests, talents, gear, items, gold or location. It covers everything the
+        addon saves: level, XP, gold, play time, location, stats, buffs, quests (with
+        who to hand them in to), talents, professions and recipes, worn gear, every
+        item in the bags, bank and mail, spells, action bars, reputations, currencies,
+        the Legacy system, group, pet and mounts. Check the "saved ... ago" line: data
+        is only as fresh as the last logout, /reload or /coach, and may be stale. The
+        bank, mail and recipes are as fresh as their "seen ... ago" line.
 
         Args:
             character: Character name ("Testchar") or "Name-Realm", case-insensitive.

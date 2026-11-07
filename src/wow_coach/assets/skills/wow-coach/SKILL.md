@@ -177,7 +177,16 @@ Tailoring", "run Deadmines"), do these seven things. This works in any AI, not o
 | Quest level 3+ below theirs (gray) | Abandon it, no XP |
 | Quest level 3+ above theirs (orange/red) | Skip for now, or group up |
 | Quest marked DONE | Remind them to turn it in |
-| Bags nearly full | Sell gray items at a vendor; get bigger bags |
+| Bags nearly full | Sell gray items at a vendor (the report says what they're worth); get bigger bags |
+| A quest's `Goal:` line | It names who to hand the quest in to and where: use it for exact directions |
+| An item in the bags they could wear (`equipSlot`, `needs level`) | Compare its stats with the worn item in that slot; tell them to equip it if it's better |
+| Gear durability under about a third | Repair at any vendor with a hammer icon (a repair vendor) before it breaks |
+| Recipes colored orange or yellow | Craft those to level the profession; gray ones give no skill points |
+| Profession materials in the bags or bank (cloth, ore, herbs) | Say what they can craft with them, or that they sell well |
+| Bank or mail "not seen yet" or seen days ago | Ask them to open it once so you can see it |
+| A key spell missing from the action bars | Show them how to drag it from the spellbook (P) to a bar |
+| `Legacy points to spend` > 0 | Open the Legacy window (Y key) and spend them |
+| Buffs: no class buff (Arcane Intellect, for a mage) | Remind them to buff themselves |
 | No `restedXP` and they play long sessions | Log out in an inn or a capital city |
 | `hearth` is far from where they quest | Set the Hearthstone at the local inn |
 | Deaths in `recent_history` | Find the cause and teach the fix (pulling 2+ mobs, orange mobs, mana) |
@@ -273,7 +282,10 @@ Otherwise give landmarks ("inside the inn") and the NPC's title.
 ## Limits to remember
 
 - The snapshot is only as fresh as the last logout, `/reload` or `/coach`. Quests under a
-  collapsed quest-log header are not saved. There is no live combat data.
+  collapsed quest-log header are not saved (factions under a collapsed reputation header
+  neither). There is no live combat data.
+- The bank, mailbox and recipe lists are only as fresh as the last time the player opened
+  that window, and play time as the last `/played`. The report shows "seen ... ago".
 - Project and install help: https://github.com/RayanBayat/wow-coach
 
 ## Notes templates
