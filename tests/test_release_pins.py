@@ -8,7 +8,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from wow_coach.assets import AGENT_PATH, read_asset
+from wow_coach.assets import AGENT_PATH, read_asset_text
 
 ROOT = Path(__file__).parent.parent
 PIN = re.compile(r"wow-coach@(v[0-9][^\s\"',)`]*)")
@@ -27,14 +27,14 @@ def test_addon_version_matches_the_project() -> None:
 
 
 def test_agent_file_pins_this_release() -> None:
-    text = read_asset(AGENT_PATH).decode("utf-8")
+    text = read_asset_text(AGENT_PATH)
     pins = set(PIN.findall(text))
     assert pins == {f"v{project_version()}"}
 
 
 def test_agent_frontmatter_has_what_claude_code_expects() -> None:
     # We avoid a YAML library (one more dependency) and check the lines that matter.
-    text = read_asset(AGENT_PATH).decode("utf-8")
+    text = read_asset_text(AGENT_PATH)
     assert text.startswith("---\nname: wow-coach\n")
     header = text.split("\n---\n", 1)[0]
     for line in (

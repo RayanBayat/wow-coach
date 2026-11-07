@@ -18,9 +18,19 @@ def read_asset(relative_path: str) -> bytes:
     return resource.read_bytes()
 
 
+def read_asset_text(relative_path: str) -> str:
+    """A packaged text file with plain ``\n`` line endings.
+
+    On Windows, git usually checks text files out with ``\r\n`` line endings, and a package
+    built from that checkout carries them along. Turning them back into ``\n`` here means
+    the code that reads these files works the same on every computer.
+    """
+    return read_asset(relative_path).decode("utf-8").replace("\r\n", "\n")
+
+
 def notebook_template() -> str:
     """The empty coach notebook, taken from the template at the end of the skill."""
-    skill = read_asset(SKILL_PATH).decode("utf-8")
+    skill = read_asset_text(SKILL_PATH)
     after_heading = skill.split("## Notebook template", 1)[1]
     fence_start = "```markdown\n"
     body = after_heading.split(fence_start, 1)[1]
