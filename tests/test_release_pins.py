@@ -1,7 +1,7 @@
 """A release must not ship stale version numbers.
 
 Several places repeat the version: the addon file, the Claude Code agent, and the docs
-(``...wow-coach@v0.4.0``). These tests compare them all with the version in pyproject.toml.
+(``...wow-coach@v0.5.0``). These tests compare them all with the version in pyproject.toml.
 """
 
 import re

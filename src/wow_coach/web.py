@@ -28,7 +28,7 @@ REQUEST_TIMEOUT_SECONDS = 10.0
 
 
 def build_user_agent() -> str:
-    """Text that tells a website who is asking, for example ``wow-coach/0.4.0 (+https://...)``."""
+    """Text that tells a website who is asking, for example ``wow-coach/0.5.0 (+https://...)``."""
     version = importlib.metadata.version("wow-coach")
     return f"wow-coach/{version} (+https://github.com/RayanBayat/wow-coach)"
 
