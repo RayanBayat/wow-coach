@@ -7,6 +7,7 @@ The addon may fail to read any section (a new game build can break an API), so e
 section quietly disappears when its data is missing or empty.
 """
 
+import itertools
 from typing import NamedTuple
 
 from wow_coach.lua_table import LuaValue
@@ -321,3 +322,249 @@ def format_history(events: list[LuaValue], *, limit: int, now: float) -> str:
         age = format_age(now - time) if time is not None else "unknown time"
         lines.append(f"- {age}: {text}")
     return "\n".join(lines) if lines else "No history recorded yet."
+
+
+# ---------------------------------------------------------------------------
+# format_progress: what happened over the last days, from the progress log
+# ---------------------------------------------------------------------------
+
+# Save points closer together than this belong to the same play session.
+SESSION_GAP_SECONDS = 30 * _MINUTE
+
+
+class _Session(NamedTuple):
+    """One stretch of play: the save points inside it and when it began."""
+
+    start: float  # the login time if the history knows it, else the first save point
+    points: list[Table]
+
+    @property
+    def end(self) -> float:
+        return _point_time(self.points[-1])
+
+    @property
+    def seconds(self) -> float:
+        return self.end - self.start
+
+
+class _Gain(NamedTuple):
+    """How much a character gained between two moments."""
+
+    levels: int
+    xp: int
+    money: int
+
+
+def _point_time(point: Table) -> float:
+    """The time of a progress point (points without a usable time are dropped earlier)."""
+    return float(_number(point.get("time")) or 0)
+
+
+def _sorted_points(progress: list[LuaValue]) -> list[Table]:
+    """The progress points that have a time, oldest first."""
+    usable = [point for point in _tables(progress) if _number(point.get("time")) is not None]
+    return sorted(usable, key=_point_time)
+
+
+def _login_times(history: list[LuaValue]) -> list[float]:
+    """When the player logged in, from the history, oldest first."""
+    times = [
+        float(time)
+        for event in _tables(history)
+        if event.get("kind") == "login" and (time := _number(event.get("time"))) is not None
+    ]
+    return sorted(times)
+
+
+def _make_session(group: list[Table], previous_end: float, logins: list[float]) -> _Session:
+    """Build a session. It starts at the first login after the previous session ended.
+
+    A session usually has only one save point (the one made at logout), so the login
+    time is what tells us how long the player really played. Without a login event we
+    fall back to the first save point.
+    """
+    first_time = _point_time(group[0])
+    after_previous = [login for login in logins if previous_end < login <= first_time]
+    return _Session(after_previous[0] if after_previous else first_time, group)
+
+
+def _split_sessions(points: list[Table], logins: list[float]) -> list[_Session]:
+    """Group the points into play sessions: a gap of 30 minutes or more starts a new one."""
+    sessions: list[_Session] = []
+    group: list[Table] = []
+    previous_end = float("-inf")
+    for point in points:
+        if group and _point_time(point) - _point_time(group[-1]) >= SESSION_GAP_SECONDS:
+            sessions.append(_make_session(group, previous_end, logins))
+            previous_end = _point_time(group[-1])
+            group = []
+        group.append(point)
+    sessions.append(_make_session(group, previous_end, logins))
+    return sessions
+
+
+def _difference(before: LuaValue, after: LuaValue) -> int | None:
+    """``after - before`` when both are numbers, else None."""
+    number_before, number_after = _number(before), _number(after)
+    if number_before is None or number_after is None:
+        return None
+    return int(number_after - number_before)
+
+
+def _gain_between(before: Table, after: Table) -> _Gain:
+    """What was gained from one point to the next (a level-up carries the leftover XP over)."""
+    levels = _difference(before.get("level"), after.get("level")) or 0
+    xp = _difference(before.get("xp"), after.get("xp")) or 0
+    if levels > 0:
+        # XP restarts at 0 on a level-up: what was left of the old level, plus the new XP.
+        left_in_level = _difference(before.get("xp"), before.get("xpMax")) or 0
+        xp = left_in_level + int(_number(after.get("xp")) or 0)
+    money = _difference(before.get("money"), after.get("money")) or 0
+    return _Gain(max(levels, 0), max(int(xp), 0), money)
+
+
+def _total_gain(points: list[Table]) -> _Gain:
+    """Add up the gains between every two neighbouring points."""
+    gains = [_gain_between(a, b) for a, b in itertools.pairwise(points)]
+    return _Gain(
+        sum(gain.levels for gain in gains),
+        sum(gain.xp for gain in gains),
+        sum(gain.money for gain in gains),
+    )
+
+
+def _signed_money(copper: int) -> str:
+    if copper == 0:
+        return "no change"
+    sign = "+" if copper > 0 else "-"
+    return f"{sign}{format_money(abs(copper))}"
+
+
+def _plural(count: int, word: str) -> str:
+    return f"{count} {word}" if count == 1 else f"{count} {word}s"
+
+
+def _format_duration(seconds: float) -> str:
+    """``2 h 10 min``; anything under half a minute is ``under 1 min``."""
+    minutes = round(seconds / _MINUTE)
+    if minutes < 1:
+        return "under 1 min"
+    hours, rest = divmod(minutes, 60)
+    if hours == 0:
+        return f"{rest} min"
+    return f"{hours} h {rest} min" if rest else f"{hours} h"
+
+
+def _count_events(history: list[LuaValue], kind: str, start: float, end: float) -> int:
+    """How many history events of this kind happened after ``start``, up to ``end``."""
+    return sum(
+        1
+        for event in _tables(history)
+        if event.get("kind") == kind
+        and (time := _number(event.get("time"))) is not None
+        and start < time <= end
+    )
+
+
+def _place(point: Table) -> str:
+    """``level 8 in Brill, Tirisfal Glades`` from a progress point."""
+    parts = [text for key in ("subZone", "zone") if (text := _text(point.get(key)))]
+    level = _number(point.get("level"))
+    level_text = f"level {_number_text(level)}" if level is not None else "level unknown"
+    return f"{level_text} in {', '.join(parts)}" if parts else level_text
+
+
+def _gain_lines(gain: _Gain, first: Table, last: Table) -> list[str]:
+    """Bullet lines for levels, XP and gold."""
+    lines = []
+    level_before, level_after = _number(first.get("level")), _number(last.get("level"))
+    if level_before is not None and level_after is not None:
+        if gain.levels:
+            levels = f"level {_number_text(level_before)} to {_number_text(level_after)}"
+            lines.append(f"- Levels: {levels} (+{gain.levels})")
+        else:
+            lines.append(f"- Levels: still level {_number_text(level_after)}")
+    lines.append(f"- XP gained: about {gain.xp}")
+    lines.append(f"- Gold: {_signed_money(gain.money)}")
+    return lines
+
+
+def _window_section(
+    sessions: list[_Session],
+    points: list[Table],
+    history: list[LuaValue],
+    now: float,
+    days: int,
+) -> str:
+    """The 'last N days' block: sessions, play time, gains, quests and deaths."""
+    cutoff = now - days * _DAY
+    title = f"**Last {_plural(days, 'day')}:**"
+    recent = [session for session in sessions if session.end >= cutoff]
+    if not recent:
+        return f"{title} no play recorded."
+    older = [point for point in points if _point_time(point) < cutoff]
+    inside = [point for point in points if _point_time(point) >= cutoff]
+    # The last point before the window is where the window's gains start from.
+    measured = [*older[-1:], *inside]
+    gain = _total_gain(measured)
+    play_seconds = sum(session.seconds for session in recent)
+    lines = [
+        f"{title} {_plural(len(recent), 'play session')}, "
+        f"about {_format_duration(play_seconds)} of play",
+        *_gain_lines(gain, measured[0], measured[-1]),
+    ]
+    if play_seconds >= _MINUTE:
+        lines.append(f"- XP per hour of play: about {round(gain.xp / (play_seconds / _HOUR))}")
+    lines.append(f"- Quests turned in: {_count_events(history, 'quest', cutoff, now)}")
+    lines.append(f"- Deaths: {_count_events(history, 'death', cutoff, now)}")
+    return "\n".join(lines)
+
+
+def _previous_session_section(sessions: list[_Session], history: list[LuaValue], now: float) -> str:
+    """What the latest session achieved, compared with where the one before it ended."""
+    if len(sessions) < 2:
+        return "**Since the previous session:** this is the only play session recorded so far."
+    previous, latest = sessions[-2], sessions[-1]
+    start_point = previous.points[-1]
+    gain = _total_gain([start_point, *latest.points])
+    return "\n".join(
+        [
+            f"**Since the previous session** (it ended {format_age(now - previous.end)}, "
+            f"at {_place(start_point)}):",
+            *_gain_lines(gain, start_point, latest.points[-1]),
+            f"- Quests turned in: {_count_events(history, 'quest', previous.end, latest.end)}",
+            f"- Deaths: {_count_events(history, 'death', previous.end, latest.end)}",
+        ]
+    )
+
+
+def format_progress(
+    progress: list[LuaValue], history: list[LuaValue], *, now: float, days: int = 7
+) -> str:
+    """Describe a character's recent progress in plain words.
+
+    Uses the addon's progress points (one per save) and the history (logins, quests,
+    deaths). Play time is an estimate: a session runs from the login to the last save.
+
+    Args:
+        progress: The character's progress points, as the addon wrote them.
+        history: The character's history events.
+        now: The current Unix time.
+        days: How many days back the summary looks (at least 1).
+    """
+    points = _sorted_points(progress)
+    if not points:
+        return (
+            "No progress recorded yet. The addon adds a progress point every time the "
+            "character is saved (logout, /reload or /coach), so type /coach in game."
+        )
+    days = max(days, 1)
+    sessions = _split_sessions(points, _login_times(history))
+    last = points[-1]
+    return "\n\n".join(
+        [
+            f"**Last played:** {format_age(now - _point_time(last))}, {_place(last)}.",
+            _window_section(sessions, points, history, now, days),
+            _previous_session_section(sessions, history, now),
+        ]
+    )
