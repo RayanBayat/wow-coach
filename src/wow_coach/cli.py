@@ -1,4 +1,4 @@
-"""The ``wow-coach`` command line: status, watch, mcp and check.
+"""The ``wow-coach`` command line: status, watch, mcp, check and wiki.
 
 Every command accepts ``--wow-dir PATH`` (the game folder that contains ``WTF/``).
 Without it we use the ``WOW_COACH_WOW_DIR`` variable, then look in the usual install places.
@@ -20,6 +20,8 @@ from wow_coach.savedvars import find_saved_variables, load_characters
 from wow_coach.server import main as run_mcp_server
 from wow_coach.server import pick_character
 from wow_coach.watch import watch
+from wow_coach.web import Fetch, PoliteFetcher, build_user_agent
+from wow_coach.wiki import DEFAULT_MAX_CHARS, answer_read_wiki_page, answer_search_wiki
 
 HISTORY_EVENTS_SHOWN = 10
 
@@ -51,7 +53,26 @@ def _build_parser() -> argparse.ArgumentParser:
     commands.add_parser(
         "check", parents=[shared], help="find out why it is not working (troubleshooting)"
     )
+    wiki = commands.add_parser(
+        "wiki", help="look something up on the Warcraft Wiki (search, or read one page)"
+    )
+    wiki.add_argument("query", nargs="?", help="what to search for")
+    wiki.add_argument("--page", metavar="TITLE", help="read this page instead of searching")
+    wiki.add_argument("--section", metavar="NAME", help="with --page: only this section")
+    wiki.add_argument("--limit", type=int, default=5, help="how many search results (default 5)")
     return parser
+
+
+def _wiki(arguments: argparse.Namespace, fetch: Fetch | None) -> int:
+    download = PoliteFetcher(build_user_agent()) if fetch is None else fetch
+    if arguments.page:
+        print(answer_read_wiki_page(arguments.page, arguments.section, DEFAULT_MAX_CHARS, download))
+    elif arguments.query:
+        print(answer_search_wiki(arguments.query, arguments.limit, download))
+    else:
+        print("wow-coach: give a search text, or --page TITLE to read a page", file=sys.stderr)
+        return 2
+    return 0
 
 
 def _status(wow_dir_flag: Path | None, character: str | None) -> int:
@@ -88,15 +109,19 @@ def _check(wow_dir_flag: Path | None) -> int:
     )
 
 
-def main(argv: Sequence[str] | None = None) -> int:
-    """Run the command line and return the exit code (0 means success)."""
+def main(argv: Sequence[str] | None = None, fetch: Fetch | None = None) -> int:
+    """Run the command line and return the exit code (0 means success).
+
+    ``fetch`` replaces the web download (tests only).
+    """
     arguments = _build_parser().parse_args(argv)
-    flag: Path | None = arguments.wow_dir
+    flag: Path | None = getattr(arguments, "wow_dir", None)
     commands: dict[str, Callable[[], int]] = {
         "status": lambda: _status(flag, arguments.character),
         "watch": lambda: _watch(flag),
         "mcp": lambda: _mcp(flag),
         "check": lambda: _check(flag),
+        "wiki": lambda: _wiki(arguments, fetch),
     }
     try:
         return commands[arguments.command]()

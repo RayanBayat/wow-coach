@@ -1,6 +1,7 @@
 """Tests for the server's text-producing functions (no MCP transport needed)."""
 
 import asyncio
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -120,19 +121,22 @@ def test_history_limit_zero_still_returns_one(wow_dir: Path) -> None:
     assert "Reached level 7" in answer_recent_history(wow_dir, None, 0, NOW)
 
 
-def test_server_registers_five_tools_and_instructions() -> None:
+def test_server_registers_all_tools_and_instructions() -> None:
     server = build_server()
     tools = asyncio.run(server.list_tools())
     assert sorted(tool.name for tool in tools) == [
         "character_status",
         "list_characters",
         "read_coach_notes",
+        "read_wiki_page",
         "recent_history",
         "save_coach_notes",
+        "search_wiki",
     ]
     assert server.instructions is not None
     assert "character_status" in server.instructions
     assert "save_coach_notes" in server.instructions
+    assert "read_wiki_page" in server.instructions
 
 
 def test_every_tool_tells_the_ai_when_to_use_it() -> None:
@@ -181,3 +185,25 @@ def test_answer_notes_report_os_errors(tmp_path: Path) -> None:
     folder_as_file = tmp_path / "dir.md"
     folder_as_file.mkdir()
     assert "no coach notes yet" in answer_read_notes(folder_as_file).lower()
+
+
+def test_wiki_tools_use_the_injected_fetch_and_never_the_network() -> None:
+    fixtures = Path(__file__).parent / "fixtures" / "wiki"
+    search_body = (fixtures / "search_abigail.json").read_text(encoding="utf-8")
+    page_body = (fixtures / "parse_Abigail_Shiel.json").read_text(encoding="utf-8")
+
+    def fake_fetch(_url: str, params: Mapping[str, str]) -> str:
+        return search_body if params["action"] == "query" else page_body
+
+    server = build_server(fetch=fake_fetch)
+    found = call_tool(server, "search_wiki", {"query": "Abigail Shiel"})
+    assert "1. Abigail Shiel" in found
+    page = call_tool(server, "read_wiki_page", {"title": "Abigail Shiel", "section": "Sells"})
+    assert "Coarse Thread | 10c" in page
+
+
+def test_wiki_tool_descriptions_say_what_they_are_good_for() -> None:
+    tools = {tool.name: tool.description or "" for tool in asyncio.run(build_server().list_tools())}
+    assert "vendor" in tools["read_wiki_page"]
+    assert "Forever" in tools["read_wiki_page"]
+    assert "search_wiki" in tools["read_wiki_page"]

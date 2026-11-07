@@ -1,6 +1,7 @@
 """Tests for the ``wow-coach`` command line."""
 
 import os
+from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
@@ -94,3 +95,30 @@ def test_environment_variable_is_used(
     assert main(["status"]) == 0
     assert "Testchar" in capsys.readouterr().out
     assert os.environ["WOW_COACH_WOW_DIR"] == str(wow_dir)
+
+
+WIKI_FIXTURES = Path(__file__).parent / "fixtures" / "wiki"
+
+
+def _fake_wiki(_url: str, params: Mapping[str, str]) -> str:
+    name = "search_abigail.json" if params["action"] == "query" else "parse_Abigail_Shiel.json"
+    return (WIKI_FIXTURES / name).read_text(encoding="utf-8")
+
+
+def test_wiki_searches(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["wiki", "Abigail Shiel"], fetch=_fake_wiki) == 0
+    out = capsys.readouterr().out
+    assert "1. Abigail Shiel" in out
+    assert "Source: Warcraft Wiki" in out
+
+
+def test_wiki_reads_a_page_and_a_section(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["wiki", "Abigail Shiel", "--page", "Abigail Shiel"], fetch=_fake_wiki) == 0
+    assert "- Title: Trade Supplies" in capsys.readouterr().out
+    assert main(["wiki", "--page", "Abigail Shiel", "--section", "Sells"], fetch=_fake_wiki) == 0
+    assert "Section: Sells" in capsys.readouterr().out
+
+
+def test_wiki_without_anything_to_do_explains(capsys: pytest.CaptureFixture[str]) -> None:
+    assert main(["wiki"], fetch=_fake_wiki) == 2
+    assert "--page" in capsys.readouterr().err

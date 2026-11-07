@@ -5,6 +5,7 @@ in the ``User-Agent`` header, remember answers for an hour so repeated questions
 nothing, and never send more than about two requests per second to one site.
 """
 
+import importlib.metadata
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -21,6 +22,12 @@ Fetch = Callable[[str, Mapping[str, str]], str]
 DEFAULT_TTL_SECONDS = 3600.0
 DEFAULT_MIN_INTERVAL_SECONDS = 0.5  # at most two requests per second per site
 REQUEST_TIMEOUT_SECONDS = 10.0
+
+
+def build_user_agent() -> str:
+    """Text that tells a website who is asking, for example ``wow-coach/0.3.0 (+https://...)``."""
+    version = importlib.metadata.version("wow-coach")
+    return f"wow-coach/{version} (+https://github.com/RayanBayat/wow-coach)"
 
 
 class PoliteFetcher:

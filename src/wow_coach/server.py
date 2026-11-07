@@ -25,13 +25,17 @@ from wow_coach.gamedir import resolve_game_folder
 from wow_coach.notes import notes_path, read_notes, save_notes
 from wow_coach.report import format_age, format_history, format_status
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
+from wow_coach.web import Fetch, PoliteFetcher, build_user_agent
+from wow_coach.wiki import DEFAULT_MAX_CHARS, answer_read_wiki_page, answer_search_wiki
 
 SERVER_NAME = "wow-coach"
 SERVER_INSTRUCTIONS = (
     "Coach the player of World of Warcraft: Forever. Before coaching, read the character "
     "with character_status (use list_characters if unsure who is playing). Keep a "
     "notebook between sessions: read it with read_coach_notes at the start and update it "
-    "with save_coach_notes when you learn something worth remembering."
+    "with save_coach_notes when you learn something worth remembering. For game facts (where "
+    "an NPC is, what a vendor sells, who gives a quest, what it rewards) use read_wiki_page, "
+    "or search_wiki to find the right page first, and cite the page link."
 )
 
 logger = logging.getLogger(__name__)
@@ -143,7 +147,9 @@ def answer_save_notes(notes_file: Path, text: str) -> str:
 
 
 def build_server(
-    wow_dir_flag: Path | None = None, environ: Mapping[str, str] | None = None
+    wow_dir_flag: Path | None = None,
+    environ: Mapping[str, str] | None = None,
+    fetch: Fetch | None = None,
 ) -> MCPServer:
     """Create the MCP server and register its tools.
 
@@ -153,8 +159,11 @@ def build_server(
     Args:
         wow_dir_flag: The ``--wow-dir`` value, or None to use the variable or auto-detect.
         environ: Environment variables (default: the real ones).
+        fetch: How web pages are downloaded (default: a polite fetcher with a cache). Tests
+            pass a fake one so they never use the network.
     """
     env = os.environ if environ is None else environ
+    download = PoliteFetcher(build_user_agent()) if fetch is None else fetch
     server = MCPServer(SERVER_NAME, instructions=SERVER_INSTRUCTIONS)
     read_only = ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=False)
     writes_notes = ToolAnnotations(
@@ -233,6 +242,43 @@ def build_server(
             text: The complete new content of the notebook.
         """
         return answer_save_notes(notes_path(environ=env), text)
+
+    # These tools reach out to a website, so unlike the others they are "open world".
+    web_lookup = ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=True)
+
+    @server.tool(annotations=web_lookup)
+    def search_wiki(query: str, limit: int = 5) -> str:
+        """Search the Warcraft Wiki and get matching page titles, one-line snippets and links.
+
+        Use this when you do not know the exact page name, for example "trade supplies
+        Brill" or "Camping 101". Then call read_wiki_page with the title you want. The
+        wiki has pages for Forever-only content too. Always cite the link you used.
+
+        Args:
+            query: What to look for, in plain words.
+            limit: How many results to return (1 to 10, default 5).
+        """
+        return answer_search_wiki(query, limit, download)
+
+    @server.tool(annotations=web_lookup)
+    def read_wiki_page(
+        title: str, section: str | None = None, max_chars: int = DEFAULT_MAX_CHARS
+    ) -> str:
+        """Read a Warcraft Wiki page as plain text, with its key facts listed first.
+
+        Use this for NPC locations and coordinates, vendor stock and prices, quest
+        givers and rewards, items, zones and game terms. Text is labelled when it only
+        applies to Classic, Retail or Forever; Forever-only info is marked, and Forever
+        is the game being played, so prefer it. Redirects are followed. If you do not
+        know the exact title, call search_wiki first. Always cite the page link.
+
+        Args:
+            title: The page title, for example "Abigail Shiel" or "Camping 101: Cooking".
+            section: Only return this section, for example "Sells" or "Rewards". Long
+                pages list their section names so you can ask for one.
+            max_chars: Longest answer to return (default 6000).
+        """
+        return answer_read_wiki_page(title, section, max_chars, download)
 
     return server
 
