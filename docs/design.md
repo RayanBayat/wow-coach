@@ -83,21 +83,58 @@ CoachLinkDB = {
 | `savedAt` | number | Unix time (seconds) when the snapshot was taken |
 | `reason` | string | Why it was taken: `"logout"` (logout, exit or a plain `/reload`) or `"coach"` (the `/coach` command) |
 | `name`, `realm`, `race`, `class` | string | Character identity, in the game's language (for example `"Undead"`, `"Mage"`) |
+| `classFile` | string | The class in English capitals, the same in every game language (`"MAGE"`) |
+| `faction` | string | `"Horde"` or `"Alliance"` |
+| `guild` | table | `{ name, rank }`. Missing when not in a guild |
 | `level` | number | Character level (1-60) |
 | `xp`, `xpMax` | number | XP into the current level, and XP needed for the next |
 | `restedXP` | number | Bonus (rested) XP left. Missing means none |
+| `resting` | bool | In an inn or a city, where rested XP builds up |
 | `money` | number | Copper. 100 copper = 1 silver, 100 silver = 1 gold |
 | `zone`, `subZone` | string | For example `"Tirisfal Glades"`, `"Brill"` |
 | `mapID` | number | Map id used by the game's UI |
 | `x`, `y` | number | Map coordinates 0-100 (missing inside dungeons) |
+| `instance` | table | `{ name, type }` while inside a dungeon or raid (`type` is `"party"`, `"raid"`...) |
 | `hearth` | string | Where the Hearthstone is set |
-| `bags` | table | `{ free = n, total = n }` bag slots |
-| `quests` | list | `{ questID, title, level, complete (bool), objectives = list of { text, done (bool) } }` |
+| `stats` | table | `{ health, healthMax, power, powerMax, powerType ("MANA"...), attributes = list of { name, value, base }, armor, resistances = list of { school, value }, spellDamage = list of { school, value }, healing, spellCrit, meleeCrit, dodge (percent), attackPower, manaRegen, manaRegenCasting (mana per second) }` |
+| `bags` | table | `{ free = n, total = n, containers = list of container }`. `free`/`total` count the backpack and the four bags. `containers` (added in 0.6.0) also lists a reagent bag or keyring when the character has one |
+| `quests` | list | `{ questID, title, level, zone, complete (bool), failed (bool), suggestedGroup, objectivesText, objectives = list of { text, done (bool) } }`. `zone` is the quest-log header it sits under; `objectivesText` is the short "Bring 10 ... to ... in Brill" summary, which names who to hand it in to; `suggestedGroup` is set for group quests |
+| `completedQuests` | number | How many quests the character has ever finished |
 | `talents` | table | `{ unspent = n, trees = list of { name, spent }, picked = list of { name, rank, maxRank } }` |
-| `professions` | list | Every Skills-tab line, each name once: `{ name, rank, maxRank, category }`. `category` is the header the line sat under, in the game's language (`"Professions"`, `"Secondary Skills"`, `"Weapon Skills"`, `"Languages"`...). `category` is optional: older snapshots lack it and can list a profession twice. The report hides lines whose maxRank is 1, shows weapon skills on their own line and hides languages |
-| `gear` | list | `{ slot, name, itemLevel, quality }`; quality 0 gray, 1 white, 2 green, 3 blue, 4 purple, 5 orange |
-| `spells` | list | Names of known spells (strings) |
+| `professions` | list | Every Skills-tab line, each name once: `{ name, rank, maxRank, category }`. `category` is the header the line sat under, in the game's language (`"Professions"`, `"Secondary Skills"`, `"Weapon Skills"`, `"Languages"`...). `category` is optional: older snapshots lack it and can list a profession twice |
+| `recipes` | list | Remembered (see below). One entry per profession window opened: `{ profession, rank, maxRank, seenAt, recipes = list of { name, color, skillUps } }`. Only learned recipes. `color` is the recipe's color in the window: `"orange"` (sure skill-up), `"yellow"`, `"green"`, `"gray"` (no skill-up) |
+| `gear` | list | One item (see below) per worn slot, plus `slot` (`"Chest"`), `durability` and `durabilityMax` |
+| `bank` | table | Remembered. `{ seenAt, containers = list of container }`; a container from the account bank has `account = true` |
+| `mail` | table | Remembered. `{ seenAt, letters = list of { sender, subject, money, cod, daysLeft, items = list of { name, count, quality } } }` |
+| `timePlayed` | table | Remembered from `/played`: `{ total, thisLevel, seenAt }` (seconds) |
+| `spells` | list | Names of learned, active spells (strings) |
+| `spellBook` | list | Every learned spellbook entry: `{ tab, name, rank, passive (bool) }` |
+| `reputations` | list | `{ name, group, standing, value, max, atWar }`: `standing` is the game's word (`"Friendly"`), `value`/`max` the progress inside it. A header the player collapsed in the reputation window is `{ name, collapsed = true }`, because the game hides its factions |
+| `currencies` | list | `{ name, quantity }` from the Currency tab |
+| `legacy` | table | Forever's Legacy system: `{ renown (reward track level), points (unspent), perks = list of { tree, name, rank, maxRank }, challenges = list of { name, done, description } }` (the class challenges) |
+| `auras` | list | Buffs and debuffs right now: `{ name, kind ("buff"/"debuff"), seconds (left; missing = no end), stacks }` |
+| `actionBars` | list | `{ slot, kind ("spell", "item", "macro"...), name }`. Slots 1-12 are the main bar; the other bars follow in blocks of 12 |
+| `group` | table | `{ kind ("party"/"raid"), members = list of { name, level, class } }`. Missing when alone |
+| `pet` | table | `{ name, level, family }`. Missing without a pet |
+| `achievementPoints` | number | Achievement points |
+| `mounts` | list | Names of the mounts the character owns |
 | `errors` | list | Strings naming sections the addon failed to read, for example `"talents: attempt to index nil"` |
+
+**Containers and items.** A container (a bag, a bank tab) is
+`{ bag, name, slots, free, account, items = list of item }`. An item is
+`{ slot, name, itemID, count, quality, itemLevel, requiredLevel, type, subType, equipSlot, stats, sellPrice, bound, noValue }`:
+quality 0 gray, 1 white, 2 green, 3 blue, 4 purple, 5 orange; `type`/`subType` are the
+game's words (`"Armor"`/`"Cloth"`, `"Tradeskill"`/`"Cloth"`); `equipSlot` (`"Chest"`) and
+`stats` (a list of strings like `"+3 Stamina"`) only exist for things you can wear;
+`sellPrice` is copper for one item; `noValue` means vendors won't buy it.
+
+**Remembered fields.** The bank, the mailbox and the recipe lists can only be read while
+that window is open, and play time only arrives when the player types `/played`. The addon
+reads them at that moment and copies the last thing it saw (with `seenAt`, Unix time) into
+every snapshot, so they can be days old. Missing means "never seen yet".
+
+All fields added in 0.6.0 are additive: `formatVersion` stays 1, older readers ignore them,
+and saves from older addons simply lack them.
 
 ### History event fields
 
@@ -252,7 +289,10 @@ revisited.
 
 - The snapshot is only as fresh as the last logout, `/reload` or `/coach`.
 - Quests under a collapsed quest-log header are not saved (`C_QuestLog.GetInfo` only walks
-  shown entries).
+  shown entries). The same goes for factions under a collapsed reputation header; those
+  headers are saved with `collapsed = true` so the coach can say so.
+- The bank, mailbox, recipe lists and play time are only as fresh as the last time the
+  player opened that window (or typed `/played`).
 - The Lua test uses a fake game API, so it proves our logic, not Blizzard's behavior.
 - There is no live combat data.
 

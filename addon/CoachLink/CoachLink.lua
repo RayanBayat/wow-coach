@@ -10,14 +10,21 @@ How it works, in plain words:
   * So this addon fills CoachLinkDB with a snapshot of your character right
     before WoW writes it (the PLAYER_LOGOUT event, which also fires on
     /reload). The coach on your PC then reads that file.
+  * The snapshot holds everything the game lets an addon see: level, gold,
+    every item in your bags, gear, quests, talents, spells, stats,
+    reputations, buffs, action bars and more.
+  * A few things can only be read while a window is open: the bank, the
+    mailbox and each profession's recipe list. The addon reads them when you
+    open that window and keeps the last thing it saw (with the time) in every
+    snapshot. The same goes for your play time, which the game only tells
+    addons when you type /played.
   * /coach saves a snapshot right now by reloading the UI (takes a few seconds).
   * /coach copy shows the character as plain text in a window, to paste into
     any AI chat. It reads the game right now, so it needs no reload. The
     text itself is made by CoachLinkText.lua.
 
-The exact data format is documented in docs/project-knowledge.md
-("Data contract"). If you change what is saved here, update that file and
-the Python reader too.
+The exact data format is documented in docs/design.md ("Data contract").
+If you change what is saved here, update that file and the Python reader too.
 
 Every part of the snapshot is read inside pcall ("protected call"), so if
 one game function breaks in a new patch, the rest still gets saved and the
@@ -29,7 +36,7 @@ failure is written to snapshot.errors instead of crashing the addon.
 local _, ns = ...
 
 local ADDON_NAME = "CoachLink"
-local FORMAT_VERSION = 1    -- bump when the saved format changes
+local FORMAT_VERSION = 1    -- bump when the saved format changes in a way old readers can't handle
 local MAX_HISTORY = 300     -- keep only the newest history events
 local MAX_PROGRESS = 500    -- keep only the newest progress points
 -- A new progress point that looks the same as the last one, and comes this soon
@@ -59,8 +66,30 @@ local GEAR_SLOTS = {
     { id = 19, name = "Tabard" },
 }
 
--- Backpack (0) plus the four bag slots (1-4).
+-- Backpack (0) plus the four bag slots (1-4). These count as "your bags".
 local FIRST_BAG, LAST_BAG = 0, 4
+-- Extra containers some characters have, read only when they have slots.
+local REAGENT_BAG, KEYRING = 5, -1
+-- If the bank-tab API is missing, the character bank tabs are these containers.
+local FIRST_BANK_TAB, LAST_BANK_TAB = 6, 14
+
+-- The five main attributes, in the game's order (UnitStat index 1-5).
+local ATTRIBUTES = { "Strength", "Agility", "Stamina", "Intellect", "Spirit" }
+-- Magic schools: resistance index 1-6 and spell-damage index 2-7 follow this order.
+local SCHOOLS = { "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane" }
+-- Recipe colors in the profession window, from the game's difficulty number.
+local RECIPE_COLORS = { [0] = "orange", [1] = "yellow", [2] = "green", [3] = "gray" }
+-- Forever's Legacy system (the Y key) is three trait trees plus a reward track.
+-- These ids come from the game's Constants.LegacyConsts (used when it is missing).
+local LEGACY_TREES = {
+    { id = 1187, name = "Professions" },
+    { id = 1188, name = "Adventure" },
+    { id = 1189, name = "Progression" },
+}
+local LEGACY_REWARD_TRACK_FACTION = 2802
+local MAX_ACTION_SLOTS = 180     -- every action bar slot the game has
+local MAX_AURAS = 40             -- buffs or debuffs read per kind
+local MAX_MAIL_ATTACHMENTS = 16  -- attachments per letter (ATTACHMENTS_MAX_RECEIVE)
 
 -- Why the next snapshot is taken. /coach sets this to "coach" before reloading.
 local pendingReason = "logout"
@@ -94,12 +123,113 @@ local function characterTable()
     return entry
 end
 
+-- This character's saved table, WITHOUT creating anything in CoachLinkDB (nil if none).
+local function savedEntry()
+    local characters = CoachLinkDB and CoachLinkDB.characters
+    return characters and characters[characterKey()]
+end
+
 -- Run reader(snapshot) safely. If it fails, note the error and carry on.
 local function readSection(snapshot, sectionName, reader)
     local ok, err = pcall(reader, snapshot)
     if not ok then
         table.insert(snapshot.errors, sectionName .. ": " .. tostring(err))
     end
+end
+
+-- The game's own text for a name like "INVTYPE_CHEST" ("Chest"), or nil.
+local function gameText(globalName)
+    local text = _G[globalName]
+    if type(text) == "string" and text ~= "" then
+        return text
+    end
+    return nil
+end
+
+-- 3 -> "3", 4.25 -> "4.3" (one decimal is plenty for stats).
+local function numberText(value)
+    if value == math.floor(value) then
+        return tostring(value)
+    end
+    return string.format("%.1f", value)
+end
+
+
+-------------------------------------------------------------------------------
+-- Items: one description used for bags, bank and gear
+-------------------------------------------------------------------------------
+
+-- An item's stats as short lines, e.g. { "+3 Stamina", "+2 Intellect" }, or nil.
+-- The game gives keys like "ITEM_MOD_STAMINA_SHORT"; their text is the stat name.
+local function itemStats(link)
+    local stats = C_Item.GetItemStats(link)
+    if not stats then
+        return nil
+    end
+    local lines = {}
+    for key, value in pairs(stats) do
+        local sign = value > 0 and "+" or ""
+        table.insert(lines, sign .. numberText(value) .. " " .. (gameText(key) or key))
+    end
+    table.sort(lines)  -- pairs() has no fixed order; sorting keeps the text stable
+    if #lines == 0 then
+        return nil
+    end
+    return lines
+end
+
+-- Everything the game tells us about an item, from its link.
+local function describeItem(link)
+    local name, _, quality, _, requiredLevel, itemType, itemSubType, _, equipLoc, _, sellPrice =
+        C_Item.GetItemInfo(link)
+    local item = {
+        -- The link looks like "|cff...|Hitem:2589:...|h[Linen Cloth]|h|r".
+        name = name or string.match(link, "%[(.-)%]") or link,
+        itemID = tonumber(string.match(link, "item:(%d+)")),
+        quality = quality,
+        itemLevel = C_Item.GetDetailedItemLevelInfo(link),
+        requiredLevel = requiredLevel,
+        type = itemType,        -- e.g. "Armor", "Trade Goods", "Quest"
+        subType = itemSubType,  -- e.g. "Cloth", "Cloth" (yes, both can be "Cloth")
+        sellPrice = sellPrice,  -- copper for ONE item at a vendor
+    }
+    -- Things you can't wear have no slot ("" or INVTYPE_NON_EQUIP_IGNORE).
+    if equipLoc and equipLoc ~= "" and equipLoc ~= "INVTYPE_NON_EQUIP_IGNORE" then
+        item.equipSlot = gameText(equipLoc) or equipLoc  -- e.g. "Chest"
+        local ok, stats = pcall(itemStats, link)
+        if ok then
+            item.stats = stats
+        end
+    end
+    return item
+end
+
+-- Every item in one container (a bag, a bank tab...), with free slots counted.
+local function readContainer(bagID)
+    local slots = C_Container.GetContainerNumSlots(bagID) or 0
+    local container = { bag = bagID, slots = slots, free = 0, items = {} }
+    local okName, bagName = pcall(C_Container.GetBagName, bagID)
+    if okName then
+        container.name = bagName
+    end
+    for slot = 1, slots do
+        local info = C_Container.GetContainerItemInfo(bagID, slot)
+        if info and info.hyperlink then
+            local item = describeItem(info.hyperlink)
+            item.slot = slot
+            item.count = info.stackCount or 1
+            item.bound = info.isBound == true
+            item.noValue = info.hasNoValue == true  -- vendors won't buy it
+            item.quality = item.quality or info.quality
+            if info.itemName and item.name == info.hyperlink then
+                item.name = info.itemName
+            end
+            table.insert(container.items, item)
+        else
+            container.free = container.free + 1
+        end
+    end
+    return container
 end
 
 
@@ -111,8 +241,16 @@ local function readIdentity(snapshot)
     snapshot.name = UnitName("player")
     snapshot.realm = GetRealmName()
     snapshot.race = UnitRace("player")      -- localized, e.g. "Undead"
-    snapshot.class = UnitClass("player")    -- localized, e.g. "Mage"
+    local className, classFile = UnitClass("player")
+    snapshot.class = className              -- localized, e.g. "Mage"
+    snapshot.classFile = classFile          -- always English, e.g. "MAGE"
     snapshot.level = UnitLevel("player")
+    local _, factionName = UnitFactionGroup("player")
+    snapshot.faction = factionName          -- e.g. "Horde"
+    local guildName, rankName = GetGuildInfo("player")
+    if guildName then
+        snapshot.guild = { name = guildName, rank = rankName }
+    end
 end
 
 local function readExperience(snapshot)
@@ -120,6 +258,7 @@ local function readExperience(snapshot)
     snapshot.xpMax = UnitXPMax("player")
     snapshot.restedXP = GetXPExhaustion()   -- nil when you have no rested XP
     snapshot.money = GetMoney()             -- in copper
+    snapshot.resting = IsResting() == true  -- in an inn or a city: rested XP builds up
 end
 
 local function readLocation(snapshot)
@@ -138,33 +277,108 @@ local function readLocation(snapshot)
             snapshot.y = y * 100
         end
     end
+
+    local inInstance, instanceType = IsInInstance()
+    if inInstance then
+        snapshot.instance = { name = GetInstanceInfo(), type = instanceType }
+    end
 end
 
+-- Health, mana and the numbers on the character window's stat list.
+local function readStats(snapshot)
+    local _, powerToken = UnitPowerType("player")
+    local stats = {
+        health = UnitHealth("player"),
+        healthMax = UnitHealthMax("player"),
+        power = UnitPower("player"),
+        powerMax = UnitPowerMax("player"),
+        powerType = powerToken,             -- "MANA", "RAGE", "ENERGY"...
+        attributes = {},
+        resistances = {},
+        spellDamage = {},
+    }
+    snapshot.stats = stats
+
+    for index, englishName in ipairs(ATTRIBUTES) do
+        local base, value = UnitStat("player", index)
+        table.insert(stats.attributes, {
+            name = gameText("SPELL_STAT" .. index .. "_NAME") or englishName,
+            value = value,
+            base = base,
+        })
+    end
+    local _, armor = UnitArmor("player")
+    stats.armor = armor
+
+    for index, school in ipairs(SCHOOLS) do
+        local _, total = UnitResistance("player", index)
+        table.insert(stats.resistances, { school = school, value = total })
+        table.insert(stats.spellDamage, { school = school, value = GetSpellBonusDamage(index + 1) })
+    end
+    stats.healing = GetSpellBonusHealing()
+    stats.spellCrit = GetSpellCritChance()   -- percent
+    stats.meleeCrit = GetCritChance()        -- percent
+    stats.dodge = GetDodgeChance()           -- percent
+    local base, positive, negative = UnitAttackPower("player")
+    stats.attackPower = base + positive + negative
+    -- Mana per second: outside combat, and while casting (the "5 second rule").
+    local regenResting, regenCasting = GetManaRegen()
+    stats.manaRegen = regenResting
+    stats.manaRegenCasting = regenCasting
+end
+
+-- Your bags: the free/total count (as before) and every item in them.
 local function readBags(snapshot)
     local free, total = 0, 0
+    local containers = {}
     for bag = FIRST_BAG, LAST_BAG do
         total = total + (C_Container.GetContainerNumSlots(bag) or 0)
         free = free + (C_Container.GetContainerNumFreeSlots(bag) or 0)
+        if (C_Container.GetContainerNumSlots(bag) or 0) > 0 then
+            table.insert(containers, readContainer(bag))
+        end
     end
-    snapshot.bags = { free = free, total = total }
+    for _, extra in ipairs({ REAGENT_BAG, KEYRING }) do
+        local ok, slots = pcall(C_Container.GetContainerNumSlots, extra)
+        if ok and slots and slots > 0 then
+            table.insert(containers, readContainer(extra))
+        end
+    end
+    snapshot.bags = { free = free, total = total, containers = containers }
 end
 
+-- The quest log: every quest you have, its objectives and where to hand it in.
 local function readQuests(snapshot)
     -- Built in a local list and stored at the end: if the game breaks halfway,
     -- snapshot.quests stays nil ("unknown") instead of a misleading short list.
     local quests = {}
+    local header = nil
     local numEntries = C_QuestLog.GetNumQuestLogEntries()
     for index = 1, numEntries do
         local info = C_QuestLog.GetInfo(index)
-        -- The quest log mixes zone headers ("Tirisfal Glades") with real quests.
-        if info and not info.isHeader then
+        -- The quest log mixes zone headers ("Tirisfal Glades") with real quests,
+        -- and has hidden entries the game uses for its own bookkeeping.
+        if info and info.isHeader then
+            header = info.title
+        elseif info and not info.isHidden then
             local quest = {
                 questID = info.questID,
                 title = info.title,
                 level = info.level,
+                zone = header,
                 complete = C_QuestLog.IsComplete(info.questID) == true,
+                failed = C_QuestLog.IsFailed(info.questID) == true,
                 objectives = {},
             }
+            if info.suggestedGroup and info.suggestedGroup > 1 then
+                quest.suggestedGroup = info.suggestedGroup  -- "group quest (3)"
+            end
+            -- The short summary under "Quest Objectives", e.g. "Bring 10 Tirisfal
+            -- Pumpkins to Farmer Solliden in Brill." Says who to hand it in to.
+            local okText, _, objectivesText = pcall(GetQuestLogQuestText, index)
+            if okText and objectivesText and objectivesText ~= "" then
+                quest.objectivesText = objectivesText
+            end
             local objectives = C_QuestLog.GetQuestObjectives(info.questID) or {}
             for _, objective in ipairs(objectives) do
                 table.insert(quest.objectives, {
@@ -176,6 +390,38 @@ local function readQuests(snapshot)
         end
     end
     snapshot.quests = quests
+    -- How many quests this character has ever finished (just the number).
+    local okDone, doneIDs = pcall(C_QuestLog.GetAllCompletedQuestIDs)
+    if okDone and doneIDs then
+        snapshot.completedQuests = #doneIDs
+    end
+end
+
+-- The name of a trait-tree node's chosen entry (a talent or a Legacy perk).
+local function traitName(configID, node)
+    local entry = C_Traits.GetEntryInfo(configID, node.activeEntry.entryID)
+    local definition = C_Traits.GetDefinitionInfo(entry.definitionID)
+    local name = definition.overrideName
+    if not name or name == "" then
+        name = C_Spell.GetSpellName(definition.spellID)
+    end
+    return name or ("spell " .. tostring(definition.spellID))
+end
+
+-- Every node of a trait tree you have at least one rank in.
+local function pickedTraits(configID, treeID)
+    local picked = {}
+    for _, nodeID in ipairs(C_Traits.GetTreeNodes(treeID)) do
+        local node = C_Traits.GetNodeInfo(configID, nodeID)
+        if node and node.activeRank > 0 and node.activeEntry then
+            table.insert(picked, {
+                name = traitName(configID, node),
+                rank = node.activeRank,
+                maxRank = node.maxRanks,
+            })
+        end
+    end
+    return picked
 end
 
 -- Forever has three classic talent trees (e.g. Arcane, Fire, Frost) built on
@@ -216,23 +462,7 @@ local function readTalents(snapshot)
         })
     end
 
-    -- Every talent you have at least one rank in.
-    for _, nodeID in ipairs(C_Traits.GetTreeNodes(treeID)) do
-        local node = C_Traits.GetNodeInfo(configID, nodeID)
-        if node and node.activeRank > 0 and node.activeEntry then
-            local entry = C_Traits.GetEntryInfo(configID, node.activeEntry.entryID)
-            local definition = C_Traits.GetDefinitionInfo(entry.definitionID)
-            local name = definition.overrideName
-            if not name or name == "" then
-                name = C_Spell.GetSpellName(definition.spellID)
-            end
-            table.insert(talents.picked, {
-                name = name or ("spell " .. tostring(definition.spellID)),
-                rank = node.activeRank,
-                maxRank = node.maxRanks,
-            })
-        end
-    end
+    talents.picked = pickedTraits(configID, treeID)
 end
 
 -- Every line of the Skills tab: professions, weapon skills, languages...
@@ -242,13 +472,13 @@ end
 local function readProfessions(snapshot)
     snapshot.professions = {}
     local category = nil
-    local seen = {}
+    local seenNames = {}
     for index = 1, C_SkillInfo.GetNumSkillLines() do
         local line = C_SkillInfo.GetSkillLineInfo(index)
         if line and line.isHeader then
             category = line.name
-        elseif line and not seen[line.name] then
-            seen[line.name] = true
+        elseif line and not seenNames[line.name] then
+            seenNames[line.name] = true
             table.insert(snapshot.professions, {
                 name = line.name,
                 rank = line.rank,
@@ -259,37 +489,369 @@ local function readProfessions(snapshot)
     end
 end
 
+-- What you wear: each item with its stats and how worn it is (durability).
 local function readGear(snapshot)
     snapshot.gear = {}
     for _, slot in ipairs(GEAR_SLOTS) do
         local link = GetInventoryItemLink("player", slot.id)
         if link then
-            local name, _, quality = C_Item.GetItemInfo(link)
-            table.insert(snapshot.gear, {
-                slot = slot.name,
-                name = name or link,
-                itemLevel = C_Item.GetDetailedItemLevelInfo(link),
-                quality = quality,
-            })
+            local item = describeItem(link)
+            item.slot = slot.name
+            local current, maximum = GetInventoryItemDurability(slot.id)
+            item.durability = current
+            item.durabilityMax = maximum
+            table.insert(snapshot.gear, item)
         end
     end
 end
 
--- Names of the spells you know, so the coach can tell what you still need to train.
+-- The spellbook. `spells` lists the names of learned, active spells (what the
+-- coach checks against the trainer list). `spellBook` has every entry with its
+-- spellbook tab and rank, passives included.
 local function readSpells(snapshot)
     snapshot.spells = {}
-    local seen = {}
+    snapshot.spellBook = {}
+    local seenNames = {}
     local playerBank = Enum.SpellBookSpellBank.Player
     for lineIndex = 1, C_SpellBook.GetNumSpellBookSkillLines() do
         local line = C_SpellBook.GetSpellBookSkillLineInfo(lineIndex)
         for offset = 1, line.numSpellBookItems do
             local item = C_SpellBook.GetSpellBookItemInfo(line.itemIndexOffset + offset, playerBank)
             local isKnownSpell = item and item.itemType == Enum.SpellBookItemType.Spell
-            if isKnownSpell and not item.isPassive and not seen[item.name] then
-                seen[item.name] = true
-                table.insert(snapshot.spells, item.name)
+            if isKnownSpell then
+                local rank = item.subName
+                table.insert(snapshot.spellBook, {
+                    tab = line.name,
+                    name = item.name,
+                    rank = (rank and rank ~= "") and rank or nil,
+                    passive = item.isPassive == true,
+                })
+                if not item.isPassive and not seenNames[item.name] then
+                    seenNames[item.name] = true
+                    table.insert(snapshot.spells, item.name)
+                end
             end
         end
+    end
+end
+
+-- Reputation with every faction the reputation window shows.
+-- Factions under a header you collapsed in that window are not shown by the
+-- game, so they are missing here too; the header is marked `collapsed`.
+local function readReputations(snapshot)
+    local reputations = {}
+    local group = nil
+    for index = 1, C_Reputation.GetNumFactions() do
+        local faction = C_Reputation.GetFactionDataByIndex(index)
+        if faction and faction.isHeader and not faction.isHeaderWithRep then
+            group = faction.name
+            if faction.isCollapsed then
+                table.insert(reputations, { name = faction.name, collapsed = true })
+            end
+        elseif faction and faction.name and faction.name ~= "" then
+            local bottom = faction.currentReactionThreshold or 0
+            table.insert(reputations, {
+                name = faction.name,
+                group = group,
+                standing = gameText("FACTION_STANDING_LABEL" .. tostring(faction.reaction)),
+                value = (faction.currentStanding or 0) - bottom,
+                max = (faction.nextReactionThreshold or 0) - bottom,
+                atWar = faction.atWarWith == true,
+            })
+        end
+    end
+    snapshot.reputations = reputations
+end
+
+-- Currencies from the Currency tab (Forever-specific tokens and the like).
+local function readCurrencies(snapshot)
+    local currencies = {}
+    for index = 1, C_CurrencyInfo.GetCurrencyListSize() do
+        local info = C_CurrencyInfo.GetCurrencyListInfo(index)
+        if info and not info.isHeader and info.name and info.name ~= "" then
+            table.insert(currencies, { name = info.name, quantity = info.quantity })
+        end
+    end
+    snapshot.currencies = currencies
+end
+
+-- Forever's Legacy system (Y key): reward-track level, unspent Legacy points,
+-- the perks you picked and this class's Legacy challenges.
+local function readLegacy(snapshot)
+    local consts = Constants and Constants.LegacyConsts or {}
+    local legacy = { perks = {}, challenges = {} }
+    snapshot.legacy = legacy
+
+    legacy.renown = C_MajorFactions.GetCurrentRenownLevel(
+        consts.LEGACY_REWARD_TRACK_FACTION_ID or LEGACY_REWARD_TRACK_FACTION)
+
+    local treeIDs = {
+        consts.LEGACY_TREE_PROFESSIONS_ID, consts.LEGACY_TREE_ADVENTURE_ID,
+        consts.LEGACY_TREE_PROGRESSION_ID,
+    }
+    for index, tree in ipairs(LEGACY_TREES) do
+        local treeID = treeIDs[index] or tree.id
+        local configID = C_Traits.GetConfigIDByTreeID(treeID)
+        if configID then
+            if legacy.points == nil then
+                local currency = C_Traits.GetTreeCurrencyInfo(configID, treeID, false)
+                legacy.points = currency and currency[1] and currency[1].quantity
+            end
+            for _, perk in ipairs(pickedTraits(configID, treeID)) do
+                perk.tree = tree.name
+                table.insert(legacy.perks, perk)
+            end
+        end
+    end
+
+    -- Class challenges are achievements in one category per class.
+    local categoryID = consts["LEGACY_DEFAULT_CATEGORY_" .. tostring(snapshot.classFile)]
+    if categoryID then
+        for index = 1, (GetCategoryNumAchievements(categoryID)) or 0 do
+            local _, name, _, completed, _, _, _, description = GetAchievementInfo(categoryID, index)
+            if name then
+                table.insert(legacy.challenges, {
+                    name = name, done = completed == true, description = description,
+                })
+            end
+        end
+    end
+end
+
+-- Buffs and debuffs on you right now, with the seconds left (nil = no end).
+local function readAuras(snapshot)
+    local auras = {}
+    local now = GetTime()
+    for _, kind in ipairs({ { filter = "HELPFUL", name = "buff" }, { filter = "HARMFUL", name = "debuff" } }) do
+        for index = 1, MAX_AURAS do
+            local aura = C_UnitAuras.GetAuraDataByIndex("player", index, kind.filter)
+            if not aura then
+                break
+            end
+            local seconds = nil
+            if aura.expirationTime and aura.expirationTime > 0 then
+                seconds = math.floor(aura.expirationTime - now)
+            end
+            table.insert(auras, {
+                name = aura.name, kind = kind.name, seconds = seconds,
+                stacks = (aura.applications and aura.applications > 1) and aura.applications or nil,
+            })
+        end
+    end
+    snapshot.auras = auras
+end
+
+-- What sits on your action bars, slot by slot (empty slots are left out).
+-- Slots 1-12 are the main bar; the other bars follow in blocks of 12.
+local function readActionBars(snapshot)
+    local actions = {}
+    for slot = 1, MAX_ACTION_SLOTS do
+        local kind, id = GetActionInfo(slot)
+        if kind then
+            local name = nil
+            if kind == "spell" then
+                name = C_Spell.GetSpellName(id)
+            elseif kind == "item" then
+                name = C_Item.GetItemNameByID(id)
+            elseif kind == "summonmount" then
+                name = C_MountJournal.GetMountInfoByID(id)
+            end
+            name = name or GetActionText(slot) or (kind .. " " .. tostring(id))
+            table.insert(actions, { slot = slot, kind = kind, name = name })
+        end
+    end
+    snapshot.actionBars = actions
+end
+
+-- The party or raid you are in, if any.
+local function readGroup(snapshot)
+    if not IsInGroup() then
+        return
+    end
+    local isRaid = IsInRaid()
+    local unitPrefix = isRaid and "raid" or "party"
+    local count = isRaid and GetNumGroupMembers() or (GetNumGroupMembers() - 1)
+    local group = { kind = unitPrefix, members = {} }
+    for index = 1, count do
+        local unit = unitPrefix .. index
+        if UnitExists(unit) and not UnitIsUnit(unit, "player") then
+            table.insert(group.members, {
+                name = UnitName(unit), level = UnitLevel(unit), class = UnitClass(unit),
+            })
+        end
+    end
+    snapshot.group = group
+end
+
+-- A hunter's or warlock's pet (or any other pet you have out).
+local function readPet(snapshot)
+    if UnitExists("pet") then
+        snapshot.pet = {
+            name = UnitName("pet"), level = UnitLevel("pet"), family = UnitCreatureFamily("pet"),
+        }
+    end
+end
+
+local function readAchievements(snapshot)
+    snapshot.achievementPoints = GetTotalAchievementPoints()
+end
+
+-- The mounts you own, by name.
+local function readMounts(snapshot)
+    local mounts = {}
+    for _, mountID in ipairs(C_MountJournal.GetMountIDs() or {}) do
+        local name, _, _, _, _, _, _, _, _, _, isCollected = C_MountJournal.GetMountInfoByID(mountID)
+        if isCollected and name then
+            table.insert(mounts, name)
+        end
+    end
+    table.sort(mounts)
+    snapshot.mounts = mounts
+end
+
+
+-------------------------------------------------------------------------------
+-- Things the game only shows while a window is open
+-------------------------------------------------------------------------------
+
+-- The bank, the mailbox and the recipe list can only be read while that window
+-- is open, and play time only arrives when you type /played. So we read them at
+-- that moment and remember what we saw, with the time (`seenAt`). Every snapshot
+-- carries the last thing we saw. `seen` holds what was read in this session;
+-- before that, the previous saved snapshot is used.
+local seen = {}
+local seenErrors = {}    -- problems while reading those windows, added to the next snapshot
+local bankIsOpen = false
+
+-- The last bank/mail/recipes/timePlayed we saw: this session, or the saved snapshot.
+local function lastSeen(name)
+    if seen[name] ~= nil then
+        return seen[name]
+    end
+    local entry = savedEntry()
+    return entry and entry.snapshot and entry.snapshot[name]
+end
+
+-- Run reader() safely. Failures are kept for the next snapshot (not printed in
+-- chat: the bank is re-read on every bag change, and chat spam helps nobody).
+local function rememberSafely(name, reader)
+    local ok, err = pcall(reader)
+    if ok then
+        seenErrors[name] = nil
+    else
+        seenErrors[name] = name .. ": " .. tostring(err)
+    end
+end
+
+-- The bank containers: the bank tabs you bought (character and account bank).
+local function bankContainers()
+    local containers = {}
+    if C_Bank and C_Bank.FetchPurchasedBankTabData and Enum.BankType then
+        for _, bankType in ipairs({ Enum.BankType.Character, Enum.BankType.Account }) do
+            local okTabs, tabs = pcall(C_Bank.FetchPurchasedBankTabData, bankType)
+            for _, tab in ipairs(okTabs and tabs or {}) do
+                table.insert(containers, {
+                    id = tab.ID, name = tab.name, account = bankType == Enum.BankType.Account,
+                })
+            end
+        end
+    end
+    if #containers == 0 then
+        for bagID = FIRST_BANK_TAB, LAST_BANK_TAB do
+            if (C_Container.GetContainerNumSlots(bagID) or 0) > 0 then
+                table.insert(containers, { id = bagID, account = false })
+            end
+        end
+    end
+    return containers
+end
+
+local function readBank()
+    local bank = { seenAt = time(), containers = {} }
+    for _, tab in ipairs(bankContainers()) do
+        local container = readContainer(tab.id)
+        if tab.name and tab.name ~= "" then
+            container.name = tab.name
+        end
+        container.account = tab.account
+        table.insert(bank.containers, container)
+    end
+    seen.bank = bank
+end
+
+local function readMail()
+    local mail = { seenAt = time(), letters = {} }
+    local shown = GetInboxNumItems()
+    for index = 1, shown do
+        local _, _, sender, subject, money, cod, daysLeft, itemCount = GetInboxHeaderInfo(index)
+        local letter = {
+            sender = sender, subject = subject, money = money, cod = cod,
+            daysLeft = daysLeft and math.floor(daysLeft) or nil, items = {},
+        }
+        if itemCount then
+            for attachment = 1, MAX_MAIL_ATTACHMENTS do
+                local name, _, _, count, quality = GetInboxItem(index, attachment)
+                if name then
+                    table.insert(letter.items, { name = name, count = count, quality = quality })
+                end
+            end
+        end
+        table.insert(mail.letters, letter)
+    end
+    seen.mail = mail
+end
+
+-- Add or replace one profession in the remembered recipe lists.
+local function rememberRecipes(profession)
+    local list = {}
+    for _, old in ipairs(lastSeen("recipes") or {}) do
+        if old.profession ~= profession.profession then
+            table.insert(list, old)
+        end
+    end
+    table.insert(list, profession)
+    seen.recipes = list
+end
+
+-- The open profession window: every recipe you know and its color.
+local function readRecipes()
+    local ui = C_TradeSkillUI
+    local isSomeoneElses = (ui.IsTradeSkillLinked and ui.IsTradeSkillLinked())
+        or (ui.IsTradeSkillGuild and ui.IsTradeSkillGuild())
+        or (ui.IsNPCCrafting and ui.IsNPCCrafting())
+    if isSomeoneElses then
+        return  -- a linked or guild recipe list: not this character's recipes
+    end
+    local info = ui.GetBaseProfessionInfo()
+    if not info or not info.professionName or info.professionName == "" then
+        return
+    end
+    local profession = {
+        profession = info.professionName, rank = info.skillLevel,
+        maxRank = info.maxSkillLevel, seenAt = time(), recipes = {},
+    }
+    local recipeIDs = (ui.GetAllRecipeIDs or ui.GetFilteredRecipeIDs)() or {}
+    for _, recipeID in ipairs(recipeIDs) do
+        local recipe = ui.GetRecipeInfo(recipeID)
+        if recipe and recipe.learned then
+            table.insert(profession.recipes, {
+                name = recipe.name,
+                color = RECIPE_COLORS[recipe.relativeDifficulty],
+                skillUps = recipe.numSkillUps,
+            })
+        end
+    end
+    rememberRecipes(profession)
+end
+
+-- Copy everything remembered into the snapshot, plus any problems reading it.
+local function readRemembered(snapshot)
+    snapshot.bank = lastSeen("bank")
+    snapshot.mail = lastSeen("mail")
+    snapshot.recipes = lastSeen("recipes")
+    snapshot.timePlayed = lastSeen("timePlayed")
+    for _, message in pairs(seenErrors) do
+        table.insert(snapshot.errors, message)
     end
 end
 
@@ -305,12 +867,23 @@ local function buildSnapshot(reason)
     readSection(snapshot, "identity", readIdentity)
     readSection(snapshot, "experience", readExperience)
     readSection(snapshot, "location", readLocation)
+    readSection(snapshot, "stats", readStats)
     readSection(snapshot, "bags", readBags)
     readSection(snapshot, "quests", readQuests)
     readSection(snapshot, "talents", readTalents)
     readSection(snapshot, "professions", readProfessions)
     readSection(snapshot, "gear", readGear)
     readSection(snapshot, "spells", readSpells)
+    readSection(snapshot, "reputations", readReputations)
+    readSection(snapshot, "currencies", readCurrencies)
+    readSection(snapshot, "legacy", readLegacy)
+    readSection(snapshot, "auras", readAuras)
+    readSection(snapshot, "actionBars", readActionBars)
+    readSection(snapshot, "group", readGroup)
+    readSection(snapshot, "pet", readPet)
+    readSection(snapshot, "achievements", readAchievements)
+    readSection(snapshot, "mounts", readMounts)
+    readSection(snapshot, "remembered", readRemembered)
 
     return snapshot
 end
@@ -444,6 +1017,41 @@ function handlers.QUEST_TURNED_IN(questID, xpReward)
     addHistory("quest", text)
 end
 
+-- The bank window: read it when it opens, and again after every change while open.
+function handlers.BANKFRAME_OPENED()
+    bankIsOpen = true
+    rememberSafely("bank", readBank)
+end
+
+function handlers.BANKFRAME_CLOSED()
+    bankIsOpen = false
+end
+
+function handlers.BAG_UPDATE_DELAYED()
+    if bankIsOpen then
+        rememberSafely("bank", readBank)
+    end
+end
+
+-- Fires when the mailbox's letters arrive or change (only while it is open).
+function handlers.MAIL_INBOX_UPDATE()
+    rememberSafely("mail", readMail)
+end
+
+-- A profession window opened, or its recipe list changed.
+function handlers.TRADE_SKILL_SHOW()
+    rememberSafely("recipes", readRecipes)
+end
+
+function handlers.TRADE_SKILL_LIST_UPDATE()
+    rememberSafely("recipes", readRecipes)
+end
+
+-- The answer to /played: total play time and time at this level, in seconds.
+function handlers.TIME_PLAYED_MSG(totalSeconds, levelSeconds)
+    seen.timePlayed = { total = totalSeconds, thisLevel = levelSeconds, seenAt = time() }
+end
+
 -- Fires right before WoW writes SavedVariables: on logout, /reload and exit.
 function handlers.PLAYER_LOGOUT()
     takeSnapshot(pendingReason)
@@ -517,6 +1125,7 @@ local function createEditBox(frame)
 
     local editBox = CreateFrame("EditBox", nil, scroll)
     editBox:SetMultiLine(true)
+    editBox:SetMaxLetters(0)      -- 0 = no limit: the full sheet is long
     editBox:SetAutoFocus(false)   -- we focus it ourselves when the window opens
     editBox:SetFontObject(ChatFontNormal)
     editBox:SetWidth(560)
@@ -541,8 +1150,7 @@ end
 
 -- This character's saved history, WITHOUT creating anything in CoachLinkDB.
 local function savedHistory()
-    local characters = CoachLinkDB and CoachLinkDB.characters
-    local entry = characters and characters[characterKey()]
+    local entry = savedEntry()
     return entry and entry.history or {}
 end
 
@@ -576,6 +1184,7 @@ SlashCmdList.COACHLINK = function(argument)
         say("/coach: save your character for the coach on this PC (reloads the UI, a few seconds).")
         say("/coach copy (or /coach export): show your character as text to copy into any AI chat. No reload.")
         say("/coach help: show this list.")
+        say("The bank, mailbox and recipes are saved when you open them; play time when you type /played.")
         return
     end
     if argument == "copy" or argument == "export" then
