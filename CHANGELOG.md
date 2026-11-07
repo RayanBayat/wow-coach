@@ -4,6 +4,39 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-11-08
+
+The addon now saves everything about your character, and `/coach copy` gives only your data.
+
+### Added
+
+- The snapshot holds every item in your bags (count, quality, type, vendor price, stats and
+  needed level for things you can wear, soulbound and "vendors won't buy it"), plus the reagent
+  bag and keyring when you have them.
+- The bank, mailbox and each profession's recipe list (with the recipe colors) are read when
+  you open that window and remembered with the time you saw them, so they are in every
+  snapshot after that. Play time is remembered from `/played`.
+- Stats (health, mana, attributes, armor, resistances, spell damage, crit, dodge, attack power,
+  mana regeneration), buffs and debuffs with the time left, faction, guild, resting, and the
+  dungeon you are in.
+- Quests: the quest-log zone, the short goal text that says who to hand the quest in to,
+  group quest size, failed quests, and how many quests you have ever completed.
+- Gear: stats and durability. The full spellbook by tab with ranks and passives, what sits on
+  every action bar, reputations, currencies, Forever's Legacy system (reward track level,
+  points to spend, perks and your class challenges), your group, your pet, achievement points
+  and the mounts you own.
+- The status report (`character_status`, `wow-coach status`) shows all of it, including the
+  total vendor value of your gray items and skills such as languages.
+- `/coach help` says how the bank, mail, recipes and play time get included.
+
+### Changed
+
+- `/coach copy` no longer starts with instructions for the AI ("Please be my coach..."). The
+  text is a plain title and your character's data, so you decide what to ask.
+- The text is longer now; the copy window has no length limit.
+
+All new fields are additive: `formatVersion` stays 1 and older saves still work.
+
 ## [0.5.0] - 2026-11-07
 
 Every character now has its own memory, and each coaching session starts by choosing one.

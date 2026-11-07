@@ -1,7 +1,8 @@
 # wow-coach
 
 wow-coach lets an AI of your choice see your World of Warcraft: Forever character, so it can
-coach you with your real level, quests, talents, gear and spells. A small addon called
+coach you with your real character: level, quests, talents, gear, every item in your bags,
+bank and mail, spells, stats and more. A small addon called
 CoachLink saves your character as text. You give that text to the AI by pasting it, or by
 connecting an AI app that can read it.
 
@@ -29,9 +30,9 @@ You can start with Way 1 and add the others later.
 
 Shortcut: if you have [uv](https://docs.astral.sh/uv/getting-started/installation/), this line
 does steps 1 to 3 for you:
-`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.5.0 wow-coach setup`
+`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.6.0 wow-coach setup`
 
-1. Download `CoachLink-0.5.0.zip` from the
+1. Download `CoachLink-0.6.0.zip` from the
    [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest).
 2. Unzip it into the game's `Interface\AddOns` folder, so this file exists:
    `World of Warcraft\_forever_\Interface\AddOns\CoachLink\CoachLink.toc`.
@@ -56,7 +57,7 @@ lists the commands.
    player notes file and installs the coach into Claude Code:
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.5.0 wow-coach setup --claude-code
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.6.0 wow-coach setup --claude-code
    ```
 
 3. Restart the game completely if the setup told you to, then start your coach:
@@ -113,8 +114,9 @@ In a terminal, `wow-coach characters` and `wow-coach progress` show the same lis
   character data is not part of that.
 - The AI you choose receives what you paste or what it reads, and sends it to its provider, like
   anything else you type there. Your character sheet contains your character name, realm,
-  level, zone, quests, gear, spells and gold. It does not contain your account name, password or
-  email.
+  guild, level, zone, quests, items, gear, spells, gold and the rest of what the game shows you.
+  It also contains other players' character names when they are in your group or sent you
+  mail (with the mail's subject). It does not contain your account name, password or email.
 - The addon only uses the normal addon interface. It does not read game memory, inject code or
   automate play. Addons that use the normal interface are allowed under Blizzard's rules.
 - The coach never needs you to close the game for it.

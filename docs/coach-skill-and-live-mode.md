@@ -10,7 +10,7 @@ Combine it with [Way 2](connect-an-ai-app.md) so the agent can read your charact
 
 ## Shortcut for Claude Code
 
-Run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.5.0 wow-coach setup --claude-code`.
+Run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.6.0 wow-coach setup --claude-code`.
 It copies the skill (and the ready-made coach agent, see
 [the Claude Code agent](claude-code-agent.md)) into `~/.claude`. For other agents, follow the
 steps below.
@@ -87,7 +87,7 @@ Claude as a message, so Claude reacts. Each line ends with the reason:
 To start it, say to Claude: `start live mode`. Claude runs this command with the Monitor tool:
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.5.0 wow-coach watch
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.6.0 wow-coach watch
 ```
 
 Monitors last at most 30 minutes. The skill tells Claude to restart it while the game runs.

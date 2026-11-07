@@ -111,7 +111,7 @@ Code's **Monitor** tool is the one tested). Offer it when a session starts and t
 running; the player can also say "start live mode".
 
 1. Start the watcher with Monitor:
-   - command: `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.5.0 wow-coach watch`
+   - command: `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.6.0 wow-coach watch`
      (it finds the game folder that `wow-coach setup` saved; without that, set the
      environment variable `WOW_COACH_WOW_DIR` to the `_forever_` folder first)
    - description: `WoW /coach saves`
