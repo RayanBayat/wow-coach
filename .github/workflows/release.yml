@@ -1,0 +1,49 @@
+name: Release
+
+# Runs when you push a tag like v0.2.0. It builds CoachLink-<version>.zip
+# and publishes it on the GitHub Releases page.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check the tag matches the addon version
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          toc_version="$(sed -n 's/^## Version:[[:space:]]*//p' addon/CoachLink/CoachLink.toc | tr -d '\r')"
+          echo "tag: $tag_version, CoachLink.toc: $toc_version"
+          if [ "$tag_version" != "$toc_version" ]; then
+            echo "The tag $GITHUB_REF_NAME does not match the version in CoachLink.toc." >&2
+            exit 1
+          fi
+          echo "VERSION=$tag_version" >> "$GITHUB_ENV"
+
+      - name: Build the zip (folder CoachLink/ at the root)
+        run: |
+          cd addon
+          zip -r "../CoachLink-${VERSION}.zip" CoachLink
+
+      - name: Take this version's notes from CHANGELOG.md
+        run: |
+          awk -v v="$VERSION" '
+            /^## \[/ { if (found) exit; if (index($0, "[" v "]")) { found = 1; next } }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "No section for $VERSION in CHANGELOG.md." >&2
+            exit 1
+          fi
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "CoachLink-${VERSION}.zip" --title "$GITHUB_REF_NAME" --notes-file release-notes.md

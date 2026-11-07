@@ -1,0 +1,67 @@
+[project]
+name = "wow-coach"
+version = "0.2.0"
+description = "An AI coach for World of Warcraft: Forever: an addon saves your character, and any AI app can read it."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    { name = "Rayan Bayat" }
+]
+keywords = ["world-of-warcraft", "wow", "wow-forever", "addon", "mcp", "ai", "coach"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Games/Entertainment",
+    "Typing :: Typed",
+]
+requires-python = ">=3.14"
+dependencies = [
+    "mcp==2.3.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/RayanBayat/wow-coach"
+Source = "https://github.com/RayanBayat/wow-coach"
+Issues = "https://github.com/RayanBayat/wow-coach/issues"
+Changelog = "https://github.com/RayanBayat/wow-coach/blob/main/CHANGELOG.md"
+
+[project.scripts]
+wow-coach = "wow_coach.cli:main"
+wow-coach-mcp = "wow_coach.server:main"
+
+[build-system]
+requires = ["uv_build>=0.12.24,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy==2.4.1",
+    "pytest==9.2.0",
+    "ruff==0.17.4",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF", "ANN", "S", "PTH", "RET", "ARG", "PLC0415"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+strict = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]

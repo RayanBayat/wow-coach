@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: CoachLink
+## Notes: Saves your character so an AI coach can read it. Type /coach help.
+## Author: Rayan Bayat
+## Version: 0.2.0
+## X-Website: https://github.com/RayanBayat/wow-coach
+## X-License: MIT
+## SavedVariables: CoachLinkDB
+
+CoachLinkText.lua
+CoachLink.lua
