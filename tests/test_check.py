@@ -91,4 +91,5 @@ def test_save_file_without_characters(tmp_path: Path) -> None:
 def test_notes_file_location_is_shown(tmp_path: Path) -> None:
     install_save(tmp_path)
     _, text = check(tmp_path)
-    assert "/notes/coach-notes.md" in text
+    # Path() writes it the way this computer does (backslashes on Windows).
+    assert str(Path("/notes/coach-notes.md")) in text
