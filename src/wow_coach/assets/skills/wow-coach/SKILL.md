@@ -59,9 +59,9 @@ Code's **Monitor** tool is the one tested). Offer it when a session starts and t
 running; the player can also say "start live mode".
 
 1. Start the watcher with Monitor:
-   - command: `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.3.0 wow-coach watch`
-     (if the game is not in a standard place, set the environment variable
-     `WOW_COACH_WOW_DIR` to the `_forever_` folder first)
+   - command: `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.4.0 wow-coach watch`
+     (it finds the game folder that `wow-coach setup` saved; without that, set the
+     environment variable `WOW_COACH_WOW_DIR` to the `_forever_` folder first)
    - description: `WoW /coach saves`
    - timeout_ms: `1800000` (30 minutes, the maximum)
 2. When it expires, start it again while the game is still running. Stop once the game has
@@ -74,6 +74,34 @@ running; the player can also say "start live mode".
    - `reload`: only speak up if something is wrong (for example `Addon read errors`).
 
 If your agent cannot do this, skip it: the player just asks you after typing `/coach`.
+
+## Goals and plans
+
+When the player states a goal ("level 20 by Sunday", "100 gold for the mount", "max
+Tailoring", "run Deadmines"), do these seven things. This works in any AI, not only agents.
+
+1. **Make it concrete.** Restate it as a measurable target with a deadline ("reach level 20 by
+   Sunday 2026-11-15, 20:00"). Ask only what is missing: hours per day or per session, solo or
+   group, relaxed or fast.
+2. **Read the character and the notebook** (see "Every time" above): level, XP, zone, gold,
+   professions, gear, earlier goals and choices.
+3. **Research.** First `search_wiki` and `read_wiki_page`, then web search for anything
+   Forever-specific the wiki lacks. Cite the links, and say when a source is old or from the
+   beta.
+4. **Write the plan.**
+   - *Milestones* with rough time estimates, for example XP still needed compared with what
+     quests at that level usually give (say that it is an estimate).
+   - *The route:* zones, quests and dungeons in order.
+   - *What to skip* (gray quests, slow grinding, far detours).
+   - *Side goals that help:* gear, a profession, gold for training or a mount.
+   - *The risks* (hard elite quests, dying, running out of time) and the backup plan.
+5. **Today's next 1-3 actions** in exact steps (where to go, who to talk to, what to turn in),
+   if the player wants click-by-click steps.
+6. **Save it** in the notebook under "## Goals": the goal, the deadline, the plan and each
+   milestone with its date. Use absolute dates.
+7. **Track it.** On every new snapshot compare the real progress with the plan. Say if they
+   are ahead or behind, by how much, and what to change (drop a side goal, add a session,
+   pick a faster route). Mark finished milestones in the notebook.
 
 ## Teaching style
 
@@ -204,6 +232,11 @@ macOS `~/Library/Application Support/wow-coach/coach-notes.md`, Linux
 
 ```markdown
 # Coach notes: <character>
+
+## Goals
+- Goal: <measurable target> by <date>
+- Plan: <milestones with dates, route, what to skip>
+- Progress: <date>: <ahead or behind, by how much, what changed>
 
 ## Player
 - Started WoW Forever: <date>, experience level
