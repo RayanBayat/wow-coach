@@ -11,8 +11,28 @@ import itertools
 from typing import NamedTuple
 
 from wow_coach.lua_table import LuaValue
+from wow_coach.report_values import (
+    DAY,
+    HOUR,
+    MINUTE,
+    Table,
+    as_number,
+    as_table,
+    as_tables,
+    as_text,
+    format_age,
+    format_money,
+    number_text,
+)
 
-type Table = dict[str | int, LuaValue]
+__all__ = [
+    "Table",
+    "format_age",
+    "format_history",
+    "format_money",
+    "format_progress",
+    "format_status",
+]
 
 STALE_AFTER_SECONDS = 30 * 60
 QUALITY_NAMES = {0: "gray", 1: "white", 2: "green", 3: "blue", 4: "purple", 5: "orange"}
@@ -20,74 +40,6 @@ QUALITY_NAMES = {0: "gray", 1: "white", 2: "green", 3: "blue", 4: "purple", 5: "
 # language they don't match, and those lines simply show under Professions.
 WEAPON_SKILLS_CATEGORY = "Weapon Skills"
 LANGUAGES_CATEGORY = "Languages"
-
-_MINUTE = 60
-_HOUR = 60 * _MINUTE
-_DAY = 24 * _HOUR
-
-
-# ---------------------------------------------------------------------------
-# Small formatting helpers
-# ---------------------------------------------------------------------------
-
-
-def format_money(copper: int) -> str:
-    """Format copper as ``1g 23s 45c`` (zero parts are left out, ``0c`` if all zero)."""
-    gold, rest = divmod(copper, 10_000)
-    silver, copper_left = divmod(rest, 100)
-    parts = []
-    if gold:
-        parts.append(f"{gold}g")
-    if silver:
-        parts.append(f"{silver}s")
-    if copper_left or not parts:
-        parts.append(f"{copper_left}c")
-    return " ".join(parts)
-
-
-def format_age(seconds: float) -> str:
-    """Describe an age in seconds: ``just now``, ``5 min ago``, ``2 h ago``, ``3 days ago``."""
-    if seconds < _MINUTE:
-        return "just now"
-    if seconds < _HOUR:
-        return f"{int(seconds // _MINUTE)} min ago"
-    if seconds < _DAY:
-        return f"{int(seconds // _HOUR)} h ago"
-    days = int(seconds // _DAY)
-    return f"{days} day ago" if days == 1 else f"{days} days ago"
-
-
-# ---------------------------------------------------------------------------
-# Safe readers: the data comes from a game addon, so never trust its shape.
-# ---------------------------------------------------------------------------
-
-
-def _number(value: LuaValue) -> int | float | None:
-    """Return value if it is a real number (not a bool), else None."""
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return None
-    return value
-
-
-def _text(value: LuaValue) -> str | None:
-    return value if isinstance(value, str) and value else None
-
-
-def _tables(value: LuaValue) -> list[Table]:
-    """Return the dict items of a list (ignoring ``nil`` holes and junk)."""
-    if not isinstance(value, list):
-        return []
-    return [item for item in value if isinstance(item, dict)]
-
-
-def _table(value: LuaValue) -> Table:
-    return value if isinstance(value, dict) else {}
-
-
-def _number_text(value: float) -> str:
-    """Show whole numbers without a trailing ``.0``."""
-    return str(int(value)) if float(value).is_integer() else str(value)
-
 
 # ---------------------------------------------------------------------------
 # format_status: one function per section
@@ -114,25 +66,25 @@ def format_status(snapshot: Table, *, now: float) -> str:
 
 
 def _header_section(snapshot: Table, now: float) -> str:
-    name = _text(snapshot.get("name")) or "Unknown character"
-    level = _number(snapshot.get("level"))
+    name = as_text(snapshot.get("name")) or "Unknown character"
+    level = as_number(snapshot.get("level"))
     description = [
-        f"level {_number_text(level)}" if level is not None else None,
-        _text(snapshot.get("race")),
-        _text(snapshot.get("class")),
+        f"level {number_text(level)}" if level is not None else None,
+        as_text(snapshot.get("race")),
+        as_text(snapshot.get("class")),
     ]
     line = f"# {name}"
     described = " ".join(part for part in description if part)
     if described:
         line += f": {described}"
-    realm = _text(snapshot.get("realm"))
+    realm = as_text(snapshot.get("realm"))
     if realm:
         line += f" ({realm})"
 
     lines = [line]
-    saved_at = _number(snapshot.get("savedAt"))
+    saved_at = as_number(snapshot.get("savedAt"))
     if saved_at is not None:
-        reason = _text(snapshot.get("reason"))
+        reason = as_text(snapshot.get("reason"))
         suffix = f" ({reason})" if reason else ""
         lines.append(f"Saved {format_age(now - saved_at)}{suffix}")
         if now - saved_at > STALE_AFTER_SECONDS:
@@ -141,82 +93,82 @@ def _header_section(snapshot: Table, now: float) -> str:
 
 
 def _xp_section(snapshot: Table) -> str:
-    xp = _number(snapshot.get("xp"))
-    xp_max = _number(snapshot.get("xpMax"))
+    xp = as_number(snapshot.get("xp"))
+    xp_max = as_number(snapshot.get("xpMax"))
     if xp is None or not xp_max:
         return ""
     percent = round(100 * xp / xp_max)
-    line = f"**XP:** {_number_text(xp)}/{_number_text(xp_max)} ({percent}%)"
-    rested = _number(snapshot.get("restedXP"))
+    line = f"**XP:** {number_text(xp)}/{number_text(xp_max)} ({percent}%)"
+    rested = as_number(snapshot.get("restedXP"))
     if rested:
-        line += f", rested XP {_number_text(rested)}"
+        line += f", rested XP {number_text(rested)}"
     return line
 
 
 def _gold_section(snapshot: Table) -> str:
-    money = _number(snapshot.get("money"))
+    money = as_number(snapshot.get("money"))
     return "" if money is None else f"**Gold:** {format_money(int(money))}"
 
 
 def _location_section(snapshot: Table) -> str:
     place = ", ".join(
-        part for part in (_text(snapshot.get("zone")), _text(snapshot.get("subZone"))) if part
+        part for part in (as_text(snapshot.get("zone")), as_text(snapshot.get("subZone"))) if part
     )
-    x, y = _number(snapshot.get("x")), _number(snapshot.get("y"))
+    x, y = as_number(snapshot.get("x")), as_number(snapshot.get("y"))
     if place and x is not None and y is not None:
         place += f" ({x:.1f}, {y:.1f})"
     elif x is not None and y is not None:
         place = f"({x:.1f}, {y:.1f})"
-    hearth = _text(snapshot.get("hearth"))
+    hearth = as_text(snapshot.get("hearth"))
     parts = [f"**Location:** {place}" if place else "", f"Hearth: {hearth}" if hearth else ""]
     return "\n".join(part for part in parts if part)
 
 
 def _bags_section(snapshot: Table) -> str:
-    bags = _table(snapshot.get("bags"))
-    free, total = _number(bags.get("free")), _number(bags.get("total"))
+    bags = as_table(snapshot.get("bags"))
+    free, total = as_number(bags.get("free")), as_number(bags.get("total"))
     if free is None or total is None:
         return ""
-    return f"**Bags:** {_number_text(free)}/{_number_text(total)} slots free"
+    return f"**Bags:** {number_text(free)}/{number_text(total)} slots free"
 
 
 def _quest_line(quest: Table) -> str:
-    level = _number(quest.get("level"))
-    prefix = f"[{_number_text(level)}] " if level is not None else ""
-    title = _text(quest.get("title")) or "Untitled quest"
+    level = as_number(quest.get("level"))
+    prefix = f"[{number_text(level)}] " if level is not None else ""
+    title = as_text(quest.get("title")) or "Untitled quest"
     if quest.get("complete") is True:
         return f"- {prefix}{title}, DONE (turn in)"
-    objectives = [_text(o.get("text")) for o in _tables(quest.get("objectives"))]
+    objectives = [as_text(o.get("text")) for o in as_tables(quest.get("objectives"))]
     shown = ", ".join(text for text in objectives if text)
     return f"- {prefix}{title}, {shown}" if shown else f"- {prefix}{title}"
 
 
 def _quests_section(snapshot: Table) -> str:
-    quests = _tables(snapshot.get("quests"))
+    quests = as_tables(snapshot.get("quests"))
     if not quests:
         return ""
     return "\n".join(["**Quests:**", *(_quest_line(quest) for quest in quests)])
 
 
 def _talents_section(snapshot: Table) -> str:
-    talents = _table(snapshot.get("talents"))
+    talents = as_table(snapshot.get("talents"))
     lines: list[str] = []
-    unspent = _number(talents.get("unspent"))
+    unspent = as_number(talents.get("unspent"))
     if unspent is not None:
-        lines.append(f"Unspent points: {_number_text(unspent)}")
+        lines.append(f"Unspent points: {number_text(unspent)}")
     trees = []
-    for tree in _tables(talents.get("trees")):
-        name, spent = _text(tree.get("name")), _number(tree.get("spent"))
+    for tree in as_tables(talents.get("trees")):
+        name, spent = as_text(tree.get("name")), as_number(tree.get("spent"))
         if name and spent is not None:
-            trees.append(f"{name} {_number_text(spent)}")
+            trees.append(f"{name} {number_text(spent)}")
     if trees:
         lines.append("Points per tree: " + ", ".join(trees))
     picked = []
-    for talent in _tables(talents.get("picked")):
-        name, rank = _text(talent.get("name")), _number(talent.get("rank"))
-        max_rank = _number(talent.get("maxRank"))
+    for talent in as_tables(talents.get("picked")):
+        name, rank = as_text(talent.get("name")), as_number(talent.get("rank"))
+        max_rank = as_number(talent.get("maxRank"))
         if name and rank is not None:
-            ranks = _number_text(rank) + (f"/{_number_text(max_rank)}" if max_rank else "")
+            ranks = number_text(rank) + (f"/{number_text(max_rank)}" if max_rank else "")
             picked.append(f"{name} {ranks}")
     if picked:
         lines.append("Picked: " + ", ".join(picked))
@@ -238,14 +190,14 @@ def _ranked_skills(snapshot: Table) -> list[_Skill]:
     """
     skills: list[_Skill] = []
     seen: set[str] = set()
-    for skill in _tables(snapshot.get("professions")):
-        name, rank = _text(skill.get("name")), _number(skill.get("rank"))
-        max_rank = _number(skill.get("maxRank"))
+    for skill in as_tables(snapshot.get("professions")):
+        name, rank = as_text(skill.get("name")), as_number(skill.get("rank"))
+        max_rank = as_number(skill.get("maxRank"))
         if not name or name in seen or rank is None or max_rank is None or max_rank <= 1:
             continue
         seen.add(name)
-        ranks = f"{_number_text(rank)}/{_number_text(max_rank)}"
-        skills.append(_Skill(name, ranks, _text(skill.get("category"))))
+        ranks = f"{number_text(rank)}/{number_text(max_rank)}"
+        skills.append(_Skill(name, ranks, as_text(skill.get("category"))))
     return skills
 
 
@@ -270,13 +222,13 @@ def _weapon_skills_section(snapshot: Table) -> str:
 
 
 def _gear_line(item: Table) -> str:
-    slot = _text(item.get("slot")) or "?"
-    name = _text(item.get("name")) or "(unknown item)"
+    slot = as_text(item.get("slot")) or "?"
+    name = as_text(item.get("name")) or "(unknown item)"
     details = []
-    item_level = _number(item.get("itemLevel"))
+    item_level = as_number(item.get("itemLevel"))
     if item_level is not None:
-        details.append(f"item level {_number_text(item_level)}")
-    quality = _number(item.get("quality"))
+        details.append(f"item level {number_text(item_level)}")
+    quality = as_number(item.get("quality"))
     if quality is not None:
         details.append(QUALITY_NAMES.get(int(quality), f"quality {int(quality)}"))
     suffix = f" ({', '.join(details)})" if details else ""
@@ -284,7 +236,7 @@ def _gear_line(item: Table) -> str:
 
 
 def _gear_section(snapshot: Table) -> str:
-    gear = _tables(snapshot.get("gear"))
+    gear = as_tables(snapshot.get("gear"))
     return "\n".join(["**Gear:**", *(_gear_line(item) for item in gear)]) if gear else ""
 
 
@@ -314,11 +266,11 @@ def _errors_section(snapshot: Table) -> str:
 def format_history(events: list[LuaValue], *, limit: int, now: float) -> str:
     """List the newest ``limit`` events first as ``- <age>: <text>``."""
     lines: list[str] = []
-    for event in reversed(_tables(events)):
+    for event in reversed(as_tables(events)):
         if len(lines) >= limit:
             break
-        text = _text(event.get("text")) or _text(event.get("kind")) or "(no description)"
-        time = _number(event.get("time"))
+        text = as_text(event.get("text")) or as_text(event.get("kind")) or "(no description)"
+        time = as_number(event.get("time"))
         age = format_age(now - time) if time is not None else "unknown time"
         lines.append(f"- {age}: {text}")
     return "\n".join(lines) if lines else "No history recorded yet."
@@ -329,7 +281,7 @@ def format_history(events: list[LuaValue], *, limit: int, now: float) -> str:
 # ---------------------------------------------------------------------------
 
 # Save points closer together than this belong to the same play session.
-SESSION_GAP_SECONDS = 30 * _MINUTE
+SESSION_GAP_SECONDS = 30 * MINUTE
 
 
 class _Session(NamedTuple):
@@ -357,12 +309,12 @@ class _Gain(NamedTuple):
 
 def _point_time(point: Table) -> float:
     """The time of a progress point (points without a usable time are dropped earlier)."""
-    return float(_number(point.get("time")) or 0)
+    return float(as_number(point.get("time")) or 0)
 
 
 def _sorted_points(progress: list[LuaValue]) -> list[Table]:
     """The progress points that have a time, oldest first."""
-    usable = [point for point in _tables(progress) if _number(point.get("time")) is not None]
+    usable = [point for point in as_tables(progress) if as_number(point.get("time")) is not None]
     return sorted(usable, key=_point_time)
 
 
@@ -370,8 +322,8 @@ def _login_times(history: list[LuaValue]) -> list[float]:
     """When the player logged in, from the history, oldest first."""
     times = [
         float(time)
-        for event in _tables(history)
-        if event.get("kind") == "login" and (time := _number(event.get("time"))) is not None
+        for event in as_tables(history)
+        if event.get("kind") == "login" and (time := as_number(event.get("time"))) is not None
     ]
     return sorted(times)
 
@@ -405,7 +357,7 @@ def _split_sessions(points: list[Table], logins: list[float]) -> list[_Session]:
 
 def _difference(before: LuaValue, after: LuaValue) -> int | None:
     """``after - before`` when both are numbers, else None."""
-    number_before, number_after = _number(before), _number(after)
+    number_before, number_after = as_number(before), as_number(after)
     if number_before is None or number_after is None:
         return None
     return int(number_after - number_before)
@@ -418,7 +370,7 @@ def _gain_between(before: Table, after: Table) -> _Gain:
     if levels > 0:
         # XP restarts at 0 on a level-up: what was left of the old level, plus the new XP.
         left_in_level = _difference(before.get("xp"), before.get("xpMax")) or 0
-        xp = left_in_level + int(_number(after.get("xp")) or 0)
+        xp = left_in_level + int(as_number(after.get("xp")) or 0)
     money = _difference(before.get("money"), after.get("money")) or 0
     return _Gain(max(levels, 0), max(int(xp), 0), money)
 
@@ -446,7 +398,7 @@ def _plural(count: int, word: str) -> str:
 
 def _format_duration(seconds: float) -> str:
     """``2 h 10 min``; anything under half a minute is ``under 1 min``."""
-    minutes = round(seconds / _MINUTE)
+    minutes = round(seconds / MINUTE)
     if minutes < 1:
         return "under 1 min"
     hours, rest = divmod(minutes, 60)
@@ -459,31 +411,31 @@ def _count_events(history: list[LuaValue], kind: str, start: float, end: float) 
     """How many history events of this kind happened after ``start``, up to ``end``."""
     return sum(
         1
-        for event in _tables(history)
+        for event in as_tables(history)
         if event.get("kind") == kind
-        and (time := _number(event.get("time"))) is not None
+        and (time := as_number(event.get("time"))) is not None
         and start < time <= end
     )
 
 
 def _place(point: Table) -> str:
     """``level 8 in Brill, Tirisfal Glades`` from a progress point."""
-    parts = [text for key in ("subZone", "zone") if (text := _text(point.get(key)))]
-    level = _number(point.get("level"))
-    level_text = f"level {_number_text(level)}" if level is not None else "level unknown"
+    parts = [text for key in ("subZone", "zone") if (text := as_text(point.get(key)))]
+    level = as_number(point.get("level"))
+    level_text = f"level {number_text(level)}" if level is not None else "level unknown"
     return f"{level_text} in {', '.join(parts)}" if parts else level_text
 
 
 def _gain_lines(gain: _Gain, first: Table, last: Table) -> list[str]:
     """Bullet lines for levels, XP and gold."""
     lines = []
-    level_before, level_after = _number(first.get("level")), _number(last.get("level"))
+    level_before, level_after = as_number(first.get("level")), as_number(last.get("level"))
     if level_before is not None and level_after is not None:
         if gain.levels:
-            levels = f"level {_number_text(level_before)} to {_number_text(level_after)}"
+            levels = f"level {number_text(level_before)} to {number_text(level_after)}"
             lines.append(f"- Levels: {levels} (+{gain.levels})")
         else:
-            lines.append(f"- Levels: still level {_number_text(level_after)}")
+            lines.append(f"- Levels: still level {number_text(level_after)}")
     lines.append(f"- XP gained: about {gain.xp}")
     lines.append(f"- Gold: {_signed_money(gain.money)}")
     return lines
@@ -497,7 +449,7 @@ def _window_section(
     days: int,
 ) -> str:
     """The 'last N days' block: sessions, play time, gains, quests and deaths."""
-    cutoff = now - days * _DAY
+    cutoff = now - days * DAY
     title = f"**Last {_plural(days, 'day')}:**"
     recent = [session for session in sessions if session.end >= cutoff]
     if not recent:
@@ -513,8 +465,8 @@ def _window_section(
         f"about {_format_duration(play_seconds)} of play",
         *_gain_lines(gain, measured[0], measured[-1]),
     ]
-    if play_seconds >= _MINUTE:
-        lines.append(f"- XP per hour of play: about {round(gain.xp / (play_seconds / _HOUR))}")
+    if play_seconds >= MINUTE:
+        lines.append(f"- XP per hour of play: about {round(gain.xp / (play_seconds / HOUR))}")
     lines.append(f"- Quests turned in: {_count_events(history, 'quest', cutoff, now)}")
     lines.append(f"- Deaths: {_count_events(history, 'death', cutoff, now)}")
     return "\n".join(lines)
