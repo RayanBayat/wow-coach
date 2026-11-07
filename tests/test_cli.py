@@ -3,6 +3,7 @@
 import importlib.metadata
 import io
 import os
+import time
 import zipfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -59,6 +60,61 @@ def test_status_without_game_folder_explains(
     monkeypatch.delenv("WOW_COACH_WOW_DIR", raising=False)
     assert main(["status", "--wow-dir", str(tmp_path / "nope")]) == 1
     assert "nope" in capsys.readouterr().err
+
+
+def test_characters_lists_them_with_journal_state(
+    wow_dir: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("WOW_COACH_NOTES_FILE", str(tmp_path / "notes" / "coach-notes.md"))
+    journals = tmp_path / "notes" / "characters"
+    journals.mkdir(parents=True)
+    (journals / "Testchar-Testrealm.md").write_text("## Goals\n- Level 20\n", encoding="utf-8")
+    assert main(["characters", "--wow-dir", str(wow_dir)]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0].startswith("- Testchar-Testrealm: level 7 Undead Mage, ")
+    assert lines[0].endswith("goal: Level 20")
+
+
+def test_characters_without_a_game_folder_fails_politely(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("WOW_COACH_WOW_DIR", raising=False)
+    assert main(["characters", "--wow-dir", str(tmp_path / "nope")]) == 1
+    assert "nope" in capsys.readouterr().err
+
+
+def test_progress_without_points_explains(
+    wow_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["progress", "--wow-dir", str(wow_dir)]) == 0
+    out = capsys.readouterr().out
+    assert "# Progress of Testchar-Testrealm" in out
+    assert "No progress recorded yet" in out
+
+
+def test_progress_prints_the_summary(wow_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    save = next(wow_dir.glob("WTF/Account/*/SavedVariables/CoachLink.lua"))
+    now = int(time.time())
+    point = f'{{["time"] = {now - 60}, ["level"] = 7, ["xp"] = 5, ["subZone"] = "Brill"}},'
+    text = save.read_text(encoding="utf-8")
+    text = text.replace('["history"] = {', f'["progress"] = {{{point}}},\n["history"] = {{', 1)
+    save.write_text(text, encoding="utf-8")
+    assert (
+        main(["progress", "--character", "testchar", "--days", "3", "--wow-dir", str(wow_dir)]) == 0
+    )
+    out = capsys.readouterr().out
+    assert "**Last played:** 1 min ago, level 7 in Brill" in out
+    assert "**Last 3 days:**" in out
+
+
+def test_progress_unknown_character_fails_politely(
+    wow_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert main(["progress", "--character", "Nobody", "--wow-dir", str(wow_dir)]) == 1
+    assert "Nobody" in capsys.readouterr().err
 
 
 def test_check_command_runs(wow_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:

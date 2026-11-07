@@ -1,4 +1,4 @@
-"""The ``wow-coach`` command line: setup, status, watch, mcp, check and wiki.
+"""The ``wow-coach`` command line: setup, status, characters, progress, watch, mcp, check, wiki.
 
 Every command accepts ``--wow-dir PATH`` (the game folder that contains ``WTF/``).
 Without it we use the ``WOW_COACH_WOW_DIR`` variable, then the folder saved by
@@ -18,10 +18,10 @@ from wow_coach.check import run_check
 from wow_coach.config import config_path
 from wow_coach.errors import WowCoachError
 from wow_coach.gamedir import resolve_game_folder
-from wow_coach.report import format_history, format_status
-from wow_coach.savedvars import find_saved_variables, load_characters
+from wow_coach.report import format_history, format_progress, format_status
+from wow_coach.savedvars import Character, find_saved_variables, load_characters
+from wow_coach.server import format_character_list, pick_character
 from wow_coach.server import main as run_mcp_server
-from wow_coach.server import pick_character
 from wow_coach.setup import SetupChoices, SetupWorld, run_setup
 from wow_coach.watch import watch
 from wow_coach.web import Fetch, FetchBytes, PoliteFetcher, build_user_agent
@@ -63,6 +63,22 @@ def _build_parser() -> argparse.ArgumentParser:
         "status", parents=[shared], help="print the character's status and recent history"
     )
     status.add_argument("--character", metavar="NAME", help="character name (default: newest save)")
+    commands.add_parser(
+        "characters",
+        parents=[shared],
+        help="list your characters, most recently played first, with their goals",
+    )
+    progress = commands.add_parser(
+        "progress",
+        parents=[shared],
+        help="show how a character has progressed lately (sessions, levels, gold, deaths)",
+    )
+    progress.add_argument(
+        "--character", metavar="NAME", help="character name (default: newest save)"
+    )
+    progress.add_argument(
+        "--days", type=int, default=7, help="how many days back to look (default 7)"
+    )
     commands.add_parser(
         "watch", parents=[shared], help="print a line each time you save with /coach"
     )
@@ -121,13 +137,39 @@ def _setup(arguments: argparse.Namespace, download: FetchBytes | None) -> int:
     return run_setup(choices, world)
 
 
-def _status(wow_dir_flag: Path | None, character: str | None) -> int:
+def _load_saved_characters(wow_dir_flag: Path | None) -> dict[str, Character]:
+    """Find the game folder and read every saved character."""
     folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
-    characters = load_characters(find_saved_variables(folder))
-    chosen = pick_character(characters, character)
+    return load_characters(find_saved_variables(folder))
+
+
+def _choose_character(characters: dict[str, Character], wanted: str | None) -> Character:
+    """The wanted character (default: newest save), or a friendly error."""
+    chosen = pick_character(characters, wanted)
     if chosen is None:
         known = ", ".join(sorted(characters)) or "(none yet: type /coach in game)"
-        raise WowCoachError(f"No character matches {character!r}. Known characters: {known}")
+        raise WowCoachError(f"No character matches {wanted!r}. Known characters: {known}")
+    return chosen
+
+
+def _characters(wow_dir_flag: Path | None) -> int:
+    characters = _load_saved_characters(wow_dir_flag)
+    if not characters:
+        raise WowCoachError("The CoachLink file has no characters yet: type /coach in game.")
+    print(format_character_list(characters, time.time(), os.environ))
+    return 0
+
+
+def _progress(wow_dir_flag: Path | None, character: str | None, days: int) -> int:
+    chosen = _choose_character(_load_saved_characters(wow_dir_flag), character)
+    print(f"# Progress of {chosen.key}")
+    print()
+    print(format_progress(chosen.progress, chosen.history, days=days, now=time.time()))
+    return 0
+
+
+def _status(wow_dir_flag: Path | None, character: str | None) -> int:
+    chosen = _choose_character(_load_saved_characters(wow_dir_flag), character)
     now = time.time()
     print(format_status(chosen.snapshot, now=now))
     print()
@@ -169,6 +211,8 @@ def main(
     commands: dict[str, Callable[[], int]] = {
         "setup": lambda: _setup(arguments, download),
         "status": lambda: _status(flag, arguments.character),
+        "characters": lambda: _characters(flag),
+        "progress": lambda: _progress(flag, arguments.character, arguments.days),
         "watch": lambda: _watch(flag),
         "mcp": lambda: _mcp(flag),
         "check": lambda: _check(flag),

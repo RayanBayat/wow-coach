@@ -116,6 +116,17 @@ def _character_description(character: Character, now: float, journal_file: Path)
     )
 
 
+def format_character_list(
+    characters: dict[str, Character], now: float, environ: Mapping[str, str]
+) -> str:
+    """One line per character, most recently played first (empty text if there are none)."""
+    newest_first = sorted(characters.values(), key=_snapshot_time, reverse=True)
+    return "\n".join(
+        _character_description(character, now, journal_path(character.key, environ=environ))
+        for character in newest_first
+    )
+
+
 def answer_list_characters(wow_dir: Path, now: float, environ: Mapping[str, str]) -> str:
     """Text for the ``list_characters`` tool: most recently played first."""
     loaded = _load_all(wow_dir)
@@ -123,11 +134,7 @@ def answer_list_characters(wow_dir: Path, now: float, environ: Mapping[str, str]
         return loaded
     if not loaded:
         return "The CoachLink file contains no characters yet. Type /coach in game."
-    newest_first = sorted(loaded.values(), key=_snapshot_time, reverse=True)
-    return "\n".join(
-        _character_description(character, now, journal_path(character.key, environ=environ))
-        for character in newest_first
-    )
+    return format_character_list(loaded, now, environ)
 
 
 def answer_character_status(wow_dir: Path, character: str | None, now: float) -> str:

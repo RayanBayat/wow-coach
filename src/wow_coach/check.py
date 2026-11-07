@@ -11,7 +11,7 @@ from typing import TextIO
 from wow_coach.config import config_path
 from wow_coach.errors import CoachDataMissing, ConfigUnreadable, GameFolderNotFound, WowCoachError
 from wow_coach.gamedir import resolve_game_folder
-from wow_coach.notes import notes_path
+from wow_coach.notes import journals_folder, notes_path
 from wow_coach.report import format_age
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
 
@@ -66,6 +66,18 @@ def _check_save_file(game_folder: Path, now: float, say: Say) -> bool:
     return True
 
 
+def _say_journals(folder: Path, say: Say) -> None:
+    """List the character journals that exist (one file per character)."""
+    try:
+        names = sorted(path.stem for path in folder.glob("*.md"))
+    except OSError:
+        names = []
+    if names:
+        say(f"Character journals in {folder}: {', '.join(names)}")
+    else:
+        say(f"Character journals: none yet (the coach creates one per character in {folder})")
+
+
 def run_check(
     wow_dir_flag: Path | None,
     *,
@@ -98,7 +110,8 @@ def run_check(
     say(f"  found via {found.how_found}")
     all_well = _check_save_file(found.path, now, say)
     notes = notes_path(environ=environ)
-    say(f"Coach notes file: {notes} ({'exists' if notes.is_file() else 'not created yet'})")
+    say(f"Player notes file: {notes} ({'exists' if notes.is_file() else 'not created yet'})")
+    _say_journals(journals_folder(environ=environ), say)
     if closing_line:
         say()
         say("Everything looks good." if all_well else "Fix the problem above, then run this again.")

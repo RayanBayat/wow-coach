@@ -100,6 +100,20 @@ def test_notes_file_location_is_shown(tmp_path: Path) -> None:
     assert str(Path("/notes/coach-notes.md")) in text
 
 
+def test_journals_are_listed(tmp_path: Path) -> None:
+    install_save(tmp_path / "game")
+    notes = tmp_path / "data" / "coach-notes.md"
+    environ = {"WOW_COACH_NOTES_FILE": str(notes)}
+    _, text = check(tmp_path / "game", environ=environ)
+    assert "Character journals: none yet" in text
+    journals = tmp_path / "data" / "characters"
+    journals.mkdir(parents=True)
+    (journals / "Testchar-Testrealm.md").write_text("## Goals\n", encoding="utf-8")
+    (journals / "ignored.txt").write_text("x", encoding="utf-8")
+    _, text = check(tmp_path / "game", environ=environ)
+    assert f"Character journals in {journals}: Testchar-Testrealm" in text
+
+
 def test_check_says_when_the_saved_setting_was_used(tmp_path: Path) -> None:
     install_save(tmp_path / "game")
     config = tmp_path / "config.json"
