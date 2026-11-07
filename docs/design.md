@@ -70,6 +70,7 @@ CoachLinkDB = {
     ["Testchar-SomeRealm"] = {         -- key is "Name-Realm"
       ["snapshot"] = { ... },          -- see the table below
       ["history"] = { {event}, ... },  -- oldest first, at most 300 entries
+      ["progress"] = { {point}, ... }, -- oldest first, at most 500 points (added in 0.5.0)
     },
   },
 }
@@ -107,6 +108,27 @@ CoachLinkDB = {
 | `text` | string | A sentence, for example `"Reached level 7"`, `"Died in Brill (level 6)"` |
 | `level` | number | Character level at the time |
 | `zone` | string | Zone at the time |
+
+### Progress point fields
+
+One point is added to a character's `progress` list every time a snapshot is taken (logout,
+`/reload`, `/coach`). It is a small copy of the numbers that show how far the character got,
+so the coach can compare sessions without keeping every snapshot. `progress` is additive:
+`formatVersion` stays 1, and saves from older addon versions simply have no `progress`.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `time` | number | Unix time (seconds) of the snapshot |
+| `reason` | string | Same as the snapshot's `reason` |
+| `level`, `xp`, `xpMax` | number | Level, XP into the level, XP needed for the next |
+| `money` | number | Copper |
+| `zone`, `subZone` | string | Where the character was |
+| `questsDone` | number | How many quests in the log were complete (ready to turn in) at that moment. Missing when the quest log could not be read |
+
+Every field is optional: if a game call fails, the point is still added with what is known.
+Rules: at most 500 points (the oldest are dropped), and a point is **not** added when
+`level`, `xp`, `xpMax`, `money`, `zone`, `subZone` and `questsDone` are all the same as in the
+previous point and it was taken within 60 seconds of it (quick `/reload` series).
 
 ### How WoW Forever writes the file (seen 2026-11-06, build 1.60.1)
 

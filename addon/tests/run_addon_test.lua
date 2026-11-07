@@ -324,6 +324,14 @@ for _, event in ipairs(character.history) do
 end
 check(table.concat(kinds, ",") == "login,level,quest,death", "history events in order")
 check(character.history[4].text == "Died in Brill (level 7)", "death text")
+check(#character.progress == 1, "the snapshot added one progress point")
+local firstPoint = character.progress[1]
+check(firstPoint.time == FAKE_NOW and firstPoint.reason == "coach", "progress point has time and reason")
+check(firstPoint.level == 7 and firstPoint.xp == 1530 and firstPoint.xpMax == 2690,
+    "progress point has level and XP")
+check(firstPoint.money == 12345 and firstPoint.zone == "Tirisfal Glades"
+    and firstPoint.subZone == "Brill", "progress point has gold and place")
+check(firstPoint.questsDone == 1, "progress point counts complete quests")
 
 local goodDB = CoachLinkDB
 
@@ -425,6 +433,51 @@ end
 check(brokenBox ~= nil and brokenBox.text:find("READ ERRORS", 1, true) ~= nil
     and brokenBox.text:find("talents: ", 1, true) ~= nil, "copy text lists the read error")
 check(brokenBox.text:find("Testchar, level 7", 1, true) ~= nil, "copy text still has the other facts")
+
+
+-------------------------------------------------------------------------------
+-- Test 4: the progress log
+-------------------------------------------------------------------------------
+
+installFakeGame()
+loadAddon()
+local now = FAKE_NOW
+time = function() return now end
+local function progressList() return CoachLinkDB.characters["Testchar-Testrealm"].progress end
+
+SlashCmdList.COACHLINK("")
+now = FAKE_NOW + 30
+SlashCmdList.COACHLINK("")   -- nothing changed, 30 s later: a quick reload
+check(#progressList() == 1, "same state within 60 s adds no new point")
+
+now = FAKE_NOW + 120
+SlashCmdList.COACHLINK("")   -- nothing changed, but 2 minutes later
+check(#progressList() == 2, "same state after 60 s adds a point")
+
+now = FAKE_NOW + 130
+UnitXP = function() return 1600 end
+SlashCmdList.COACHLINK("")   -- XP changed, only 10 s later
+check(#progressList() == 3 and progressList()[3].xp == 1600, "a changed value adds a point at once")
+
+-- The cap: 600 snapshots with growing gold keep only the newest 500.
+for step = 1, 600 do
+    now = FAKE_NOW + 1000 + step
+    GetMoney = function() return 1000000 + step end
+    SlashCmdList.COACHLINK("")
+end
+check(#progressList() == 500, "progress log is capped at 500 points")
+check(progressList()[500].money == 1000600, "the newest point is kept")
+check(progressList()[1].money == 1000101, "the oldest points are dropped")
+
+-- A broken reader still gives a point with what is known.
+installFakeGame()
+C_QuestLog = nil
+loadAddon()
+SlashCmdList.COACHLINK("")
+local partial = CoachLinkDB.characters["Testchar-Testrealm"].progress
+check(#partial == 1 and partial[1].level == 7 and partial[1].zone == "Tirisfal Glades",
+    "a broken quest reader still gives a progress point")
+check(partial[1].questsDone == nil, "unknown quests are nil, not zero")
 
 
 -------------------------------------------------------------------------------

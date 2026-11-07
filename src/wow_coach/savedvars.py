@@ -5,7 +5,7 @@ There is one folder per game account, so we look in all of them and use the file
 was changed most recently.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from wow_coach.errors import CoachDataMissing, UnsupportedFormat
@@ -22,6 +22,8 @@ class Character:
     key: str  # "Name-Realm"
     snapshot: dict[str | int, LuaValue]
     history: list[LuaValue]  # oldest first, as the addon writes it
+    # Progress points, oldest first. Empty for saves made before addon 0.5.0.
+    progress: list[LuaValue] = field(default_factory=list)
 
 
 def find_saved_variables(wow_dir: Path) -> Path:
@@ -68,8 +70,10 @@ def _build_character(key: str, raw: LuaValue) -> Character:
     table = raw if isinstance(raw, dict) else {}
     snapshot = table.get("snapshot")
     history = table.get("history")
+    progress = table.get("progress")
     return Character(
         key=key,
         snapshot=snapshot if isinstance(snapshot, dict) else {},
         history=history if isinstance(history, list) else [],
+        progress=progress if isinstance(progress, list) else [],
     )

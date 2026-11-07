@@ -84,3 +84,14 @@ def test_addon_output_lists_each_skill_once_in_its_group(addon_output: Path) -> 
 
     assert status.count("Tailoring: 23/75") == 1, status
     assert "**Weapon skills:** Staves 35/35" in status, status
+
+
+def test_addon_output_has_a_progress_point(addon_output: Path) -> None:
+    character = load_characters(addon_output)["Testchar-Testrealm"]
+
+    assert len(character.progress) == 1
+    point = character.progress[0]
+    assert isinstance(point, dict)
+    assert point["level"] == 7
+    assert point["subZone"] == "Brill"
+    assert point["questsDone"] == 1

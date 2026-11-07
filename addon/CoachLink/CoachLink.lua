@@ -31,6 +31,10 @@ local _, ns = ...
 local ADDON_NAME = "CoachLink"
 local FORMAT_VERSION = 1    -- bump when the saved format changes
 local MAX_HISTORY = 300     -- keep only the newest history events
+local MAX_PROGRESS = 500    -- keep only the newest progress points
+-- A new progress point that looks the same as the last one, and comes this soon
+-- after it, is skipped (quick /reload series would otherwise fill the log).
+local DUPLICATE_WINDOW_SECONDS = 60
 
 -- Equipment slot numbers used by GetInventoryItemLink, with readable names.
 local GEAR_SLOTS = {
@@ -85,6 +89,7 @@ local function characterTable()
     local key = characterKey()
     local entry = CoachLinkDB.characters[key] or {}
     entry.history = entry.history or {}
+    entry.progress = entry.progress or {}
     CoachLinkDB.characters[key] = entry
     return entry
 end
@@ -145,7 +150,9 @@ local function readBags(snapshot)
 end
 
 local function readQuests(snapshot)
-    snapshot.quests = {}
+    -- Built in a local list and stored at the end: if the game breaks halfway,
+    -- snapshot.quests stays nil ("unknown") instead of a misleading short list.
+    local quests = {}
     local numEntries = C_QuestLog.GetNumQuestLogEntries()
     for index = 1, numEntries do
         local info = C_QuestLog.GetInfo(index)
@@ -165,9 +172,10 @@ local function readQuests(snapshot)
                     done = objective.finished == true,
                 })
             end
-            table.insert(snapshot.quests, quest)
+            table.insert(quests, quest)
         end
     end
+    snapshot.quests = quests
 end
 
 -- Forever has three classic talent trees (e.g. Arcane, Fire, Frost) built on
@@ -307,9 +315,80 @@ local function buildSnapshot(reason)
     return snapshot
 end
 
--- Build a full snapshot and store it for this character.
+-- How many quests in the snapshot are complete (ready to turn in). nil when
+-- the quests could not be read, so "unknown" is never mistaken for "zero".
+local function countCompleteQuests(snapshot)
+    if not snapshot.quests then
+        return nil
+    end
+    local done = 0
+    for _, quest in ipairs(snapshot.quests) do
+        if quest.complete then
+            done = done + 1
+        end
+    end
+    return done
+end
+
+-- One compact point of the progress log, made from a snapshot. A section that
+-- failed to read leaves its fields nil, so the point holds what is known.
+local function buildProgressPoint(snapshot)
+    return {
+        time = snapshot.savedAt,
+        reason = snapshot.reason,
+        level = snapshot.level,
+        xp = snapshot.xp,
+        xpMax = snapshot.xpMax,
+        money = snapshot.money,
+        zone = snapshot.zone,
+        subZone = snapshot.subZone,
+        questsDone = countCompleteQuests(snapshot),
+    }
+end
+
+-- The fields that say "the character moved on". Time and reason are left out
+-- on purpose: only a real change in the game should make a new point.
+local PROGRESS_FIELDS = { "level", "xp", "xpMax", "money", "zone", "subZone", "questsDone" }
+
+-- True when `point` shows nothing new compared with `previous` and was taken
+-- within DUPLICATE_WINDOW_SECONDS of it.
+local function isDuplicatePoint(previous, point)
+    if not previous or not previous.time or not point.time then
+        return false
+    end
+    if point.time - previous.time > DUPLICATE_WINDOW_SECONDS then
+        return false
+    end
+    for _, field in ipairs(PROGRESS_FIELDS) do
+        if previous[field] ~= point[field] then
+            return false
+        end
+    end
+    return true
+end
+
+-- Add a point to the character's progress log (oldest dropped past the cap).
+local function addProgressPoint(entry, snapshot)
+    local point = buildProgressPoint(snapshot)
+    local progress = entry.progress
+    if isDuplicatePoint(progress[#progress], point) then
+        return
+    end
+    table.insert(progress, point)
+    while #progress > MAX_PROGRESS do
+        table.remove(progress, 1)  -- drop the oldest
+    end
+end
+
+-- Build a full snapshot, store it for this character and log a progress point.
 local function takeSnapshot(reason)
-    characterTable().snapshot = buildSnapshot(reason)
+    local entry = characterTable()
+    entry.snapshot = buildSnapshot(reason)
+    -- The log is a bonus: if it fails, the snapshot above is already saved.
+    local ok, err = pcall(addProgressPoint, entry, entry.snapshot)
+    if not ok then
+        table.insert(entry.snapshot.errors, "progress: " .. tostring(err))
+    end
 end
 
 -- Add one event (level up, death, quest...) to this character's history.
