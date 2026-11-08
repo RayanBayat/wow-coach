@@ -233,15 +233,15 @@ something to do, a button.
    CoachLink creates it too.) This is the folder where the coach puts its answers for the game.
 4. **"Save for the coach" key**: this card only explains what to do in the game. See the next
    section.
-5. **App menu** (not on macOS): click **Add to my app menu**. On Windows this puts "WoW Coach"
-   in the Start menu. On Linux it puts it in your application menu. Next time you can start the
-   app like any other app.
+5. **Start menu** card on Windows, **App menu** card on Linux (not on macOS): click **Add to
+   my Start menu** (Windows) or **Add to my app menu** (Linux). Next time you can start the app
+   like any other app.
 6. **Start with my computer** (not on macOS, optional): click **Start when I log in**. WoW Coach
    then starts quietly in the tray when you log in. Click **Stop starting** to undo it.
 7. **Overlay hotkey**: shows whether the overlay key works (see
    [Overlay mode](#overlay-mode-the-coach-on-top-of-your-game)).
 
-If the App menu or Start with my computer card shows a command and says "WoW Coach was started
+If the Start menu / App menu or Start with my computer card shows a command and says "WoW Coach was started
 from a temporary place, so a shortcut would stop working later", you started the app a
 different way than this guide (for example with `uvx`). Install it once with the command the
 card shows. The command in the card has no version number in it; the install line in this
@@ -446,7 +446,8 @@ The commands above follow uv's documentation.
 
 Do the steps you need, in this order.
 
-1. In WoW Coach, click **Setup**, and click **Remove** on the **App menu** card and **Stop
+1. In WoW Coach, click **Setup**, and click **Remove** on the **Start menu** (Windows) or
+   **App menu** (Linux) card and **Stop
    starting** on the **Start with my computer** card (if you added them). Uninstalling does
    not remove these shortcuts by itself.
 2. Click **ChatGPT**, then **Sign out**. This removes the sign-in from your computer's

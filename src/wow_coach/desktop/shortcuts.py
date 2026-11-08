@@ -30,6 +30,7 @@ from typing import Final
 
 from wow_coach.alerts import Runner, default_runner
 from wow_coach.desktop.icons import APP_ICON_SVG, save_app_ico
+from wow_coach.install_hint import install_command
 
 _log = logging.getLogger(__name__)
 
@@ -38,9 +39,7 @@ _log = logging.getLogger(__name__)
 # coach. Linux uses the same program, so both systems behave the same.
 PROGRAM_NAME: Final = "wow-coach-app"
 DISPLAY_NAME: Final = "WoW Coach"
-INSTALL_COMMAND: Final = (
-    'uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach"'
-)
+INSTALL_COMMAND: Final = install_command()  # pinned to the version that is running
 UNSTABLE_SENTENCE: Final = (
     "WoW Coach was started from a temporary place, so a shortcut would stop working later. "
     "Install it once with this command, then open it again:"

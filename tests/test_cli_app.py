@@ -9,6 +9,7 @@ import pytest
 
 from wow_coach import cli
 from wow_coach.cli import main
+from wow_coach.install_hint import install_command
 
 
 class Calls:
@@ -122,9 +123,7 @@ def test_without_qt_a_friendly_sentence_and_the_browser_window(
     assert main(["app", "--wow-dir", str(game)]) == 0
     out = capsys.readouterr().out
     assert "The desktop app needs the desktop extra" in out
-    assert (
-        'uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach"' in out
-    )
+    assert install_command() in out  # pinned to this version, not the newest on main
     assert "Opening the browser window instead." in out
     assert calls.desktop == []
     assert calls.browser == [(game, 0, True)]

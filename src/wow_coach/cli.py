@@ -32,6 +32,7 @@ from wow_coach.config import config_path
 from wow_coach.engine.contract import CoachReply
 from wow_coach.errors import WowCoachError
 from wow_coach.gamedir import resolve_game_folder
+from wow_coach.install_hint import install_command
 from wow_coach.report import format_history, format_progress, format_status
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
 from wow_coach.server import format_character_list
@@ -303,8 +304,7 @@ def _ask(wow_dir_flag: Path | None, words: Sequence[str], character: str | None)
 
 
 DESKTOP_MISSING = (
-    "The desktop app needs the desktop extra: uv tool install "
-    '"wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach". '
+    f"The desktop app needs the desktop extra: {install_command()}. "
     "Opening the browser window instead."
 )
 

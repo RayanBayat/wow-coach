@@ -64,8 +64,12 @@ STATUS_ICONS = {Status.OK: "ok", Status.ATTENTION: "attention", Status.PROBLEM: 
 STATUS_ICON_SIZE = 26
 KEYBINDING_SENTENCE = (
     'In WoW, open Options → Keybindings → CoachLink and pick a key for "Save for the '
-    'coach (reloads the interface)". Press it whenever you want me to see your latest progress.'
+    'coach (reloads the interface)". Press it whenever you want me to see your latest progress. '
+    "Not in the list? Quit WoW completely and start it again once: the game only finds new "
+    "key bindings when it starts."
 )
+# What the shortcut menu is called: Windows calls it the Start menu, Linux an app menu.
+MENU_NAME = "Start menu" if sys.platform == "win32" else "app menu"
 NO_SHORTCUTS_SENTENCE = "Shortcuts are not available on macOS yet."
 
 # The "Overlay hotkey" card: what it says when the key does not work by itself.
@@ -90,7 +94,8 @@ OVERLAY_STEPS_MAC = (
     "command); we have not tested that:"
 )
 OVERLAY_MENU_FIRST = (
-    "Tip: add WoW Coach to your app menu first (the App menu card above). That is how your "
+    f"Tip: add WoW Coach to your {MENU_NAME} first (the {MENU_NAME.capitalize()} card above). "
+    "That is how your "
     "desktop learns about the app. Then press Try again."
 )
 OVERLAY_UNSTABLE = "This program path may be temporary. Install WoW Coach once, as shown above."
@@ -309,7 +314,7 @@ class SetupPage(Page):
         self.key_card.show_state("info", KEYBINDING_SENTENCE)
         self.overlay_card = OverlayHotkeyCard()
         self.overlay_card.hide()  # shown once the app gives the page its hotkey
-        self.menu_card = SetupCard("App menu")
+        self.menu_card = SetupCard(MENU_NAME.capitalize())
         self.login_card = SetupCard("Start with my computer")
         self.no_shortcuts = QLabel(NO_SHORTCUTS_SENTENCE)
         self.no_shortcuts.setProperty("role", "muted")
@@ -447,9 +452,9 @@ class SetupPage(Page):
         self._show_toggle(
             self.menu_card,
             state.in_menu,
-            on_text="WoW Coach is in your app menu.",
-            off_text="Add WoW Coach to your app menu, so you can open it like any other app.",
-            add="Add to my app menu",
+            on_text=f"WoW Coach is in your {MENU_NAME}.",
+            off_text=f"Add WoW Coach to your {MENU_NAME}, so you can open it like any other app.",
+            add=f"Add to my {MENU_NAME}",
             remove="Remove",
         )
         self._show_toggle(

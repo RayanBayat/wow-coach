@@ -20,11 +20,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from wow_coach.errors import WowCoachError
+from wow_coach.install_hint import install_command
 
-DESKTOP_MISSING = (
-    "WoW Coach needs its desktop extra. Install it with: uv tool install "
-    '"wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach"'
-)
+DESKTOP_MISSING = f"WoW Coach needs its desktop extra. Install it with: {install_command()}"
 
 
 def desktop_installed() -> bool:
