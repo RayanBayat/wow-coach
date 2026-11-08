@@ -10,10 +10,11 @@ on your computer. The helper here is `wow-coach`. It gives the AI these tools:
 - `progress_summary`: how a character progressed lately (play sessions, levels, XP, gold, quests, deaths).
 - `read_coach_notes`: the coach's memory, your **player notes** (shared by all characters) and one character's **journal**.
 - `save_coach_notes`: saves one character's journal. `save_player_notes`: saves the player notes.
-- `search_wiki`, `read_wiki_page`: game lookups on the [Warcraft Wiki](https://warcraft.wiki.gg).
+- `search_wiki`, `read_wiki_page`, `find_quest`: game lookups on the [Warcraft Wiki](https://warcraft.wiki.gg).
   Use `read_wiki_page` for NPC locations, vendor stock, quest givers and rewards. It marks
   text that is Classic-only, Retail-only or Forever-only, and always gives the page link. Use
-  `search_wiki` first when you do not know the page name. These two tools need the internet
+  `search_wiki` first when you do not know the page name. Use `find_quest` with the quest ID that
+  the status shows ("quest 365") to get the right quest page. These tools need the internet
   and send only the words you searched for. If the wiki does not answer, the tool says so and
   the AI falls back to a web search.
 

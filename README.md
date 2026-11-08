@@ -81,6 +81,12 @@ Forever-only, and gives you the page link. You can try it yourself:
 wow-coach wiki "Abigail Shiel" --page "Abigail Shiel"
 ```
 
+To find a quest by the number the status shows after its name, for example `(quest 365)`:
+
+```
+wow-coach wiki --quest 365
+```
+
 ## Guides
 
 - [Install the addon](docs/install-the-addon.md)
@@ -101,7 +107,7 @@ a progress log per character. The tools the AI uses:
 - `list_characters`: your characters, most recently played first, with each one's goal.
 - `character_status`, `recent_history`, `progress_summary`: where a character is, what it did, and how it progressed lately.
 - `read_coach_notes`, `save_coach_notes`, `save_player_notes`: read both kinds of notes, save one character's journal, save the player notes.
-- `search_wiki`, `read_wiki_page`: game facts from the Warcraft Wiki.
+- `search_wiki`, `read_wiki_page`, `find_quest`: game facts from the Warcraft Wiki. `find_quest` finds a quest's page from its quest ID (shown in the status).
 
 In a terminal, `wow-coach characters` and `wow-coach progress` show the same lists.
 

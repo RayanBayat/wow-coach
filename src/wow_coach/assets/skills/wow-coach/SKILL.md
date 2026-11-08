@@ -137,7 +137,7 @@ Tailoring", "run Deadmines"), do these seven things. This works in any AI, not o
    group, relaxed or fast.
 2. **Read the character, its journal and the player notes** (see "Every time" above): level, XP, zone, gold,
    professions, gear, earlier goals and choices.
-3. **Research.** First `search_wiki` and `read_wiki_page`, then web search for anything
+3. **Research.** First `search_wiki`, `find_quest` (quests, by their ID) and `read_wiki_page`, then web search for anything
    Forever-specific the wiki lacks. Cite the links, and say when a source is old or from the
    beta.
 4. **Write the plan.**
@@ -248,11 +248,16 @@ guides were written during the beta (September-October 2026).
 
 Use this order, and always tell the player where an answer came from (give the link):
 
-1. **The `wow-coach` MCP tools `read_wiki_page` and `search_wiki`** (Warcraft Wiki). Fast and
-   Forever-aware: use them for NPC locations, vendor stock and prices, quest givers and
-   rewards. Search first if you do not know the exact page title. Pages say when something is
-   Forever-only, Classic-only or Retail-only; trust the Forever parts and say when only a
-   Retail or Classic fact is available.
+1. **The `wow-coach` MCP tools `read_wiki_page`, `search_wiki` and `find_quest`** (Warcraft
+   Wiki). Fast and Forever-aware: use them for NPC locations, vendor stock and prices, quest
+   givers and rewards. Search first if you do not know the exact page title. Pages say when
+   something is Forever-only, Classic-only or Retail-only; trust the Forever parts and say
+   when only a Retail or Classic fact is available.
+   **Look quests up by ID, not by title.** The status shows each quest as "(quest 365)". Call
+   `find_quest` with that number and read the page it returns. Forever reuses Classic quests
+   (same ID), and a title search often finds the Retail page, which has other NPCs and
+   rewards. If `find_quest` finds nothing, fall back to `search_wiki` and check that the page
+   you read shows the same quest ID.
 2. **Web search**, when the tools are missing, the wiki has no page, or the wiki did not answer.
    The table below lists sites worth reading.
 

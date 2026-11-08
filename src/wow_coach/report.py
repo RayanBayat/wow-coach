@@ -168,6 +168,9 @@ def _quest_line(quest: Table) -> str:
     prefix = f"[{number_text(level)}] " if level is not None else ""
     title = as_text(quest.get("title")) or "Untitled quest"
     tags = []
+    # The ID tells apart quests with the same title (Classic vs Retail pages on the wiki).
+    if (quest_id := as_number(quest.get("questID"))) is not None:
+        tags.append(f"quest {number_text(quest_id)}")
     if quest.get("failed") is True:
         tags.append("FAILED")
     if (group := as_number(quest.get("suggestedGroup"))) is not None:

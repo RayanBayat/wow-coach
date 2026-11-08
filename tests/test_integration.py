@@ -31,8 +31,8 @@ def test_fixture_through_savedvars_and_report(tmp_path: Path) -> None:
     status = format_status(testchar.snapshot, now=SAVED_AT + 120)
     assert "# Testchar: level 7 Undead Mage (Testrealm)" in status
     assert "Saved 2 min ago (coach)" in status
-    assert "- [1] Rude Awakening, DONE (turn in)" in status
-    assert "- [5] The Damned, 3/8 Scarlet Initiate slain" in status
+    assert "- [1] Rude Awakening (quest 363), DONE (turn in)" in status
+    assert "- [5] The Damned (quest 3902), 3/8 Scarlet Initiate slain" in status
     assert "Talents" not in status  # empty table is skipped
     assert "- Language: Common" not in status  # a language is not a profession
     assert 'Gnarled "Rotwood" Staff (item level 10, white)' in status

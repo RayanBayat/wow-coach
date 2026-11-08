@@ -69,8 +69,9 @@ FULL: Table = {
     "hearth": "Brill",
     "bags": {"free": 10, "total": 16},
     "quests": [
-        {"title": "Done Quest", "level": 5, "complete": True, "objectives": []},
+        {"questID": 4001, "title": "Done Quest", "level": 5, "complete": True, "objectives": []},
         {
+            "questID": 4002,
             "title": "Wolves",
             "level": 6,
             "complete": False,
@@ -105,8 +106,8 @@ def test_full_status_contains_every_section() -> None:
         "**Location:** Tirisfal Glades, Brill (61.2, 52.0)",
         "Hearth: Brill",
         "**Bags:** 10/16 slots free",
-        "- [5] Done Quest, DONE (turn in)",
-        "- [6] Wolves, 3/8 Wolf Pelts",
+        "- [5] Done Quest (quest 4001), DONE (turn in)",
+        "- [6] Wolves (quest 4002), 3/8 Wolf Pelts",
         "Unspent points: 2",
         "Points per tree: Fire 3, Frost 0",
         "Picked: Improved Fireball 2/5",
@@ -173,6 +174,12 @@ def test_only_low_rank_professions_hides_section() -> None:
 def test_unknown_quality_and_nil_holes_are_tolerated() -> None:
     snapshot: Table = {"gear": [None, {"slot": "Back", "name": "Cloak", "quality": 9}]}
     assert "- Back: Cloak (quality 9)" in format_status(snapshot, now=NOW)
+
+
+def test_quest_id_comes_first_among_the_tags() -> None:
+    quest: Table = {"questID": 365, "title": "Fields of Grief", "zone": "Tirisfal Glades"}
+    snapshot: Table = {"quests": [quest]}
+    assert "- Fields of Grief (quest 365; Tirisfal Glades)" in format_status(snapshot, now=NOW)
 
 
 def test_incomplete_quest_without_objectives() -> None:

@@ -161,6 +161,7 @@ def test_server_registers_all_tools_and_instructions() -> None:
     tools = asyncio.run(server.list_tools())
     assert sorted(tool.name for tool in tools) == [
         "character_status",
+        "find_quest",
         "list_characters",
         "progress_summary",
         "read_coach_notes",
@@ -293,6 +294,23 @@ def test_wiki_tools_use_the_injected_fetch_and_never_the_network() -> None:
     assert "1. Abigail Shiel" in found
     page = call_tool(server, "read_wiki_page", {"title": "Abigail Shiel", "section": "Sells"})
     assert "Coarse Thread | 10c" in page
+
+
+def test_find_quest_tool_uses_the_injected_fetch() -> None:
+    fixtures = Path(__file__).parent / "fixtures" / "wiki"
+    body = (fixtures / "search_quest_365.json").read_text(encoding="utf-8")
+    server = build_server(fetch=lambda _url, _params: body)
+    text = call_tool(server, "find_quest", {"quest_id": 365})
+    assert "Fields of Grief (Classic)" in text
+
+
+def test_find_quest_tool_is_a_read_only_web_lookup() -> None:
+    tools = {tool.name: tool for tool in asyncio.run(build_server().list_tools())}
+    annotations = tools["find_quest"].annotations
+    assert annotations is not None
+    assert annotations.read_only_hint is True
+    assert annotations.open_world_hint is True
+    assert "quest ID" in (tools["find_quest"].description or "")
 
 
 def test_wiki_tool_descriptions_say_what_they_are_good_for() -> None:

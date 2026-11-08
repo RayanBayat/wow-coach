@@ -1,8 +1,9 @@
 """Look things up on the Warcraft Wiki (warcraft.wiki.gg) through its official MediaWiki API.
 
-Two lookups, both returning short plain text that ends with a ``Source:`` line:
+Three lookups, all returning short plain text that ends with a ``Source:`` line:
 
 * ``answer_search_wiki``: find page titles for a question.
+* ``answer_find_quest``: find the quest page whose info box has a given quest ID.
 * ``answer_read_wiki_page``: read one page (or one section of it) as plain text.
 
 The wiki's text is licensed CC BY-SA 4.0, so every answer carries the page link and the
@@ -11,11 +12,18 @@ fake one.
 """
 
 import json
+import re
 from urllib.parse import quote
 
 from wow_coach.errors import LookupFailed
 from wow_coach.web import Fetch
-from wow_coach.wikitext import WikiPage, clean_snippet, find_section, parse_wikitext
+from wow_coach.wikitext import (
+    WikiPage,
+    clean_snippet,
+    find_section,
+    find_unresolved_templates,
+    parse_wikitext,
+)
 
 WIKI_HOME = "https://warcraft.wiki.gg"
 API_URL = f"{WIKI_HOME}/api.php"
@@ -25,6 +33,12 @@ MAX_LAG_SECONDS = "5"
 MAX_SEARCH_RESULTS = 10
 # Sections with no text (References, External links) are not worth listing.
 DEFAULT_MAX_CHARS = 6000
+# Templates we cannot read ourselves are expanded by the wiki in ONE extra request. These
+# limits keep that request and its answer small.
+MAX_EXPANDED_TEMPLATES = 12
+MAX_EXPANDED_CHARS = 3000
+# Put between the templates we send, so we can cut the wiki's one answer back into pieces.
+EXPANSION_SEPARATOR = "@@WOWCOACH-SPLIT@@"
 
 
 def page_url(title: str) -> str:
@@ -86,6 +100,48 @@ def _search_results(data: dict[str, object]) -> list[dict[str, object]] | None:
     return [item for item in results if isinstance(item, dict)]
 
 
+def answer_find_quest(quest_id: int, fetch: Fetch) -> str:
+    """Text for the ``find_quest`` tool: the wiki page(s) whose quest info box has this ID.
+
+    Searching by title is unreliable because Forever reuses Classic quests (same ID, page
+    called "Title (Classic)") while a plain title search finds the Retail page first. The
+    quest info box (``Questbox``) has an ``id`` field, which the wiki's search can match.
+    """
+    query = f'insource:"id = {quest_id}" insource:Questbox'
+    try:
+        data = _ask(
+            fetch,
+            {"action": "query", "list": "search", "srsearch": query, "srlimit": "5"},
+        )
+    except LookupFailed as error:
+        return _didnt_answer(str(error))
+    results = _search_results(data)
+    if results is None:
+        return _didnt_answer("unexpected reply")
+    if not results:
+        return (
+            f"No quest page with infobox id {quest_id} found on the Warcraft Wiki. "
+            "Try search_wiki with the quest title."
+        )
+    lines = [f"Quest {quest_id} on the Warcraft Wiki:"]
+    for number, result in enumerate(results, start=1):
+        title = str(result.get("title", ""))
+        snippet = clean_snippet(str(result.get("snippet", "")))
+        lines.append(f"{number}. {title}: {_id_match_note(quest_id, snippet)}")
+        lines.append(f"   {page_url(title)}")
+    if len(results) > 1:
+        lines.append("More than one page matched: read each and pick the one for Forever.")
+    lines.append(SOURCE_LINE)
+    return "\n".join(lines)
+
+
+def _id_match_note(quest_id: int, snippet: str) -> str:
+    """Say whether the search snippet shows the ``id = N`` line of the info box."""
+    if re.search(rf"\bid\s*=\s*{quest_id}\b", snippet):
+        return "the infobox id matched."
+    return "the id was not visible in the match; read the page to check."
+
+
 def answer_read_wiki_page(title: str, section: str | None, max_chars: int, fetch: Fetch) -> str:
     """Text for the ``read_wiki_page`` tool: a page (or one section) as plain text."""
     try:
@@ -108,10 +164,44 @@ def answer_read_wiki_page(title: str, section: str | None, max_chars: int, fetch
     if not isinstance(parsed, dict) or not isinstance(parsed.get("wikitext"), str):
         return _didnt_answer("unexpected reply")
     real_title = str(parsed.get("title", title))
-    page = parse_wikitext(real_title, str(parsed["wikitext"]))
+    wikitext = str(parsed["wikitext"])
+    page = parse_wikitext(real_title, wikitext, _expand_unknown_templates(wikitext, fetch))
     if section:
         return _render_section(page, section, max_chars)
     return _render_page(page, max_chars)
+
+
+def _expand_unknown_templates(wikitext: str, fetch: Fetch) -> dict[str, str]:
+    """Ask the wiki to expand the templates we cannot read (one request, small and capped).
+
+    Returns template source -> expanded wikitext. Any problem gives an empty dict, so the
+    page is still shown, with ``[Template name]`` where the content would be.
+    """
+    sources = find_unresolved_templates(wikitext)[:MAX_EXPANDED_TEMPLATES]
+    if not sources:
+        return {}
+    try:
+        data = _ask(
+            fetch,
+            {
+                "action": "expandtemplates",
+                "prop": "wikitext",
+                "text": EXPANSION_SEPARATOR.join(sources),
+            },
+        )
+    except LookupFailed:
+        return {}
+    result = data.get("expandtemplates")
+    expanded = result.get("wikitext") if isinstance(result, dict) else None
+    pieces = expanded.split(EXPANSION_SEPARATOR) if isinstance(expanded, str) else []
+    if len(pieces) != len(sources):
+        return {}
+    # A template that expands to a navigation box is page furniture: keep the bracket.
+    return {
+        source: piece[:MAX_EXPANDED_CHARS]
+        for source, piece in zip(sources, pieces, strict=True)
+        if "navbox" not in piece
+    }
 
 
 def _api_error_text(title: str, code: str) -> str:
