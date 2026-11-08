@@ -3,8 +3,9 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
+from wow_coach.desktop.icons import icon
 from wow_coach.desktop.state import CharacterView, StateView
-from wow_coach.desktop.theme import SPACE, SPACE_SMALL
+from wow_coach.desktop.theme import SPACE, SPACE_SMALL, Colors
 from wow_coach.desktop.widgets.bubbles import plain_label
 from wow_coach.desktop.widgets.formatting import Freshness, gold_text
 
@@ -136,7 +137,8 @@ class HeaderCard(QFrame):
         self._name.setVisible(not many)
         self._picker.blockSignals(True)  # filling the list must not count as a choice
         self._picker.clear()
-        self._picker.addItems(list(state.characters))
+        for key in state.characters:
+            self._picker.addItem(character_label(key), key)  # show a nice name, keep the key
         if state.selected in state.characters:
             self._picker.setCurrentIndex(state.characters.index(state.selected))
         self._picker.blockSignals(False)
@@ -155,7 +157,18 @@ class HeaderCard(QFrame):
         self._picker.setCurrentIndex(index)
         self._picked(index)
 
+    def use_icons(self, colors: Colors) -> None:
+        """Draw the buttons' icons in the current theme's colors."""
+        self.refresh_button.setIcon(icon("refresh", colors.text, 16))
+        self.keep_button.setIcon(icon("pin", colors.text, 16))
+
     def _picked(self, index: int) -> None:
-        key = self._picker.itemText(index)
-        if key:
+        key = self._picker.itemData(index)
+        if isinstance(key, str) and key:
             self.character_chosen.emit(key)
+
+
+def character_label(key: str) -> str:
+    """How a saved character's key ("Name-Realm") reads in the picker: "Name (Realm)"."""
+    name, _dash, realm = key.partition("-")
+    return f"{name} ({realm})" if name and realm else key

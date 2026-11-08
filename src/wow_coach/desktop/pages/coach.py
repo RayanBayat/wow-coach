@@ -99,7 +99,7 @@ class CoachPage(Page):
 
         self._build()
         self._wire()
-        self.setStyleSheet(_style(current_colors()))
+        self._restyle()
         self._timer = QTimer(self)
         self._timer.setInterval(TICK_MS)
         self._timer.timeout.connect(self._tick)
@@ -201,9 +201,16 @@ class CoachPage(Page):
 
     def on_theme_changed(self) -> None:
         """Light or dark mode changed: restyle this page and the small card."""
-        self.setStyleSheet(_style(current_colors()))
+        self._restyle()
         if self._card is not None:
             self._card.update()
+
+    def _restyle(self) -> None:
+        """Apply this page's colors and redraw the button icons in them."""
+        colors = current_colors()
+        self.setStyleSheet(_style(colors))
+        self.header.use_icons(colors)
+        self.composer.use_icons(colors)
 
     # ---- asking -------------------------------------------------------------------------
 

@@ -13,7 +13,8 @@ from PySide6.QtGui import QFocusEvent, QKeyEvent
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget
 
 from wow_coach.advice.contract import MAX_QUESTION_CHARS
-from wow_coach.desktop.theme import SPACE, SPACE_SMALL
+from wow_coach.desktop.icons import icon
+from wow_coach.desktop.theme import SPACE, SPACE_SMALL, Colors
 from wow_coach.desktop.widgets.bubbles import plain_label
 
 PLACEHOLDER: Final = "Ask your coach anything…"
@@ -93,6 +94,10 @@ class Composer(QFrame):
     def text(self) -> str:
         """What is typed so far."""
         return self._edit.toPlainText()
+
+    def use_icons(self, colors: Colors) -> None:
+        """Draw the Send button's icon in the current theme's colors."""
+        self._send.setIcon(icon("send", colors.on_accent, 16))
 
     def set_text(self, text: str, cursor: int | None = None) -> None:
         """Put text in the box, with the cursor at ``cursor`` (default: the end), and focus it."""

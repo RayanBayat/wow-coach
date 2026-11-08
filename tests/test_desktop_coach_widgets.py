@@ -21,6 +21,7 @@ from wow_coach.desktop.widgets.formatting import (
     gold_text,
     relative_time,
 )
+from wow_coach.desktop.widgets.header import character_label
 from wow_coach.desktop.widgets.refresh_banner import (
     HINT_AFTER_SECONDS,
     STILL_WAITING_TEXT,
@@ -308,3 +309,13 @@ def test_character_summary_copes_with_a_thin_save() -> None:
     assert summary["level"] is None
     assert character_summary(None) is None
     assert read_state(sample_state()).character is None
+
+
+def test_the_picker_shows_name_and_realm_but_hands_back_the_key() -> None:
+    assert character_label("Thrall-Some Realm 8") == "Thrall (Some Realm 8)"
+    assert character_label("NoRealm") == "NoRealm"
+
+
+def test_very_old_or_broken_times_read_as_over_a_year() -> None:
+    assert relative_time(400 * 86_400) == "over a year ago"
+    assert relative_time(2 * 86_400) == "2 days ago"

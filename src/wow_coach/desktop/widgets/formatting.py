@@ -12,6 +12,7 @@ type Level = Literal["success", "warning", "muted"]
 MINUTE: Final = 60
 HOUR: Final = 3_600
 DAY: Final = 86_400
+YEAR: Final = 365 * DAY
 FRESH_BELOW_SECONDS: Final = 10 * MINUTE  # green: the data is recent
 STALE_BELOW_SECONDS: Final = HOUR  # orange: getting old; older than this is grey
 
@@ -38,6 +39,8 @@ def age_words(seconds: float) -> str:
         return f"{int(seconds // MINUTE)} min"
     if seconds < DAY:
         return f"{int(seconds // HOUR)} h"
+    if seconds >= YEAR:
+        return "over a year"  # also covers broken clocks and very old answers
     days = int(seconds // DAY)
     return f"{days} day" if days == 1 else f"{days} days"
 
