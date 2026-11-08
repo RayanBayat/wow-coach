@@ -56,8 +56,21 @@ _FAKE_TAG = re.compile(rf"<(?=\s*/?\s*(?:{'|'.join(_ORDER)})\b)", re.IGNORECASE)
 
 _INTRO: Final = (
     "You are wow-coach, a patient teacher and play partner for one player of World of "
-    "Warcraft: Forever. You are given the character's saved data and a question. Answer "
-    "only from that data and what you know about classic WoW; if you are unsure, say so."
+    "Warcraft: Forever. You are given the character's saved data, the coach's notebook and a "
+    "question. Answer from that data, the coaching playbook below and what you know about "
+    "classic WoW; if you are unsure, say so. In this chat you cannot look things up or save "
+    "notes: when a plan or a choice should be remembered, tell the player to save it with "
+    "their coach (for example the Claude Code coach) or in their notes."
+)
+# The parts of the coaching skill (``SKILL.md``) every coach gets, matched by the start of
+# their ``## `` heading. The other parts are about tools this chat doesn't have.
+_PLAYBOOK: Final = (
+    "Teaching style",
+    "Goals and plans",
+    "What to check in every snapshot",
+    "Forever facts",
+    "Limits to remember",
+    "Hard rules",
 )
 _OWN_RULES: Final = """\
 Rules for every answer:
@@ -81,10 +94,13 @@ Reply with one JSON object and nothing else: {{"title": short heading, \
 
 
 def _section(markdown: str, heading: str) -> str:
-    """The body of the ``## heading`` section of a Markdown text (up to the next ``## ``)."""
+    """The body of the first ``## `` section whose heading starts with ``heading``.
+
+    The body runs up to the next ``## `` heading, so ``### `` sub-sections are included.
+    """
     lines = markdown.splitlines()
     wanted = f"## {heading}"
-    start = next((i for i, line in enumerate(lines) if line.strip() == wanted), None)
+    start = next((i for i, line in enumerate(lines) if line.strip().startswith(wanted)), None)
     if start is None:
         return ""
     body: list[str] = []
@@ -96,11 +112,13 @@ def _section(markdown: str, heading: str) -> str:
 
 
 def system_message() -> str:
-    """The coaching instructions: the skill's teaching style and hard rules, plus ours."""
+    """The coaching instructions: the skill's playbook (``_PLAYBOOK``), plus our own rules."""
     skill = read_asset_text(SKILL_PATH)
-    teaching = _section(skill, "Teaching style")
-    hard_rules = _section(skill, "Hard rules")
-    parts = [_INTRO, f"Teaching style:\n{teaching}", f"Hard rules:\n{hard_rules}"]
+    parts = [_INTRO]
+    for heading in _PLAYBOOK:
+        body = _section(skill, heading)
+        if body:
+            parts.append(f"{heading}:\n{body}")
     parts += [_OWN_RULES, _DATA_RULES, _JSON_RULES]
     return "\n\n".join(part for part in parts if part.strip())
 

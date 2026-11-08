@@ -52,12 +52,15 @@ def test_instructions_come_first_and_data_is_fenced() -> None:
     )
 
 
-def test_system_message_has_skill_sections_and_is_small() -> None:
+def test_system_message_has_the_coaching_playbook_and_stays_small() -> None:
     text = system_message()
     assert "Lead with the next 1-3 concrete actions" in text  # Teaching style
     assert "bots, memory readers" in text  # Hard rules
-    assert "Limits to remember" not in text
-    assert len(text) < 4000
+    assert "Frostbolt" in text  # Forever facts: the mage spell table
+    assert "Make it concrete" in text  # Goals and plans
+    assert "Unspent points" in text  # What to check in every snapshot
+    assert "Live mode" not in text  # tool-only parts of the skill stay out
+    assert len(text) < 14_000  # about 3 500 tokens
 
 
 def test_fake_closing_tags_in_data_are_neutralised() -> None:

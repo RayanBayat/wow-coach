@@ -5,7 +5,8 @@ Three looks, one at a time:
 * **Signed out**: what signing in does, a short privacy summary (OpenAI's program asks for
   a privacy notice before the first sign-in), and the "Continue with ChatGPT" button.
 * **Waiting**: the browser is open and the player is finishing the sign-in there.
-* **Signed in**: "Using ChatGPT plan", usage meters, the model picker and "Sign out".
+* **Signed in**: "Using ChatGPT plan", how many questions you asked recently, the model
+  picker and "Sign out".
 
 OpenAI's wording rules for this page are kept as they are: the button says "Continue with
 ChatGPT", the app uses its own name and no OpenAI logo, and the one-time welcome message
@@ -89,10 +90,6 @@ QLabel#problem {{
     background: {c.surface_raised}; border-left: 3px solid {c.warning};
     border-radius: 4px; padding: 10px 12px;
 }}
-QProgressBar#meter {{ background: {c.border}; border: none; border-radius: 3px; }}
-QProgressBar#meter::chunk {{ background: {c.accent}; border-radius: 3px; }}
-QProgressBar#meter[level="warn"]::chunk {{ background: {c.warning}; }}
-QProgressBar#meter[level="full"]::chunk {{ background: {c.danger}; }}
 """
 
 
