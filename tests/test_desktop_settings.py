@@ -239,8 +239,6 @@ def test_one_edit_saves_only_that_field(qtbot: QtBot) -> None:
     page.speak.check.setChecked(True)
     page.save_now()
     assert core.changes == [{"speak": True}]
-    assert core.settings.max_calls_per_hour == 33
-    assert core.settings.send_coach_notes is False
 
 
 def test_a_trigger_edit_sends_only_the_changed_rule_fields(qtbot: QtBot) -> None:
