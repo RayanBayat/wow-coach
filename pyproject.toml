@@ -28,6 +28,13 @@ dependencies = [
     "mcp==2.3.0",
 ]
 
+[project.optional-dependencies]
+# The desktop app (`wow-coach app`): Qt for Python. Optional because it is a big download
+# (about 80 MB) that people who only use the MCP server or the addon don't need.
+desktop = [
+    "PySide6-Essentials==6.12.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/RayanBayat/wow-coach"
 Source = "https://github.com/RayanBayat/wow-coach"
@@ -46,7 +53,9 @@ build-backend = "uv_build"
 dev = [
     "hypothesis==6.170.15",
     "mypy==2.4.1",
+    "pyside6-essentials==6.12.0",
     "pytest==9.2.0",
+    "pytest-qt==4.5.0",
     "ruff==0.17.4",
 ]
 

@@ -1,8 +1,13 @@
 """Shared test setup."""
 
+import os
 from pathlib import Path
 
 import pytest
+
+# The desktop app's tests draw windows without a screen ("offscreen"), so they also run on CI
+# servers and never pop up a window on a developer's desktop. Qt reads this when it starts.
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 
 @pytest.fixture(autouse=True)

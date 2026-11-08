@@ -43,7 +43,7 @@ def run_app(
     """
     environ = os.environ if environ is None else environ
     out = sys.stdout if out is None else out
-    core = _build_core(wow_dir, environ)
+    core = build_core(wow_dir, environ)
     server = CoachServer(core, port)
     watcher = Watcher(core, wow_dir)
     server.start()
@@ -77,7 +77,7 @@ def print_links_on_enter(server: CoachServer, out: TextIO, stdin: TextIO | None)
         print(SNAP_HINT, file=out, flush=True)
 
 
-def _build_core(wow_dir: Path, environ: Mapping[str, str]) -> AppCore:
+def build_core(wow_dir: Path, environ: Mapping[str, str]) -> AppCore:
     """Create the real settings, keychain sign-in, usage log, AI, engine and alerts.
 
     ``companion.py`` builds the same sign-in and caps as ``wow-coach ask``, so the window and
