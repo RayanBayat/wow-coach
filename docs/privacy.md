@@ -30,6 +30,8 @@ Last updated: 2026-11-08.
 | Your ChatGPT sign-in: a renewal token, the id OpenAI gave this copy of wow-coach, and your ChatGPT account id (not your email) | Your computer's password store (for example KDE Wallet, GNOME Keyring, macOS Keychain, Windows Credential Manager), never a file. The short-lived access token is only kept in memory | OpenAI only, when wow-coach asks for an answer |
 | Your email address | Not stored by wow-coach (it is shown once after sign-in) | Nobody |
 | A usage log (time, model, number of tokens; no text) | wow-coach's data folder | Nobody |
+| Your "when to speak up" rules in your own words, and short summaries of game events (for example "Died in Brill") | wow-coach's data folder (settings) | OpenAI's smallest model on your plan, only if you turn on "use a small AI to decide" |
+| Names of other players the coach has seen (to keep hiding them), and the ids of questions already answered | wow-coach's data folder (`hidden-names-v2.json`, `answered-questions.json`), kept until you delete them | Nobody |
 | Words you look up on the Warcraft Wiki | Nowhere | The Warcraft Wiki (warcraft.wiki.gg), when the coach looks something up |
 
 wow-coach's data folder is `~/.local/share/wow-coach` on Linux (or `$XDG_DATA_HOME/wow-coach`),

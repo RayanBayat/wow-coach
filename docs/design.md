@@ -382,13 +382,24 @@ ChatGPT plan. The pieces (the plan, the rules and the reasons: `docs/plans/coach
 **The window's safety rules** (`app/server.py`):
 - **Where it listens:** 127.0.0.1 only, on a random port. The Host header must be exactly
   `127.0.0.1:<port>`, against DNS rebinding.
-- **The session:** the start link carries a one-time token in its `#fragment`. The page trades
-  it once for an `HttpOnly`, `SameSite=Strict` session cookie, and every `/api` call needs that
-  cookie.
-- **Changes:** every POST also needs the `X-Wow-Coach` header and a matching `Origin`,
-  against CSRF from other websites.
+- **The start link:** it carries a one-time token in its `#fragment`, which the server never
+  sees. The browser is given a private start page in a 0700 temp folder (a 0600 file with a
+  meta refresh, deleted after 60 s), so the token never appears in a command line other users
+  could read. The terminal prints the link too.
+- **The session:** the page trades the token once for a random session secret. It keeps the
+  secret in `sessionStorage` (this tab, this exact address, never sent by itself) and sends it
+  as the `X-Wow-Coach-Session` header on every `/api` call, including the streamed events.
+  There is no cookie: cookies are shared with every other port on 127.0.0.1.
+  - The custom header also stops other websites: it forces a preflight, which the server
+    answers with 405.
+  - Pressing Enter in the terminal makes a fresh start link.
+- **Where requests come from:** a matching `Origin` is required on changes. `Sec-Fetch-Site`
+  `cross-site` or `same-site` is refused, except a top-level navigation to the page itself
+  (the start page's `file://` hop), which holds no data.
 - **Headers:** a strict Content-Security-Policy with no inline scripts, `nosniff`,
-  `no-referrer`, `no-store`, `DENY` frames.
+  `no-referrer`, `no-store`, `DENY` frames, and same-origin CORP and COOP.
+- **Limits:** a 30 s timeout per request, at most 32 connections and 4 event streams, and
+  every error is one JSON sentence (never a traceback).
 - **Files and sizes:** a fixed list of static files, and capped request sizes.
 - **AI text** reaches the page only through `textContent`. A test fails on `innerHTML` and
   similar.
