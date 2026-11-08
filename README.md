@@ -127,8 +127,8 @@ In a terminal, `wow-coach characters` and `wow-coach progress` show the same lis
   mail (with the mail's subject) or attacked you just before you died. It does not contain your account name, password or email.
 - The addon only uses the normal addon interface. It does not read game memory, inject code or
   automate play. Addons that use the normal interface are allowed under Blizzard's rules.
-- With the coach window (Way 5), wow-coach's own coach sends your character's data and your
-  questions to OpenAI through your own Sign in with ChatGPT, using your ChatGPT plan. Other
+- With the coach window (Way 5), wow-coach's own coach sends your character's data, your
+  questions, the recent conversation and the coach's notes (you can turn the notes off) to OpenAI through your own Sign in with ChatGPT, using your ChatGPT plan. Other
   players' names are replaced with "a player" first, unless you allow them. Details:
   [privacy notice](docs/privacy.md).
 - The coach never needs you to close the game for it.

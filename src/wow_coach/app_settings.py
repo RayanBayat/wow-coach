@@ -44,6 +44,9 @@ class AppSettings:
     # Send other players' names (group members, mail senders, killers) to the AI. Off:
     # they are replaced with "a player" before anything leaves the PC.
     share_other_player_names: bool = False
+    # Send the coach's notes (player notes and the character's journal) with each question.
+    # They make answers fit the player, but they can hold personal notes, so it is a choice.
+    send_coach_notes: bool = True
     # When the coach speaks up by itself (deaths, level-ups, a timer...). Manual by default.
     triggers: TriggerSettings = field(default_factory=TriggerSettings)
 
@@ -92,6 +95,7 @@ def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
         share_other_player_names=_clean_flag(
             data.get("share_other_player_names"), DEFAULTS.share_other_player_names
         ),
+        send_coach_notes=_clean_flag(data.get("send_coach_notes"), DEFAULTS.send_coach_notes),
         triggers=trigger_settings_from_dict(data.get("triggers")),
     )
 

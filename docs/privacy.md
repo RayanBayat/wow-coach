@@ -11,7 +11,8 @@ Last updated: 2026-11-08.
 - The CoachLink addon writes your character's data to a file on your computer. Nothing else.
 - The `wow-coach` program reads that file on your computer.
 - When **you choose** to get answers from wow-coach's own coach (`wow-coach ask`, the coach
-  window), it sends that data to **OpenAI**, through your own **Sign in with ChatGPT**,
+  window), it sends that data, your question, the last few messages of the conversation and
+  the coach's notes (your player notes and the character's journal) to **OpenAI**, through your own **Sign in with ChatGPT**,
   using your ChatGPT plan.
 - When you use another AI app (Claude Code, an MCP app, or you paste the text into a chat),
   that app's company receives what it reads. That is between you and that company.
@@ -24,7 +25,7 @@ Last updated: 2026-11-08.
 | Your character's snapshot: name, realm, level, zone, quests, gear, bags, bank, mail, spells, stats, reputations, history (deaths, items, quests) | The game's SavedVariables file on your computer | OpenAI, when wow-coach's own coach answers (only after you signed in). Any other AI app you connect |
 | Questions you type in the Coach panel or the coach window | The game's SavedVariables file, and a conversation file in wow-coach's data folder | OpenAI, as above |
 | The coach's answers | `Interface/AddOns/CoachLink_Advice/Advice.lua`, and the conversation file | Nobody else |
-| Your player notes and character journals | wow-coach's data folder | The AI app you use, when it reads them |
+| Your player notes and character journals (the coach writes them; they can hold personal notes, for example how you like to be coached or notes about your computer) | wow-coach's data folder | OpenAI, with each question to wow-coach's own coach (up to a few thousand characters of each), unless you turn off "send the coach's notes" in the window's Settings. The AI app you use, when it reads them |
 | Other players' names (your group, mail senders, players who attacked you) | The game's SavedVariables file | Hidden from wow-coach's own coach (replaced with "a player") unless you turn on "share other players' names". Other AI apps can read them in the status report |
 | Your ChatGPT sign-in: a renewal token, the id OpenAI gave this copy of wow-coach, and your ChatGPT account id (not your email) | Your computer's password store (for example KDE Wallet, GNOME Keyring, macOS Keychain, Windows Credential Manager), never a file. The short-lived access token is only kept in memory | OpenAI only, when wow-coach asks for an answer |
 | Your email address | Not stored by wow-coach (it is shown once after sign-in) | Nobody |
@@ -57,6 +58,8 @@ the requests (`store: false`).
   game's `Interface/AddOns`, and the CoachLink SavedVariables file
   (`WTF/Account/<account>/SavedVariables/CoachLink.lua`).
 - **Other players' names:** keep "share other players' names" off (the default).
+- **The coach's notes:** turn off "send the coach's notes" to keep your player notes and
+  journals on your computer (answers fit you less well).
 
 ## Children
 

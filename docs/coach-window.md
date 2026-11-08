@@ -88,7 +88,8 @@ coach** (the coach looks at it and gives advice, using your plan).
 ## Privacy
 
 - **What goes to OpenAI:** your character's data (the same report the other coaches get), the
-  question and the last few messages of the conversation. It goes through your own sign-in and
+  question, the last few messages of the conversation, and the coach's notes (your player notes
+  and the character's journal; turn them off in Settings with "send the coach's notes"). It goes through your own sign-in and
   counts as your ChatGPT use.
 - **Other players' names** (your group, mail senders, players who attacked you) are replaced
   with "a player" first, unless you turn that off in Settings.
