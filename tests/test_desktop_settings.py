@@ -28,8 +28,6 @@ def settings_state(settings: AppSettings) -> dict[str, object]:
 
 def test_the_fields_show_the_saved_settings(qtbot: QtBot) -> None:
     saved = AppSettings(
-        max_calls_per_hour=33,
-        max_calls_per_day=150,
         share_other_player_names=True,
         send_coach_notes=False,
         triggers=TriggerSettings(
@@ -43,8 +41,6 @@ def test_the_fields_show_the_saved_settings(qtbot: QtBot) -> None:
         ),
     )
     page, _bridge, _core = make_page(qtbot, **settings_state(saved))
-    assert page.max_hour.value() == 33
-    assert page.max_day.value() == 150
     assert page.share_names.check.isChecked()
     assert not page.send_notes.check.isChecked()
     assert page.mode_boxes["died"].currentData() == "notify"
@@ -58,16 +54,9 @@ def test_the_fields_show_the_saved_settings(qtbot: QtBot) -> None:
 
 
 def test_filling_the_fields_does_not_save_anything(qtbot: QtBot) -> None:
-    page, _bridge, core = make_page(qtbot, **settings_state(AppSettings(max_calls_per_hour=33)))
+    page, _bridge, core = make_page(qtbot, **settings_state(AppSettings(send_coach_notes=False)))
     assert not page._save_timer.isActive()
     assert core.changes == []
-
-
-def test_usage_is_shown_next_to_the_limits(qtbot: QtBot) -> None:
-    usage = {"last_hour": 4, "last_day": 9, "hour_cap": 20, "day_cap": 100}
-    page, _bridge, _core = make_page(qtbot, usage=usage)
-    assert page.hour_used.text() == "Used in the last hour: 4"
-    assert page.day_used.text() == "Used in the last day: 9"
 
 
 def test_notify_is_disabled_when_the_computer_cannot(qtbot: QtBot) -> None:
@@ -83,11 +72,11 @@ def test_notify_is_disabled_when_the_computer_cannot(qtbot: QtBot) -> None:
 
 def test_a_change_saves_after_the_wait_not_at_once(qtbot: QtBot) -> None:
     page, _bridge, core = make_page(qtbot)
-    page.max_hour.setValue(55)
+    page.cooldown.setValue(55)
     assert core.changes == []
     assert page._save_timer.isActive()
     page._save_timer.timeout.emit()  # what the timer does after 400 ms
-    assert core.settings.max_calls_per_hour == 55
+    assert core.settings.triggers.cooldown_minutes == 55
     assert page.saved_label.isVisible()
 
 
@@ -101,10 +90,10 @@ def test_the_real_timer_saves_by_itself(qtbot: QtBot) -> None:
 def test_many_quick_changes_save_once(qtbot: QtBot) -> None:
     page, _bridge, core = make_page(qtbot)
     for value in (21, 22, 23):
-        page.max_hour.setValue(value)
+        page.cooldown.setValue(value)
     page._save_timer.timeout.emit()
     assert len(core.changes) == 1
-    assert core.settings.max_calls_per_hour == 23
+    assert core.settings.triggers.cooldown_minutes == 23
 
 
 def test_trigger_rules_are_saved_in_the_core_s_shape(qtbot: QtBot) -> None:
@@ -127,12 +116,12 @@ def test_trigger_rules_are_saved_in_the_core_s_shape(qtbot: QtBot) -> None:
 def test_a_timer_of_a_few_minutes_is_not_saved_and_says_why(qtbot: QtBot) -> None:
     page, _bridge, core = make_page(qtbot)
     page.timer_minutes.setValue(3)
-    page.max_day.setValue(77)
+    page.share_names.check.setChecked(True)
     page.save_now()
     assert page.problem_label.text() == TIMER_PROBLEM
     assert page.problem_label.isVisible()
     assert core.settings.triggers.every_minutes == 0  # the bad rules were not saved
-    assert core.settings.max_calls_per_day == 77  # the rest was
+    assert core.settings.share_other_player_names is True  # the rest was
 
 
 def test_half_set_quiet_hours_are_not_saved(qtbot: QtBot) -> None:
@@ -163,29 +152,29 @@ def test_the_free_text_is_cut_to_its_limit(qtbot: QtBot) -> None:
 
 def test_a_new_state_does_not_overwrite_an_unsaved_edit(qtbot: QtBot) -> None:
     page, _bridge, _core = make_page(qtbot)
-    page.max_hour.setValue(55)  # not saved yet
-    newer = settings_state(AppSettings(max_calls_per_hour=7))
+    page.cooldown.setValue(55)  # not saved yet
+    newer = settings_state(AppSettings(triggers=TriggerSettings(cooldown_minutes=7)))
     page.show_state(read_state(sample_state(**newer)))
-    assert page.max_hour.value() == 55
+    assert page.cooldown.value() == 55
 
 
 def test_a_new_state_updates_fields_that_are_not_being_edited(qtbot: QtBot) -> None:
     page, _bridge, _core = make_page(qtbot)
-    newer = settings_state(AppSettings(max_calls_per_hour=7))
+    newer = settings_state(AppSettings(triggers=TriggerSettings(cooldown_minutes=7)))
     page.show_state(read_state(sample_state(**newer)))
-    assert page.max_hour.value() == 7
+    assert page.cooldown.value() == 7
 
 
 def test_the_focused_field_is_left_alone(qtbot: QtBot) -> None:
     page, _bridge, _core = make_page(qtbot)
     page.activateWindow()
-    page.max_day.setFocus()
-    qtbot.waitUntil(page.max_day.hasFocus)
-    page.max_day.setValue(88)
+    page.cooldown.setFocus()
+    qtbot.waitUntil(page.cooldown.hasFocus)
+    page.cooldown.setValue(88)
     page._save_timer.stop()  # as if the edit had just been saved
-    newer = settings_state(AppSettings(max_calls_per_day=5))
+    newer = settings_state(AppSettings(triggers=TriggerSettings(cooldown_minutes=5)))
     page.show_state(read_state(sample_state(**newer)))
-    assert page.max_day.value() == 88
+    assert page.cooldown.value() == 88
 
 
 # ---- not saving before the settings are known ------------------------------------------
@@ -217,9 +206,9 @@ def test_a_state_without_settings_changes_nothing(qtbot: QtBot) -> None:
 
 
 def test_a_failed_read_keeps_the_values_already_shown(qtbot: QtBot) -> None:
-    page, _bridge, _core = make_page(qtbot, **settings_state(AppSettings(max_calls_per_hour=33)))
+    page, _bridge, _core = make_page(qtbot, **settings_state(AppSettings(send_coach_notes=False)))
     page.show_state(read_state(sample_state(settings={})))
-    assert page.max_hour.value() == 33
+    assert not page.send_notes.check.isChecked()
     assert page.form.isEnabled()
 
 
@@ -230,7 +219,7 @@ def test_saving_before_the_settings_arrive_sends_nothing(qtbot: QtBot) -> None:
 
 
 def test_one_edit_saves_only_that_field(qtbot: QtBot) -> None:
-    saved = AppSettings(max_calls_per_hour=33, max_calls_per_day=150, send_coach_notes=False)
+    saved = AppSettings(send_coach_notes=False)
     page, _bridge, core = make_page(qtbot, **settings_state(saved))
     page.share_names.check.setChecked(True)
     page.save_now()
@@ -246,8 +235,8 @@ def test_a_trigger_edit_sends_only_the_changed_rule_fields(qtbot: QtBot) -> None
 
 def test_the_same_edit_is_not_sent_twice(qtbot: QtBot) -> None:
     page, _bridge, core = make_page(qtbot)
-    page.max_day.setValue(77)
+    page.share_names.check.setChecked(True)
     page.save_now()
-    page.max_hour.setValue(12)
+    page.send_notes.check.setChecked(False)
     page.save_now()
-    assert core.changes == [{"max_calls_per_day": 77}, {"max_calls_per_hour": 12}]
+    assert core.changes == [{"share_other_player_names": True}, {"send_coach_notes": False}]

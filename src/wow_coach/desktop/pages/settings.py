@@ -1,4 +1,4 @@
-"""The Settings page: answers, the coach speaking up by itself, limits and privacy choices.
+"""The Settings page: answers, the coach speaking up by itself and privacy choices.
 
 There is no "Save" button. A change is saved about 0.4 seconds after the last one (so typing
 a number does not save after every key), and a small "Saved" appears. A value that cannot
@@ -26,11 +26,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from wow_coach.app_settings import MAX_CALLS_PER_DAY_LIMIT, MAX_CALLS_PER_HOUR_LIMIT
 from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.forms import Card, ToggleRow, make_label, page_header, scrollable
 from wow_coach.desktop.pages.base import Page
-from wow_coach.desktop.state import StateView, UsageView
+from wow_coach.desktop.state import StateView
 from wow_coach.desktop.theme import SPACE, Colors, current_colors
 from wow_coach.triggers.settings import (
     MAX_COOLDOWN_MINUTES,
@@ -49,8 +48,6 @@ LOADING_TEXT: Final = "Loading your settings\u2026"
 SIMPLE_KEYS: Final = (
     "answer_questions_from_game",
     "notify",
-    "max_calls_per_hour",
-    "max_calls_per_day",
     "share_other_player_names",
     "send_coach_notes",
 )
@@ -116,7 +113,7 @@ def _as_mapping(value: object) -> Mapping[str, object]:
 
 
 class SettingsPage(Page):
-    """Answers, the coach on its own, limits and privacy choices."""
+    """Answers, the coach on its own and privacy choices."""
 
     name = "settings"
     title = "Settings"
@@ -158,7 +155,6 @@ class SettingsPage(Page):
         form_column.setSpacing(SPACE)
         form_column.addWidget(self._build_answers_card())
         form_column.addWidget(self._build_triggers_card())
-        form_column.addWidget(self._build_limits_card())
         form_column.addWidget(self._build_privacy_card())
         self.form.setEnabled(False)
         column.addWidget(self.form)
@@ -313,30 +309,6 @@ class SettingsPage(Page):
         label.setBuddy(field)
         return label
 
-    def _build_limits_card(self) -> Card:
-        card = Card(
-            "Limits that protect your plan",
-            "The most AI calls the coach may make. 0 means none at all: the coach can't "
-            "answer until you raise it.",
-        )
-        self.max_hour = self._spin(
-            0, MAX_CALLS_PER_HOUR_LIMIT, "The most AI calls in one hour.", " calls"
-        )
-        self.max_day = self._spin(
-            0, MAX_CALLS_PER_DAY_LIMIT, "The most AI calls in one day.", " calls"
-        )
-        self.hour_used = make_label("", "small")
-        self.day_used = make_label("", "small")
-        form = QFormLayout()
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
-        form.setVerticalSpacing(SPACE)
-        form.addRow(self._buddy_label("Most calls per hour", self.max_hour), self.max_hour)
-        form.addRow("", self.hour_used)
-        form.addRow(self._buddy_label("Most calls per day", self.max_day), self.max_day)
-        form.addRow("", self.day_used)
-        card.body.addLayout(form)
-        return card
-
     def _build_privacy_card(self) -> Card:
         card = Card("Privacy")
         self.share_names = self._toggle(
@@ -359,7 +331,6 @@ class SettingsPage(Page):
 
     def show_state(self, state: StateView) -> None:
         """Fill the fields from the saved settings, unless the player is editing them."""
-        self._show_usage(state.usage)
         self.notify.set_available(
             state.notify_available, "This computer can't show desktop notifications."
         )
@@ -378,18 +349,12 @@ class SettingsPage(Page):
             self.form.setEnabled(True)
             self.loading_label.hide()
 
-    def _show_usage(self, usage: UsageView) -> None:
-        self.hour_used.setText(f"Used in the last hour: {usage.last_hour}")
-        self.day_used.setText(f"Used in the last day: {usage.last_day}")
-
     def _fill(self, settings: Mapping[str, object]) -> None:
         """Copy saved values into the fields the player is not using right now."""
         self._set_check(self.answer_games, settings.get("answer_questions_from_game"), True)
         self._set_check(self.notify, settings.get("notify"), True)
         self._set_check(self.share_names, settings.get("share_other_player_names"), False)
         self._set_check(self.send_notes, settings.get("send_coach_notes"), True)
-        self._set_spin(self.max_hour, _as_int(settings.get("max_calls_per_hour"), 20))
-        self._set_spin(self.max_day, _as_int(settings.get("max_calls_per_day"), 100))
         self._fill_triggers(_as_mapping(settings.get("triggers")))
 
     def _fill_triggers(self, rules: Mapping[str, object]) -> None:
@@ -485,8 +450,6 @@ class SettingsPage(Page):
         return {
             "answer_questions_from_game": self.answer_games.check.isChecked(),
             "notify": self.notify.check.isChecked(),
-            "max_calls_per_hour": self.max_hour.value(),
-            "max_calls_per_day": self.max_day.value(),
             "share_other_player_names": self.share_names.check.isChecked(),
             "send_coach_notes": self.send_notes.check.isChecked(),
             "triggers": self._trigger_values(),
@@ -502,8 +465,6 @@ class SettingsPage(Page):
                 settings.get("answer_questions_from_game"), True
             ),
             "notify": _as_bool(settings.get("notify"), True),
-            "max_calls_per_hour": _as_int(settings.get("max_calls_per_hour"), 20),
-            "max_calls_per_day": _as_int(settings.get("max_calls_per_day"), 100),
             "share_other_player_names": _as_bool(settings.get("share_other_player_names"), False),
             "send_coach_notes": _as_bool(settings.get("send_coach_notes"), True),
             "triggers": {

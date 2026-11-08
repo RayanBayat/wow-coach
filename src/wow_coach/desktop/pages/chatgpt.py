@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMessageBox,
-    QProgressBar,
     QVBoxLayout,
     QWidget,
 )
@@ -41,7 +40,7 @@ from wow_coach.desktop.forms import (
 )
 from wow_coach.desktop.pages.base import Page
 from wow_coach.desktop.state import StateView, UsageView
-from wow_coach.desktop.theme import SPACE, SPACE_SMALL, Colors, current_colors
+from wow_coach.desktop.theme import SPACE, Colors, current_colors
 from wow_coach.desktop.welcome import WelcomeDialog
 
 SIGN_IN_BUTTON_TEXT: Final = "Continue with ChatGPT"  # OpenAI's required wording
@@ -95,43 +94,6 @@ QProgressBar#meter::chunk {{ background: {c.accent}; border-radius: 3px; }}
 QProgressBar#meter[level="warn"]::chunk {{ background: {c.warning}; }}
 QProgressBar#meter[level="full"]::chunk {{ background: {c.danger}; }}
 """
-
-
-class UsageMeter(QWidget):
-    """One line of text over a thin bar: "Last hour: 3 of 20 calls"."""
-
-    def __init__(self, period: str) -> None:
-        super().__init__()
-        self._period = period
-        self.text = make_label("")
-        self.bar = QProgressBar()
-        self.bar.setObjectName("meter")
-        self.bar.setTextVisible(False)
-        self.bar.setFixedHeight(6)
-        column = QVBoxLayout(self)
-        column.setContentsMargins(0, 0, 0, 0)
-        column.setSpacing(SPACE_SMALL)
-        column.addWidget(self.text)
-        column.addWidget(self.bar)
-
-    def set_usage(self, used: int, cap: int) -> None:
-        """Show ``used`` calls against the player's own ``cap`` (0 means no calls allowed)."""
-        if cap <= 0:
-            self.text.setText(
-                f"{self._period}: {used} calls. Your limit is 0, so the coach can't use your "
-                "plan. Raise it in Settings."
-            )
-            self.bar.setRange(0, 1)
-            self.bar.setValue(1)
-            level = "full"
-        else:
-            self.text.setText(f"{self._period}: {used} of {cap} calls")
-            self.bar.setRange(0, cap)
-            self.bar.setValue(min(used, cap))
-            level = "full" if used >= cap else "warn" if used * 5 >= cap * 4 else "ok"
-        self.bar.setProperty("level", level)
-        self.bar.style().unpolish(self.bar)  # make Qt re-read the stylesheet for the new level
-        self.bar.style().polish(self.bar)
 
 
 class ChatGPTPage(Page):
@@ -269,15 +231,15 @@ class ChatGPTPage(Page):
         card.body.addLayout(status)
         card.body.addWidget(
             make_label(
-                "The coach's answers count toward your ChatGPT plan. The limits below are "
-                "your own, to protect it.",
+                "The coach's answers count toward your ChatGPT plan, and only the plan's "
+                "own limits apply.",
                 "muted",
             )
         )
-        self.hour_meter = UsageMeter("Last hour")
-        self.day_meter = UsageMeter("Last day")
-        card.body.addWidget(self.hour_meter)
-        card.body.addWidget(self.day_meter)
+        self.hour_used = make_label("")
+        self.day_used = make_label("")
+        card.body.addWidget(self.hour_used)
+        card.body.addWidget(self.day_used)
 
         card.body.addWidget(make_label("Model", "subtitle"))
         self.model_box = QComboBox()
@@ -442,8 +404,8 @@ class ChatGPTPage(Page):
         self.bridge.change_settings({"model": self.model_box.itemData(index)})
 
     def _show_usage(self, usage: UsageView) -> None:
-        self.hour_meter.set_usage(usage.last_hour, usage.hour_cap)
-        self.day_meter.set_usage(usage.last_day, usage.day_cap)
+        self.hour_used.setText(f"Questions in the last hour: {usage.last_hour}")
+        self.day_used.setText(f"Questions today: {usage.last_day}")
 
     # ---- signing out ---------------------------------------------------------------------
 

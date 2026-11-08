@@ -46,7 +46,7 @@ def sample_state(**changes: object) -> dict[str, object]:
         "selected": KEY,
         "answers": [sample_answer()],
         "open_questions": [],
-        "usage": {"last_hour": 1, "last_day": 3, "hour_cap": 30, "day_cap": 200},
+        "usage": {"last_hour": 1, "last_day": 3},
         "last_save": 1_000,
         "alerts": {"notify": True},
         "problem": None,

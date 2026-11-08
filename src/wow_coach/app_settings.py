@@ -19,10 +19,6 @@ from wow_coach.triggers.settings import trigger_settings_from_dict, trigger_sett
 
 SETTINGS_FILE_NAME: Final = "settings.json"
 MAX_SETTINGS_BYTES: Final = 64_000
-# Caps that protect the player's ChatGPT plan. The window lets them change these.
-MIN_CALLS: Final = 0
-MAX_CALLS_PER_HOUR_LIMIT: Final = 200
-MAX_CALLS_PER_DAY_LIMIT: Final = 2000
 MAX_MODEL_CHARS: Final = 80
 
 
@@ -36,9 +32,6 @@ class AppSettings:
     answer_questions_from_game: bool = True
     # Show a desktop notification when an answer is ready.
     notify: bool = True
-    # Never use more of the plan than this.
-    max_calls_per_hour: int = 20
-    max_calls_per_day: int = 100
     # Send other players' names (group members, mail senders, killers) to the AI. Off:
     # they are replaced with "a player" before anything leaves the PC.
     share_other_player_names: bool = False
@@ -65,12 +58,6 @@ def _clean_model(value: object) -> str | None:
     return value if ok else None
 
 
-def _clean_count(value: object, default: int, limit: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        return default
-    return min(max(value, MIN_CALLS), limit)
-
-
 def _clean_flag(value: object, default: bool) -> bool:
     return value if isinstance(value, bool) else default
 
@@ -83,12 +70,6 @@ def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
             data.get("answer_questions_from_game"), DEFAULTS.answer_questions_from_game
         ),
         notify=_clean_flag(data.get("notify"), DEFAULTS.notify),
-        max_calls_per_hour=_clean_count(
-            data.get("max_calls_per_hour"), DEFAULTS.max_calls_per_hour, MAX_CALLS_PER_HOUR_LIMIT
-        ),
-        max_calls_per_day=_clean_count(
-            data.get("max_calls_per_day"), DEFAULTS.max_calls_per_day, MAX_CALLS_PER_DAY_LIMIT
-        ),
         share_other_player_names=_clean_flag(
             data.get("share_other_player_names"), DEFAULTS.share_other_player_names
         ),

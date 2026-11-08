@@ -156,29 +156,27 @@ def _lines(path: Path) -> list[dict[str, object]]:
     return [json.loads(line) for line in path.read_text().splitlines()]
 
 
-def test_calls_are_counted_and_capped(tmp_path: Path) -> None:
-    log = UsageLog(tmp_path / "usage.jsonl", max_calls_per_hour=1)
-    api = Api(stream_response(HAPPY))
+def test_calls_are_counted_and_never_refused_by_us(tmp_path: Path) -> None:
+    log = UsageLog(tmp_path / "usage.jsonl")
+    api = Api(lambda _request: stream_response(HAPPY))
     plan = make(api, usage_log=log)
     ask(plan)
     call, tokens = _lines(tmp_path / "usage.jsonl")
     assert "tokens_only" not in call
     assert (tokens["tokens_only"], tokens["input_tokens"], tokens["output_tokens"]) == (True, 11, 7)
-    with pytest.raises(PlanLimitReached, match="per hour"):
+    for _ in range(30):  # many more calls than the old default limit of 20 an hour
         ask(plan)
-    assert len(api.requests) == 1  # the capped call never reached the network
-    assert len(_lines(tmp_path / "usage.jsonl")) == 2  # and a refused call is not counted
+    assert len(api.requests) == 31  # every call reached the network
+    assert log.calls_in_last(3600) == 31
 
 
 def test_failed_calls_still_count_as_attempts(tmp_path: Path) -> None:
-    log = UsageLog(tmp_path / "usage.jsonl", max_calls_per_hour=2)
+    log = UsageLog(tmp_path / "usage.jsonl")
     plan = make(Api(httpx2.Response(500)), usage_log=log)
     for _ in range(2):
         with pytest.raises(AIError):
             ask(plan)
     assert log.calls_in_last(3600) == 2
-    with pytest.raises(PlanLimitReached):  # the failures used up the cap
-        ask(plan)
 
 
 def test_a_cut_answer_still_records_its_usage_when_the_stream_reports_it(tmp_path: Path) -> None:

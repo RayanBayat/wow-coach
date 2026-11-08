@@ -84,11 +84,10 @@ coach** (the coach looks at it and gives advice, using your plan).
   decides whether it is worth asking the bigger model.
 - **Why it did or didn't speak:** the window shows each decision and its reason.
 
-## Limits that protect your plan
+## Your plan's limits
 
-- In **Settings** you set the most questions per hour and per day (20 and 100 at first).
-- When a limit is reached, or your plan's own limit is, the coach stops and says when it can
-  answer again.
+- wow-coach sets no limits of its own. Only your ChatGPT plan's limits apply.
+- When your plan's limit is reached, the coach stops and says when it can answer again.
 - One game save never costs more than one answer it didn't ask for.
 
 ## Privacy
@@ -110,7 +109,7 @@ coach** (the coach looks at it and gives advice, using your plan).
 | "You're not signed in to ChatGPT yet" | Run `wow-coach signin` |
 | "Your password keychain could not be used. It may be locked" | Unlock your password store (for example KDE Wallet) and try again |
 | "You signed in, but did not allow wow-coach to use your ChatGPT plan" | Sign in again and accept the plan permission |
-| A limit message | Wait until the time it says, or raise the limits in Settings |
+| A limit message | Wait until the time it says (it is your ChatGPT plan's own limit) |
 | No notifications on Linux | Install `libnotify` (the `notify-send` program) |
 | The window says no saved game data | In the game, type `/coach` once |
 | "Press Enter in the wow-coach terminal for a new link" | The window's session ended (for example a new tab). Press Enter in the terminal and open the new link |

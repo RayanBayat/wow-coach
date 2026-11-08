@@ -35,15 +35,10 @@ class QuestionView:
 
 @dataclass(frozen=True, slots=True)
 class UsageView:
-    """How many AI calls were made recently, and the player's own limits.
-
-    A cap of 0 does not mean "no limit": it allows no calls at all.
-    """
+    """How many AI calls were made recently."""
 
     last_hour: int = 0
     last_day: int = 0
-    hour_cap: int = 0
-    day_cap: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,8 +134,6 @@ def _usage(raw: object) -> UsageView:
     return UsageView(
         last_hour=_int_or_none(raw.get("last_hour")) or 0,
         last_day=_int_or_none(raw.get("last_day")) or 0,
-        hour_cap=_int_or_none(raw.get("hour_cap")) or 0,
-        day_cap=_int_or_none(raw.get("day_cap")) or 0,
     )
 
 

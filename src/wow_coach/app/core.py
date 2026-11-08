@@ -79,7 +79,6 @@ class AppCore:
         settings_file: Path,
         wow_dir: Path,
         usage: CallCounter,
-        on_settings_changed: Callable[[AppSettings], None] | None = None,
         triage_provider: Provider | None = None,
         small_model: Callable[[], str | None] | None = None,
         trigger_state_file: Path | None = None,
@@ -97,8 +96,6 @@ class AppCore:
             triage_provider: The AI used for the optional triage step (None = no triage).
             small_model: Gives the small model's name for triage (None = no triage).
             trigger_state_file: Where cooldowns are remembered (default: next to settings).
-            on_settings_changed: Called with the new settings after each save, so objects
-                that copied a setting (such as the usage caps) can follow.
         """
         self.coach = coach
         self.signin = signin
@@ -112,7 +109,6 @@ class AppCore:
         self._settings_file = settings_file
         self._settings = load_settings(settings_file)
         self._settings_lock = threading.Lock()
-        self._on_settings_changed = on_settings_changed
         self._usage = usage
         self.triage_provider = triage_provider
         self._welcome_file = settings_file.with_name(WELCOME_FILE_NAME)
@@ -136,8 +132,6 @@ class AppCore:
             new = update_settings(self._settings, changes)
             save_settings(self._settings_file, new)
             self._settings = new
-        if self._on_settings_changed is not None:
-            self._on_settings_changed(new)
         return new
 
     # ---- reading ----------------------------------------------------------------------

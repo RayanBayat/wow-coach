@@ -1,7 +1,7 @@
 """Put wow-coach's own coach together from its real parts (0.9.0+).
 
 Shared by ``wow-coach signin``, ``signout``, ``ask`` and the coach window, so all of them
-use the same sign-in (the system keychain), the same usage caps and the same settings.
+use the same sign-in (the system keychain), the same usage log and the same settings.
 """
 
 from collections.abc import Callable, Mapping
@@ -44,20 +44,14 @@ def build_sign_in(environ: Mapping[str, str], keychain: Keychain | None = None) 
     return ChatGPTSignIn(keychain or Keychain(), lock_path=lock)
 
 
-def build_usage_log(settings: AppSettings, environ: Mapping[str, str]) -> UsageLog:
-    """The usage log with the player's caps (calls per hour and per day)."""
-    return UsageLog(
-        usage_log_path(data_folder(environ=environ)),
-        max_calls_per_hour=settings.max_calls_per_hour,
-        max_calls_per_day=settings.max_calls_per_day,
-    )
+def build_usage_log(environ: Mapping[str, str]) -> UsageLog:
+    """The log that counts the AI calls."""
+    return UsageLog(usage_log_path(data_folder(environ=environ)))
 
 
-def build_plan(
-    sign_in: ChatGPTSignIn, settings: AppSettings, environ: Mapping[str, str]
-) -> ChatGPTPlan:
-    """The player's ChatGPT plan as an AI provider, with the player's usage caps."""
-    return ChatGPTPlan(sign_in, usage_log=build_usage_log(settings, environ))
+def build_plan(sign_in: ChatGPTSignIn, environ: Mapping[str, str]) -> ChatGPTPlan:
+    """The player's ChatGPT plan as an AI provider, counting its calls."""
+    return ChatGPTPlan(sign_in, usage_log=build_usage_log(environ))
 
 
 def pick_plan_model(plan: ChatGPTPlan, settings: AppSettings) -> str:
@@ -77,7 +71,7 @@ def build_coach(*, wow_dir_flag: Path | None, environ: Mapping[str, str]) -> Cha
             "You're not signed in to ChatGPT yet. Run `wow-coach signin` first, "
             "or sign in from the coach window (`wow-coach app`)."
         )
-    plan = build_plan(sign_in, settings, environ)
+    plan = build_plan(sign_in, environ)
     model = pick_plan_model(plan, settings)
     wow_dir = resolve_game_folder(
         wow_dir_flag, environ=environ, config_file=config_path(environ=environ)

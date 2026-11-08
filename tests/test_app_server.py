@@ -345,18 +345,18 @@ def test_answer_open_with_nothing_waiting(client: Client) -> None:
 
 
 def test_settings_are_changed_and_saved(rig: Rig, client: Client) -> None:
-    changes = {"notify": False, "max_calls_per_hour": 5, "model": "gpt-big"}
+    changes = {"notify": False, "model": "gpt-big"}
     status, body = client.json("POST", "/api/settings", {"changes": changes})
-    assert status == 200 and body["settings"]["max_calls_per_hour"] == 5
+    assert status == 200 and body["settings"]["notify"] is False
     saved = json.loads(rig.settings_file.read_text("utf-8"))
     assert saved["notify"] is False and saved["model"] == "gpt-big"
-    assert rig.core.settings.max_calls_per_hour == 5
+    assert rig.core.settings.model == "gpt-big"
 
 
 def test_settings_ignore_bad_values(client: Client) -> None:
-    changes = {"max_calls_per_hour": "lots", "unknown": 1, "notify": "yes"}
+    changes = {"model": 5, "unknown": 1, "notify": "yes"}
     status, body = client.json("POST", "/api/settings", {"changes": changes})
-    assert status == 200 and body["settings"]["max_calls_per_hour"] == 20
+    assert status == 200 and body["settings"]["model"] is None
     assert body["settings"]["notify"] is True
     assert client.json("POST", "/api/settings", {"changes": 5})[0] == 400
 

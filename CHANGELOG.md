@@ -42,6 +42,8 @@ All notable changes to this project are written here. The format follows
 ### Removed
 
 - Reading answers aloud. Notifications still tell you when an answer is ready.
+- Your own usage limits (calls per hour and per day). Only your ChatGPT plan's own limits
+  apply.
 
 ### Changed
 

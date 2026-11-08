@@ -24,7 +24,7 @@ class NotSignedIn(AIError):  # noqa: N818  (reads better than NotSignedInError)
 
 
 class PlanLimitReached(AIError):  # noqa: N818
-    """The ChatGPT plan's usage limit (or the player's own cap) was reached."""
+    """The ChatGPT plan's usage limit was reached."""
 
     def __init__(self, message: str, *, retry_after_seconds: int | None = None) -> None:
         super().__init__(message)
@@ -82,7 +82,7 @@ class Provider(Protocol):
 
         Raises:
             NotSignedIn: Not signed in, or the sign-in can't be renewed.
-            PlanLimitReached: The plan's limit or the player's cap was reached.
+            PlanLimitReached: The plan's limit was reached.
             AIError: Any other problem, with a plain explanation.
         """
         ...
