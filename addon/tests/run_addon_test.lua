@@ -1227,6 +1227,17 @@ check(chat[#chat]:find("restart the game", 1, true) ~= nil, "/coach panel withou
 coach.togglePanel = function() chat[#chat + 1] = "panel toggled" end
 SlashCmdList.COACHLINK("PANEL")
 check(chat[#chat] == "panel toggled", "/coach panel opens the panel when it is loaded")
+
+-- /coach (and the "Save for the coach" key) reloads the UI, which is not allowed in a fight.
+local reloadsBefore = reloads
+InCombatLockdown = function() return true end
+SlashCmdList.COACHLINK("")
+check(reloads == reloadsBefore, "/coach does not reload the UI during a fight")
+check(chat[#chat]:find("Can't save during a fight", 1, true) ~= nil,
+    "/coach tells the player to press it again after the fight")
+InCombatLockdown = function() return false end
+SlashCmdList.COACHLINK("")
+check(reloads == reloadsBefore + 1, "/coach reloads the UI again once the fight is over")
 print = function() end
 
 

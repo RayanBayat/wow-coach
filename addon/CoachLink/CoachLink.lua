@@ -1919,6 +1919,11 @@ SlashCmdList.COACHLINK = function(argument)
         end
         return
     end
+    -- ReloadUI() is not allowed in a fight, and the "Save for the coach" key ends up here too.
+    if InCombatLockdown() then
+        say("Can't save during a fight. Press it again when the fight is over.")
+        return
+    end
     say("saving your character for the coach...")
     pendingReason = "coach"
     ReloadUI()  -- triggers PLAYER_LOGOUT, which takes the snapshot and writes the file
