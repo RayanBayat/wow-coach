@@ -15,6 +15,7 @@ ChatGPT", the app uses its own name and no OpenAI logo, and the one-time welcome
 from collections.abc import Mapping
 from typing import Final
 
+from PySide6.QtCore import QEvent, QObject, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -147,6 +148,7 @@ class ChatGPTPage(Page):
         self._models_requested = False
         self._welcome_shown = False  # shown at most once per run, even if closed with Esc
         self.welcome_dialog: WelcomeDialog | None = None
+        self._welcome_waiting = False  # wanted, but the window is hidden (tray) for now
 
         content = QWidget()
         column = QVBoxLayout(content)
@@ -313,8 +315,9 @@ class ChatGPTPage(Page):
         self._refresh_cards(state.signed_in)
         self._show_usage(state.usage)
         self._show_chosen_model(state.settings.get("model"))
-        if state.signed_in and state.welcome_pending:
-            self._show_welcome_once()
+        self._welcome_waiting = state.signed_in and state.welcome_pending
+        if self._welcome_waiting:
+            self._show_welcome_when_visible()
 
     def _refresh_cards(self, signed_in: bool = False) -> None:
         """Show the card that fits: signed in, waiting for the browser, or signed out."""
@@ -467,6 +470,29 @@ class ChatGPTPage(Page):
         self._set_notice("Signed out." if confirmed else SIGNED_OUT_NOT_CONFIRMED)
 
     # ---- the welcome message -------------------------------------------------------------
+
+    def _show_welcome_when_visible(self) -> None:
+        """Show the welcome message now, or as soon as the window is shown.
+
+        The app can start hidden in the tray at login; a dialog must not pop up and take
+        focus then. So it waits for the window's Show event.
+        """
+        window = self.window()
+        if window.isVisible():
+            self._show_welcome_once()
+        else:
+            window.installEventFilter(self)  # installing it again changes nothing
+
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802 (Qt name)
+        """Watch the window for being shown, to show a welcome message that had to wait."""
+        if event.type() == QEvent.Type.Show and self._welcome_waiting and watched is self.window():
+            self._welcome_waiting = False
+            QTimer.singleShot(0, self._show_welcome_if_visible)  # after the window has shown
+        return super().eventFilter(watched, event)
+
+    def _show_welcome_if_visible(self) -> None:
+        if self.window().isVisible():
+            self._show_welcome_once()
 
     def _show_welcome_once(self) -> None:
         """Show the welcome message, but never twice in a row and never stacked."""

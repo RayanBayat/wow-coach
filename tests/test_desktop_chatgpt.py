@@ -305,3 +305,23 @@ def test_the_welcome_dialog_links_to_manage_usage(qtbot: QtBot, opened: list[str
     assert len(manage) == 1
     manage[0].click()
     assert opened == ["https://chatgpt.com/settings/usage"]
+
+
+def test_the_welcome_dialog_waits_while_the_window_is_hidden(qtbot: QtBot) -> None:
+    bridge, _core = make_bridge()
+    page = ChatGPTPage(bridge)  # never shown: the app started hidden in the tray
+    qtbot.addWidget(page)
+    page.show_state(read_state(sample_state(welcome_pending=True)))
+    assert page.welcome_dialog is None
+    page.show()  # the player opens the window from the tray
+    qtbot.waitUntil(lambda: page.welcome_dialog is not None, timeout=2000)
+    assert page.welcome_dialog is not None
+    assert page.welcome_dialog.isVisible()
+
+
+def test_a_hidden_window_does_not_dismiss_the_welcome(qtbot: QtBot) -> None:
+    bridge, core = make_bridge()
+    page = ChatGPTPage(bridge)
+    qtbot.addWidget(page)
+    page.show_state(read_state(sample_state(welcome_pending=True)))
+    assert core.welcome_dismissed is False
