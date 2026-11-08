@@ -41,6 +41,16 @@ class AppSettings:
     # Use the chats the player had with their Claude Code coach: show them in the window and
     # give them to the AI as part of the recent conversation.
     use_claude_chats: bool = True
+    # Let the coach use tools while answering: read the character's status, history and
+    # notes and look things up on the Warcraft Wiki.
+    use_tools: bool = True
+    # Let the coach also search the web (run by OpenAI as part of the ChatGPT plan).
+    web_search: bool = True
+    # Let the coach save the notebook (player notes and character journal). Off: it can
+    # read them but not change them.
+    save_notes: bool = True
+    # Show what the coach looked up under its answers (and live while it works).
+    show_lookups: bool = True
     # When the coach speaks up by itself (deaths, level-ups, a timer...). Manual by default.
     triggers: TriggerSettings = field(default_factory=TriggerSettings)
 
@@ -78,6 +88,10 @@ def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
         ),
         send_coach_notes=_clean_flag(data.get("send_coach_notes"), DEFAULTS.send_coach_notes),
         use_claude_chats=_clean_flag(data.get("use_claude_chats"), DEFAULTS.use_claude_chats),
+        use_tools=_clean_flag(data.get("use_tools"), DEFAULTS.use_tools),
+        web_search=_clean_flag(data.get("web_search"), DEFAULTS.web_search),
+        save_notes=_clean_flag(data.get("save_notes"), DEFAULTS.save_notes),
+        show_lookups=_clean_flag(data.get("show_lookups"), DEFAULTS.show_lookups),
         triggers=trigger_settings_from_dict(data.get("triggers")),
     )
 
