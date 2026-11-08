@@ -278,3 +278,40 @@ def test_old_snapshot_without_category_dedupes_by_name() -> None:
     text = format_status(snapshot, now=NOW)
     assert "**Professions:**\n- Mining: 3/75\n- Defense: 36/40" in text
     assert "Weapon skills" not in text
+
+
+# A save the addon made after the game had unloaded the character (a real logout with
+# addon 0.6.0 or older): level wrong, no XP needed, no gold, no bag slots.
+UNLOADED_SAVE: Table = {
+    "name": "Testchar",
+    "level": 9,
+    "savedAt": NOW - 60,
+    "reason": "logout",
+    "xp": 0,
+    "xpMax": 0,
+    "money": 0,
+    "bags": {"free": 0, "total": 0},
+}
+
+
+def test_an_unloaded_save_gets_a_warning() -> None:
+    text = format_status(UNLOADED_SAVE, now=NOW)
+    assert "WARNING: this save is almost empty" in text
+    assert "type /coach in game" in text
+
+
+def test_a_max_level_character_needs_no_xp_and_is_not_unloaded() -> None:
+    snapshot: Table = {"name": "Testchar", "level": 60, "xp": 0, "xpMax": 0, "savedAt": NOW}
+    assert "almost empty" not in format_status(snapshot, now=NOW)
+
+
+def test_a_kept_save_says_when_the_player_logged_out() -> None:
+    snapshot: Table = {
+        "name": "Testchar",
+        "level": 7,
+        "savedAt": NOW - 3600,
+        "reason": "coach",
+        "loggedOutAt": NOW - 600,
+    }
+    text = format_status(snapshot, now=NOW)
+    assert "Logged out 10 min ago; this is the last full save, from before that." in text

@@ -100,6 +100,24 @@ def as_table(value: LuaValue) -> Table:
     return value if isinstance(value, dict) else {}
 
 
+# Forever's level cap. Below it, every level needs XP for the next one.
+MAX_LEVEL = 60
+
+
+def looks_unloaded(table: Table) -> bool:
+    """True for a snapshot or progress point saved after the game unloaded the character.
+
+    On a real logout (not ``/reload``) the game unloads most of the character before the
+    addon's last chance to save. Addon 0.6.0 and older then saved an almost empty
+    snapshot: no XP needed for the next level, no bag slots, a wrong level. A character
+    in the world always has bag slots and, below the level cap, needs XP.
+    """
+    if as_number(as_table(table.get("bags")).get("total")) == 0:
+        return True
+    level = as_number(table.get("level"))
+    return as_number(table.get("xpMax")) == 0 and level is not None and level < MAX_LEVEL
+
+
 def number_text(value: float) -> str:
     """Show whole numbers without a trailing ``.0``."""
     return str(int(value)) if float(value).is_integer() else str(value)

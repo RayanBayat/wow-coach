@@ -90,6 +90,7 @@ local LEGACY_REWARD_TRACK_FACTION = 2802
 local MAX_ACTION_SLOTS = 180     -- every action bar slot the game has
 local MAX_AURAS = 40             -- buffs or debuffs read per kind
 local MAX_MAIL_ATTACHMENTS = 16  -- attachments per letter (ATTACHMENTS_MAX_RECEIVE)
+local MAX_LEVEL = 60             -- Forever's level cap: below it, every level needs XP
 
 -- Why the next snapshot is taken. /coach sets this to "coach" before reloading.
 local pendingReason = "logout"
@@ -514,7 +515,8 @@ local function readSpells(snapshot)
     local seenNames = {}
     local playerBank = Enum.SpellBookSpellBank.Player
     for lineIndex = 1, C_SpellBook.GetNumSpellBookSkillLines() do
-        local line = C_SpellBook.GetSpellBookSkillLineInfo(lineIndex)
+        -- nil when the game has already unloaded the spellbook (seen at logout).
+        local line = C_SpellBook.GetSpellBookSkillLineInfo(lineIndex) or { numSpellBookItems = 0 }
         for offset = 1, line.numSpellBookItems do
             local item = C_SpellBook.GetSpellBookItemInfo(line.itemIndexOffset + offset, playerBank)
             local isKnownSpell = item and item.itemType == Enum.SpellBookItemType.Spell
@@ -844,12 +846,17 @@ local function readRecipes()
     rememberRecipes(profession)
 end
 
--- Copy everything remembered into the snapshot, plus any problems reading it.
-local function readRemembered(snapshot)
+-- Copy everything remembered into the snapshot.
+local function copyRemembered(snapshot)
     snapshot.bank = lastSeen("bank")
     snapshot.mail = lastSeen("mail")
     snapshot.recipes = lastSeen("recipes")
     snapshot.timePlayed = lastSeen("timePlayed")
+end
+
+-- The snapshot section: what was remembered, plus any problems reading it.
+local function readRemembered(snapshot)
+    copyRemembered(snapshot)
     for _, message in pairs(seenErrors) do
         table.insert(snapshot.errors, message)
     end
@@ -953,14 +960,54 @@ local function addProgressPoint(entry, snapshot)
     end
 end
 
--- Build a full snapshot, store it for this character and log a progress point.
+-- True when the game had already unloaded the character while the snapshot was
+-- read. That happens at PLAYER_LOGOUT on a real logout or quit (not on /reload):
+-- max XP 0, no bag slots, no max health, even a wrong level. A character in the
+-- world always has a backpack and health, and needs XP for the next level below
+-- the cap. A section that failed to read (nil) proves nothing either way, so a
+-- broken game function alone never makes a snapshot look unloaded.
+local function looksUnloaded(snapshot)
+    if snapshot.bags and snapshot.bags.total == 0 then
+        return true
+    end
+    if snapshot.stats and snapshot.stats.healthMax == 0 then
+        return true
+    end
+    return snapshot.xpMax == 0 and (snapshot.level or 0) < MAX_LEVEL
+end
+
+-- A snapshot read when the player started to log out or quit, while the game
+-- still had the character (see "Logging out" below). nil until then.
+local snapshotBeforeLogout = nil
+
+-- Store `snapshot` for this character and log a progress point.
+local function saveSnapshot(entry, snapshot)
+    entry.snapshot = snapshot
+    -- The log is a bonus: if it fails, the snapshot above is already saved.
+    local ok, err = pcall(addProgressPoint, entry, snapshot)
+    if not ok then
+        table.insert(snapshot.errors, "progress: " .. tostring(err))
+    end
+end
+
+-- Build a full snapshot and save it. If the game has already unloaded the
+-- character, save the best snapshot we have instead of an almost empty one.
 local function takeSnapshot(reason)
     local entry = characterTable()
-    entry.snapshot = buildSnapshot(reason)
-    -- The log is a bonus: if it fails, the snapshot above is already saved.
-    local ok, err = pcall(addProgressPoint, entry, entry.snapshot)
-    if not ok then
-        table.insert(entry.snapshot.errors, "progress: " .. tostring(err))
+    local snapshot = buildSnapshot(reason)
+    if not looksUnloaded(snapshot) then
+        saveSnapshot(entry, snapshot)
+    elseif snapshotBeforeLogout then
+        -- Windows opened after it was read (bank, mail...) are still worth keeping.
+        copyRemembered(snapshotBeforeLogout)
+        saveSnapshot(entry, snapshotBeforeLogout)
+    elseif entry.snapshot and not looksUnloaded(entry.snapshot) then
+        -- Keep the last full snapshot; only note the logout. No progress point:
+        -- nothing new is known about the character.
+        copyRemembered(entry.snapshot)
+        entry.snapshot.loggedOutAt = time()
+    else
+        saveSnapshot(entry, snapshot)  -- nothing better (the very first save)
     end
 end
 
@@ -1066,6 +1113,25 @@ function handlers.PLAYER_LOGOUT()
     takeSnapshot(pendingReason)
 end
 
+
+-------------------------------------------------------------------------------
+-- Logging out: read the character while the game still has it
+-------------------------------------------------------------------------------
+
+-- At PLAYER_LOGOUT on a real logout the character is already gone (see
+-- looksUnloaded), so we also read a snapshot when the player starts to log out.
+-- If they cancel and keep playing, a later logout reads a newer one.
+local function readBeforeLogout()
+    local snapshot = buildSnapshot("logout")
+    if not looksUnloaded(snapshot) then
+        snapshotBeforeLogout = snapshot
+    end
+end
+
+-- The 20-second logout and quit countdowns.
+handlers.PLAYER_CAMPING = readBeforeLogout
+handlers.PLAYER_QUITING = readBeforeLogout  -- (the game's own spelling)
+
 local eventFrame = CreateFrame("Frame")
 for eventName in pairs(handlers) do
     -- The game throws an error for an event name it doesn't know (a future patch
@@ -1081,6 +1147,18 @@ eventFrame:SetScript("OnEvent", function(_, eventName, ...)
         say("error in " .. eventName .. ": " .. tostring(err))
     end
 end)
+
+-- In an inn or a city the logout is instant, with no countdown event. The game
+-- menu's Log Out and Exit Game buttons and /logout, /camp and /quit all call the
+-- game's Logout() or Quit(). hooksecurefunc runs our function right after the
+-- game's own, without changing what it does.
+for _, functionName in ipairs({ "Logout", "Quit" }) do
+    if type(_G[functionName]) == "function" then
+        hooksecurefunc(functionName, function()
+            pcall(readBeforeLogout)  -- never let our reading get in the way of logging out
+        end)
+    end
+end
 
 
 -------------------------------------------------------------------------------

@@ -8,6 +8,13 @@ All notable changes to this project are written here. The format follows
 
 ### Fixed
 
+- Logging out or quitting no longer replaces your last good snapshot with an almost empty one
+  (wrong level, no gold, no bags or gear). On a real logout the game unloads the character
+  before the addon's last chance to save, so the addon now also reads your character when you
+  start to log out or quit, and keeps the last full snapshot if it has nothing better. The
+  status report warns about empty saves made by older versions, and `progress_summary`
+  ignores them, so it no longer reports things like "level 10 to 9"
+  ([#2](https://github.com/RayanBayat/wow-coach/issues/2)).
 - A level-up in the history now stores the level reached. Before, it stored the level before
   the level-up ([#3](https://github.com/RayanBayat/wow-coach/issues/3)).
 

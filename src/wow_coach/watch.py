@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TextIO
 
 from wow_coach.errors import WowCoachError
+from wow_coach.report_values import looks_unloaded
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
 
 POLL_SECONDS = 2
@@ -56,7 +57,8 @@ def describe_newest_snapshot(wow_dir: Path) -> str:
         return "(could not read the snapshot: the file has no characters yet)"
     snapshot = max(characters.values(), key=_saved_at).snapshot
     name, level, reason = (snapshot.get(key, "?") for key in ("name", "level", "reason"))
-    return f"{name} level {level} (reason: {reason})"
+    warning = "; almost empty, type /coach" if looks_unloaded(snapshot) else ""
+    return f"{name} level {level} (reason: {reason}{warning})"
 
 
 def _say(out: TextIO, text: str) -> None:

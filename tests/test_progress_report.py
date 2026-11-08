@@ -126,3 +126,10 @@ def test_points_without_gold_or_xp_do_not_crash() -> None:
 def test_gold_loss_has_a_minus() -> None:
     progress = [point(2 * HOUR, 3, 50, 5000), point(HOUR, 3, 60, 1000)]
     assert "- Gold: -40s" in format_progress(progress, [], now=NOW)
+
+
+def test_an_unloaded_point_is_ignored() -> None:
+    # A real logout with addon 0.6.0 or older saved a point with no XP needed and no gold.
+    unloaded = point(60, 4, 0, 0) | {"xpMax": 0}
+    with_unloaded = format_progress([*PROGRESS, unloaded], HISTORY, now=NOW)
+    assert with_unloaded == format_progress(PROGRESS, HISTORY, now=NOW)

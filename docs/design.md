@@ -119,6 +119,7 @@ CoachLinkDB = {
 | `achievementPoints` | number | Achievement points |
 | `mounts` | list | Names of the mounts the character owns |
 | `errors` | list | Strings naming sections the addon failed to read, for example `"talents: attempt to index nil"` |
+| `loggedOutAt` | number | Unix time of a logout that found the character already unloaded (see "Logging out" below). The snapshot is then the last full one, from `savedAt`. Missing otherwise |
 
 **Containers and items.** A container (a bag, a bank tab) is
 `{ bag, name, slots, free, account, items = list of item }`. An item is
@@ -163,6 +164,7 @@ so the coach can compare sessions without keeping every snapshot. `progress` is 
 | `questsDone` | number | How many quests in the log were complete (ready to turn in) at that moment. Missing when the quest log could not be read |
 
 Every field is optional: if a game call fails, the point is still added with what is known.
+The reader ignores points that look unloaded (see "Logging out" below).
 Rules: at most 500 points (the oldest are dropped), and a point is **not** added when
 `level`, `xp`, `xpMax`, `money`, `zone`, `subZone` and `questsDone` are all the same as in the
 previous point and it was taken within 60 seconds of it (quick `/reload` series).
@@ -193,12 +195,39 @@ Checked against the game's own `Blizzard_CombatLog.lua` SavedVariables file:
   `C_Traits.GetGroupCurrencyInfo`. Source: `Blizzard_PlayerSpells/Camelot/ClassTalents/` in the
   same branch.
 - The addon's `.toc` interface number for Forever 1.60.1 is `16001`.
+- On a real logout or quit (not `/reload`), the game has already unloaded most of the
+  character when `PLAYER_LOGOUT` fires: `UnitXPMax` returns 0, every bag has 0 slots, max
+  health is 0, `UnitLevel` can be wrong and `C_SpellBook.GetSpellBookSkillLineInfo` returns
+  nil. Seen on 2026-11-07 and 2026-11-08 ([#2](https://github.com/RayanBayat/wow-coach/issues/2)).
 - SavedVariables are written only on logout, `/reload`, or a clean game exit. Killing the game
   loses the write.
 - New addon folders are only picked up after a full game restart, not a `/reload`.
 - `/coach` saves by reloading the UI, so the file is written without logging out.
 - The first `/coach` after you update the addon still saves with the old code, because the
   save runs before the reload.
+
+## Logging out
+
+Because of the unloaded character at `PLAYER_LOGOUT` (above), the addon works like this
+(code: `takeSnapshot`, `looksUnloaded` and "Logging out" in `CoachLink.lua`):
+
+1. A snapshot **looks unloaded** when its bags have 0 slots in total, its max health is 0, or
+   it needs 0 XP for the next level below level 60. A section that failed to read proves
+   nothing, so a broken game function alone never makes a snapshot look unloaded.
+2. When the player starts to log out or quit, the addon reads a snapshot while the character
+   is still there: right after the game's `Logout()` or `Quit()` runs (the game menu buttons
+   and `/logout`, `/camp`, `/quit` call them; `hooksecurefunc` runs our code after the game's
+   own) and on the countdown events `PLAYER_CAMPING` and `PLAYER_QUITING`.
+3. At `PLAYER_LOGOUT` the addon reads the game as before. If that looks unloaded, it saves
+   the snapshot from step 2 instead (with the bank, mail, recipes and play time it has seen
+   since). Without one, it keeps the last full snapshot, sets `loggedOutAt`, and adds no
+   progress point. Only the very first save of a character is kept even when it looks
+   unloaded, so there is something to show.
+4. The Python reader shows a warning for a snapshot that looks unloaded (older addons saved
+   them) and leaves such progress points out of `progress_summary`.
+
+What we have not seen in the game yet: whether `PLAYER_CAMPING` fires for an instant logout
+in an inn. The `Logout()` hook covers that case either way.
 
 ## The coach's memory: player notes and character journals
 

@@ -23,6 +23,7 @@ from wow_coach.report_values import (
     as_text,
     format_age,
     format_money,
+    looks_unloaded,
     number_text,
 )
 
@@ -106,6 +107,19 @@ def _header_section(snapshot: Table, now: float) -> str:
         lines.append(f"Saved {format_age(now - saved_at)}{suffix}")
         if now - saved_at > STALE_AFTER_SECONDS:
             lines.append("WARNING: this data may be stale; type /coach in game to refresh.")
+    # The addon keeps the last full snapshot when a logout finds the character unloaded.
+    logged_out_at = as_number(snapshot.get("loggedOutAt"))
+    if logged_out_at is not None:
+        lines.append(
+            f"Logged out {format_age(now - logged_out_at)}; "
+            "this is the last full save, from before that."
+        )
+    if looks_unloaded(snapshot):
+        lines.append(
+            "WARNING: this save is almost empty: the game had already unloaded the character "
+            "when it was written (a logout with addon 0.6.0 or older). Level, gold, bags and "
+            "stats below are wrong; type /coach in game for a full save."
+        )
     return "\n".join(lines)
 
 
@@ -341,8 +355,16 @@ def _point_time(point: Table) -> float:
 
 
 def _sorted_points(progress: list[LuaValue]) -> list[Table]:
-    """The progress points that have a time, oldest first."""
-    usable = [point for point in as_tables(progress) if as_number(point.get("time")) is not None]
+    """The progress points that have a time, oldest first.
+
+    Points saved after the game unloaded the character are left out: their zeros would
+    look like lost levels and gold.
+    """
+    usable = [
+        point
+        for point in as_tables(progress)
+        if as_number(point.get("time")) is not None and not looks_unloaded(point)
+    ]
     return sorted(usable, key=_point_time)
 
 

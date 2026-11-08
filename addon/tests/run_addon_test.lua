@@ -410,6 +410,30 @@ local function installFakeGame()
         return frame
     end
     ReloadUI = function() eventHandler(nil, "PLAYER_LOGOUT") end
+    -- Logging out from the game menu or with /logout calls Logout(); /quit calls Quit().
+    -- hooksecurefunc runs a function right after one of the game's own.
+    Logout = function() end
+    Quit = function() end
+    hooksecurefunc = function(name, hook)
+        local original = _G[name]
+        _G[name] = function(...)
+            original(...)
+            hook(...)
+        end
+    end
+end
+
+-- What the game looks like at PLAYER_LOGOUT on a real logout (seen 2026-11-07 and
+-- 2026-11-08): the character is already unloaded, so most functions return 0 or nil.
+local function unloadCharacter()
+    UnitLevel = function() return 6 end
+    UnitXP = function() return 0 end
+    UnitXPMax = function() return 0 end
+    GetMoney = function() return 0 end
+    UnitHealthMax = function() return 0 end
+    C_Container.GetContainerNumSlots = function() return 0 end
+    C_Container.GetContainerNumFreeSlots = function() return 0 end
+    C_SpellBook.GetSpellBookSkillLineInfo = function() return nil end
 end
 
 local function fire(eventName, ...)
@@ -805,6 +829,87 @@ local partial = CoachLinkDB.characters["Testchar-Testrealm"].progress
 check(#partial == 1 and partial[1].level == 7 and partial[1].zone == "Tirisfal Glades",
     "a broken quest reader still gives a progress point")
 check(partial[1].questsDone == nil, "unknown quests are nil, not zero")
+
+
+-------------------------------------------------------------------------------
+-- Test 5: a real logout, when the game has already unloaded the character
+-------------------------------------------------------------------------------
+
+local function savedCharacter() return CoachLinkDB.characters["Testchar-Testrealm"] end
+-- A fake game whose clock the test can move with `now`.
+local function installFakeGameWithClock()
+    installFakeGame()
+    now = FAKE_NOW
+    time = function() return now end
+end
+
+-- No warning before the logout: the last full snapshot is kept.
+installFakeGameWithClock()
+loadAddon()
+SlashCmdList.COACHLINK("")          -- a full snapshot at FAKE_NOW
+loadAddon()                         -- after the reload: a new UI session, same saved data
+now = FAKE_NOW + 600
+unloadCharacter()
+fire("PLAYER_LOGOUT")
+local kept = savedCharacter().snapshot
+check(kept.level == 7 and kept.xpMax == 2690 and kept.savedAt == FAKE_NOW,
+    "an unloaded logout keeps the last full snapshot")
+check(kept.loggedOutAt == FAKE_NOW + 600, "the kept snapshot notes when the player logged out")
+check(#savedCharacter().progress == 1, "an unloaded logout adds no progress point")
+
+-- Logging out with Logout(): the snapshot is read while the character is still there.
+installFakeGameWithClock()
+loadAddon()
+SlashCmdList.COACHLINK("")
+loadAddon()
+now = FAKE_NOW + 600
+GetMoney = function() return 20000 end
+Logout()                            -- the player clicks Log Out
+now = FAKE_NOW + 620
+unloadCharacter()
+fire("PLAYER_LOGOUT")
+local beforeLogout = savedCharacter().snapshot
+check(beforeLogout.money == 20000 and beforeLogout.savedAt == FAKE_NOW + 600
+    and beforeLogout.reason == "logout", "Logout() saves the snapshot read when it was called")
+check(beforeLogout.loggedOutAt == nil and #beforeLogout.errors == 0,
+    "that snapshot is a normal one, with no read errors")
+check(#savedCharacter().progress == 2 and savedCharacter().progress[2].money == 20000,
+    "the snapshot from before the logout adds a progress point")
+
+-- Quitting, and the logout countdown events, work the same way.
+for _, startLogout in ipairs({
+    function() Quit() end,
+    function() fire("PLAYER_CAMPING") end,
+    function() fire("PLAYER_QUITING") end,
+}) do
+    installFakeGameWithClock()
+    loadAddon()
+    now = FAKE_NOW + 600
+    startLogout()
+    unloadCharacter()
+    fire("PLAYER_LOGOUT")
+    check(savedCharacter().snapshot.level == 7 and savedCharacter().snapshot.savedAt == FAKE_NOW + 600,
+        "a snapshot is read when the player starts to log out or quit")
+end
+
+-- A /reload with the game working is saved as before, even with a section broken.
+installFakeGameWithClock()
+C_SpellBook.GetSpellBookSkillLineInfo = function() return nil end
+C_Container = nil
+loadAddon()
+SlashCmdList.COACHLINK("")
+local reloaded = savedCharacter().snapshot
+check(reloaded.reason == "coach" and reloaded.level == 7, "a broken bag API alone does not look unloaded")
+for _, message in ipairs(reloaded.errors) do
+    check(not message:find("^spells: "), "a missing spellbook line is skipped, not an error")
+end
+
+-- The very first save, unloaded and with nothing better: saved, so there is something.
+installFakeGameWithClock()
+loadAddon()
+unloadCharacter()
+fire("PLAYER_LOGOUT")
+check(savedCharacter().snapshot.reason == "logout", "with nothing better, an unloaded snapshot is still saved")
 
 
 -------------------------------------------------------------------------------
