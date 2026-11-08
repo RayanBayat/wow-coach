@@ -10,19 +10,30 @@ tells OpenAI to revoke the sign-in and forgets it here):
 
     uv run python scripts/chatgpt_signin_spike.py --sign-out
 
-Nothing is written to disk except in your system keychain. Needs a ChatGPT Plus or Pro plan.
+If sign-in keeps failing because OpenAI no longer knows the saved registration, or you want to
+use another ChatGPT account, forget the registration (the next run registers again):
+
+    uv run python scripts/chatgpt_signin_spike.py --forget-registration
+
+Your sign-in is kept in your system keychain (your desktop may ask you to unlock it, for example
+the KDE Wallet: unlock it and run the script again). The only file written is a tiny empty lock
+file in wow-coach's data folder, and it is removed again. Run one copy of the script at a time.
+Needs a ChatGPT Plus or Pro plan.
 Background and the rules we follow: docs/plans/chatgpt-signin-notes.md
 """
 
 import argparse
+import os
 import webbrowser
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 import httpx2
 
 from wow_coach.ai.base import AIError, Message
 from wow_coach.ai.chatgpt_plan import ChatGPTPlan
 from wow_coach.ai.chatgpt_signin import REVOKE_NOT_CONFIRMED, ChatGPTSignIn
+from wow_coach.datafolder import data_folder
 from wow_coach.keychain import Keychain
 
 QUESTION = "Answer in five words: what is World of Warcraft?"
@@ -39,14 +50,24 @@ def main(
     transport: httpx2.BaseTransport | None = None,
     open_browser: Callable[[str], object] = webbrowser.open,
     keychain: Keychain | None = None,
+    data_dir: Path | None = None,
 ) -> int:
     """Run the spike. Returns 0 on success, 1 on a problem (shown as a plain sentence)."""
     args = _parse_arguments(argv)
     keychain = keychain or Keychain()
+    lock_path = (data_dir or data_folder(environ=os.environ)) / "chatgpt-refresh.lock"
     sign_in = ChatGPTSignIn(
-        keychain, transport=transport, port=args.port, open_browser=open_browser
+        keychain,
+        transport=transport,
+        port=args.port,
+        open_browser=open_browser,
+        lock_path=lock_path,
     )
     try:
+        if args.forget_registration:
+            sign_in.forget_registration()
+            print("Forgot the saved registration. The next run registers wow-coach again.")
+            return 0
         if args.sign_out:
             return _sign_out(sign_in)
         return _try_it(sign_in, keychain, transport, args.model)
@@ -58,6 +79,11 @@ def main(
 def _parse_arguments(argv: Sequence[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Try Sign in with ChatGPT by hand.")
     parser.add_argument("--sign-out", action="store_true", help="revoke the sign-in and forget it")
+    parser.add_argument(
+        "--forget-registration",
+        action="store_true",
+        help="forget the saved registration and sign-in (use if sign-in is stuck)",
+    )
     parser.add_argument("--model", help="the model slug to ask (default: the first one listed)")
     parser.add_argument("--port", type=int, default=1455, help="loopback port (default 1455)")
     return parser.parse_args(argv)

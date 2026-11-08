@@ -139,6 +139,7 @@ def test_long_answers_are_cut_because_the_server_cannot_be_told_a_limit() -> Non
     plan = make(Api(stream_response(long)))
     answer = plan.ask([Message("user", "hi")], model="m1", max_output_tokens=10)  # 40 characters
     assert answer.text == "a" * 30 + "b" * 10
+    assert answer.usage == Usage(11, 7)  # the usage numbers still arrive in the last event
 
 
 def test_missing_usage_numbers_count_as_zero() -> None:
@@ -151,23 +152,78 @@ def test_missing_usage_numbers_count_as_zero() -> None:
 # ---- the usage log --------------------------------------------------------------------
 
 
-def test_calls_are_logged_and_capped(tmp_path: Path) -> None:
+def _lines(path: Path) -> list[dict[str, object]]:
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+def test_calls_are_counted_and_capped(tmp_path: Path) -> None:
     log = UsageLog(tmp_path / "usage.jsonl", max_calls_per_hour=1)
     api = Api(stream_response(HAPPY))
     plan = make(api, usage_log=log)
     ask(plan)
-    assert json.loads((tmp_path / "usage.jsonl").read_text())["input_tokens"] == 11
+    call, tokens = _lines(tmp_path / "usage.jsonl")
+    assert "tokens_only" not in call
+    assert (tokens["tokens_only"], tokens["input_tokens"], tokens["output_tokens"]) == (True, 11, 7)
     with pytest.raises(PlanLimitReached, match="per hour"):
         ask(plan)
     assert len(api.requests) == 1  # the capped call never reached the network
+    assert len(_lines(tmp_path / "usage.jsonl")) == 2  # and a refused call is not counted
 
 
-def test_failed_calls_are_not_logged(tmp_path: Path) -> None:
-    log = UsageLog(tmp_path / "usage.jsonl")
+def test_failed_calls_still_count_as_attempts(tmp_path: Path) -> None:
+    log = UsageLog(tmp_path / "usage.jsonl", max_calls_per_hour=2)
     plan = make(Api(httpx2.Response(500)), usage_log=log)
-    with pytest.raises(AIError):
+    for _ in range(2):
+        with pytest.raises(AIError):
+            ask(plan)
+    assert log.calls_in_last(3600) == 2
+    with pytest.raises(PlanLimitReached):  # the failures used up the cap
         ask(plan)
-    assert not (tmp_path / "usage.jsonl").exists()
+
+
+def test_a_cut_answer_still_records_its_usage_when_the_stream_reports_it(tmp_path: Path) -> None:
+    log = UsageLog(tmp_path / "usage.jsonl")
+    long = sse(delta("a" * 100), completed(5, 40))
+    plan = make(Api(stream_response(long)), usage_log=log)
+    answer = plan.ask([Message("user", "hi")], model="m1", max_output_tokens=10)
+    assert answer.text == "a" * 40
+    assert answer.usage == Usage(5, 40)
+    assert _lines(tmp_path / "usage.jsonl")[-1]["output_tokens"] == 40
+
+
+def test_an_error_event_in_the_stream_is_mapped() -> None:
+    limit = {"type": "error", "code": "subscription_sharing_usage_limit_exceeded"}
+    with pytest.raises(PlanLimitReached):
+        ask(make(Api(stream_response(sse(limit)))))
+    other = {"type": "error", "code": "weird", "message": SERVER_TEXT}
+    with pytest.raises(AIError) as caught:
+        ask(make(Api(stream_response(sse(other)))))
+    assert SERVER_TEXT not in str(caught.value)
+
+
+def test_a_stream_that_takes_too_long_is_stopped() -> None:
+    times = iter([0.0, 1.0, 999.0, 1000.0])
+    lines = iter(HAPPY.decode().splitlines())
+    with pytest.raises(AIError, match="took too long"):
+        read_stream(lines, 1000, deadline_seconds=10, clock=lambda: next(times))
+
+
+def test_a_huge_line_is_refused() -> None:
+    with pytest.raises(AIError, match="too large"):
+        read_stream(iter(["data: " + "x" * 2_000_000]), 1000)
+
+
+def test_absurdly_nested_event_json_is_skipped_not_a_crash() -> None:
+    lines = iter(["data: " + "[" * 300_000, *HAPPY.decode().splitlines()])
+    assert read_stream(lines, 1000)[0] == "A game about heroes."
+
+
+@pytest.mark.parametrize("value", ["²", "١٢٣", "12345678", "-5", "1.5", ""])
+def test_a_strange_retry_after_is_ignored(value: str) -> None:
+    api = Api(httpx2.Response(429, headers={"Retry-After": value.encode("utf-8")}))
+    with pytest.raises(PlanLimitReached) as caught:
+        ask(make(api))
+    assert caught.value.retry_after_seconds is None
 
 
 # ---- errors ---------------------------------------------------------------------------

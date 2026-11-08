@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import httpx2
 import keyring
+import keyring.backend
 import keyring.backends.fail
 import pytest
 
@@ -96,7 +97,7 @@ def _no_real_keychain() -> None:
 
 
 def test_spike_signs_in_lists_models_asks_and_prints_usage(
-    capsys: pytest.CaptureFixture[str],
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
 ) -> None:
     fake = FakeOpenAI()
     code = load_script().main(
@@ -104,6 +105,7 @@ def test_spike_signs_in_lists_models_asks_and_prints_usage(
         transport=httpx2.MockTransport(fake.handle),
         open_browser=fake.open_browser,
         keychain=Keychain(),
+        data_dir=tmp_path,
     )
     out = capsys.readouterr().out
     assert code == 0
@@ -116,28 +118,69 @@ def test_spike_signs_in_lists_models_asks_and_prints_usage(
     assert "SECRET" not in out
 
 
-def test_spike_sign_out_revokes(capsys: pytest.CaptureFixture[str]) -> None:
+def test_spike_sign_out_revokes(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
     fake = FakeOpenAI()
     keychain = Keychain()
     transport = httpx2.MockTransport(fake.handle)
     script = load_script()
     script.main(
-        ["--port", "0"], transport=transport, open_browser=fake.open_browser, keychain=keychain
+        ["--port", "0"],
+        transport=transport,
+        open_browser=fake.open_browser,
+        keychain=keychain,
+        data_dir=tmp_path,
     )
-    code = script.main(["--sign-out"], transport=transport, keychain=keychain)
+    code = script.main(["--sign-out"], transport=transport, keychain=keychain, data_dir=tmp_path)
     assert code == 0
     assert signin.REVOKE_URL in fake.paths
     assert "Signed out" in capsys.readouterr().out.splitlines()[-1]
     assert keychain.get(signin.KEY_REFRESH_TOKEN) is None
 
 
-def test_spike_reports_a_problem_in_plain_words(capsys: pytest.CaptureFixture[str]) -> None:
+def test_spike_reports_a_problem_in_plain_words(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
     def broken(request: httpx2.Request) -> httpx2.Response:
         raise httpx2.ConnectError("boom", request=request)
 
     keychain = Keychain()
     keychain.set(signin.KEY_REFRESH_TOKEN, "r")
     keychain.set(signin.KEY_CLIENT_ID, CLIENT_ID)
-    code = load_script().main([], transport=httpx2.MockTransport(broken), keychain=keychain)
+    code = load_script().main(
+        [], transport=httpx2.MockTransport(broken), keychain=keychain, data_dir=tmp_path
+    )
     assert code == 1
     assert "Problem: " in capsys.readouterr().out
+    assert list(tmp_path.iterdir()) == []  # the lock file is removed again
+
+
+def test_spike_forget_registration(capsys: pytest.CaptureFixture[str], tmp_path: Path) -> None:
+    keychain = Keychain()
+    keychain.set(signin.KEY_REFRESH_TOKEN, "r")
+    keychain.set(signin.KEY_CLIENT_ID, CLIENT_ID)
+    code = load_script().main(["--forget-registration"], keychain=keychain, data_dir=tmp_path)
+    assert code == 0
+    assert keychain.get(signin.KEY_CLIENT_ID) is None
+    assert keychain.get(signin.KEY_REFRESH_TOKEN) is None
+    assert "registers wow-coach again" in capsys.readouterr().out
+
+
+def test_spike_says_plainly_when_the_keychain_is_locked(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    class Locked(keyring.backend.KeyringBackend):
+        priority = 1
+
+        def get_password(self, service: str, username: str) -> str | None:  # noqa: ARG002
+            raise RuntimeError("locked")
+
+        def set_password(self, service: str, username: str, password: str) -> None:  # noqa: ARG002
+            raise RuntimeError("locked")
+
+        def delete_password(self, service: str, username: str) -> None:  # noqa: ARG002
+            raise RuntimeError("locked")
+
+    keyring.set_keyring(Locked())
+    code = load_script().main([], keychain=Keychain(), data_dir=tmp_path)
+    assert code == 1
+    assert "unlock it" in capsys.readouterr().out

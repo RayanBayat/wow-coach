@@ -13,6 +13,7 @@ How OpenAI wants the plan token used (docs read 2026-11-08, see
 
 import json
 import re
+import time
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, NoReturn, Protocol
@@ -26,6 +27,9 @@ from wow_coach.web import build_user_agent
 
 PROVIDER_NAME = "ChatGPT (your plan)"
 TIMEOUT = httpx2.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
+
+STREAM_DEADLINE_SECONDS = 300.0  # one answer may take at most this long in total
+MAX_LINE_CHARACTERS = 1_000_000  # one event line; a bigger one is not a real answer
 
 # We can't send ``max_output_tokens``, so we cut the text ourselves. About 4 characters per token.
 CHARACTERS_PER_TOKEN = 4
@@ -131,12 +135,13 @@ class ChatGPTPlan:
     ) -> Answer:
         """Send the conversation and return the reply (see ``Provider.ask``)."""
         if self._usage_log is not None:
-            self._usage_log.check_allowed()
+            # Checks the caps and counts this ATTEMPT before sending, so a failed call counts too.
+            self._usage_log.begin_call(model)
         body = build_request_body(messages, model=model, json_schema=json_schema)
         limit = max_output_tokens * CHARACTERS_PER_TOKEN
         text, usage = self._with_token_retry(lambda token: self._stream_answer(token, body, limit))
         if self._usage_log is not None:
-            self._usage_log.record(model, usage)
+            self._usage_log.record_tokens(model, usage)
         return Answer(text=text, model=model, usage=usage)
 
     def check(self) -> str:
@@ -234,34 +239,48 @@ def build_request_body(
     return body
 
 
-def read_stream(lines: Iterator[str], limit: int) -> tuple[str, Usage]:
+def read_stream(
+    lines: Iterator[str],
+    limit: int,
+    *,
+    deadline_seconds: float = STREAM_DEADLINE_SECONDS,
+    clock: Callable[[], float] = time.monotonic,
+) -> tuple[str, Usage]:
     """Read the server-sent events of one answer and return ``(text, usage)``.
 
-    Stops reading early once the text is longer than ``limit`` characters (we can't ask the
-    server to stop, see the module docstring), and cuts it to that length.
+    The text is cut to ``limit`` characters (we can't ask the server for a limit, see the
+    module docstring). We still read on to the end, without keeping more text, because the
+    final event holds the usage numbers. The whole read may take ``deadline_seconds`` at most.
     """
+    stop_at = clock() + deadline_seconds
     parts: list[str] = []
     length = 0
     for event in _events(lines):
+        if clock() > stop_at:
+            raise AIError("ChatGPT took too long to finish the answer. Please try again.")
         kind = event.get("type")
         if kind == "response.output_text.delta":
-            delta = str(event.get("delta", ""))
+            delta = str(event.get("delta", ""))[: max(0, limit - length)]
             parts.append(delta)
             length += len(delta)
-            if length > limit:
-                return "".join(parts)[:limit], Usage()
         elif kind == "response.completed":
             return "".join(parts), _usage_from(event)
         elif kind == "response.failed":
             raise_for_error(None, _failed_body(event), {})
+        elif kind == "error":
+            raise_for_error(None, {"error": event}, {})
         elif kind == "response.incomplete":
             raise AIError("ChatGPT stopped before finishing the answer. Please try again.")
+    if length >= limit > 0:
+        return "".join(parts), Usage()  # cut by us, and the stream ended early: keep the text
     raise AIError("The connection to ChatGPT broke before the answer was finished.")
 
 
 def _events(lines: Iterator[str]) -> Iterator[dict[str, Any]]:
     """Yield the JSON of every ``data:`` line of a server-sent-events stream."""
     for line in lines:
+        if len(line) > MAX_LINE_CHARACTERS:
+            raise AIError("ChatGPT sent an answer that is too large to read.")
         if not line.startswith("data:"):
             continue  # "event:" names, comments and blank separator lines
         payload = line[len("data:") :].strip()
@@ -269,7 +288,7 @@ def _events(lines: Iterator[str]) -> Iterator[dict[str, Any]]:
             return
         try:
             event = json.loads(payload)
-        except ValueError:
+        except ValueError, RecursionError:  # not JSON, or absurdly nested
             continue
         if isinstance(event, dict):
             yield event
@@ -336,7 +355,10 @@ def _unsupported_message(error: object) -> str:
 
 def _retry_after(headers: Mapping[str, str]) -> int | None:
     value = headers.get("retry-after")
-    return int(value) if value is not None and value.isdigit() else None
+    # isascii first: str.isdigit() is also true for digits like "²" that int() rejects
+    if value is None or not (value.isascii() and value.isdigit() and len(value) <= 7):
+        return None
+    return int(value)
 
 
 def _safe_json(response: httpx2.Response) -> dict[str, Any]:

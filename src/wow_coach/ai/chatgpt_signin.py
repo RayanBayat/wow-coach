@@ -18,18 +18,25 @@ The steps of a sign-in, in plain words:
 """
 
 import base64
+import contextlib
 import hashlib
 import html
 import http.server
 import json
 import logging
+import math
+import os
 import secrets
+import socket
+import socketserver
+import sys
 import threading
 import time
 import uuid
 import webbrowser
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator, Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qs, urlencode, urlsplit
 
@@ -61,12 +68,17 @@ APP_NAME_HINT = "wow-coach"
 KEY_REFRESH_TOKEN = "chatgpt-refresh-token"  # noqa: S105  (a key NAME, not a secret)
 KEY_CLIENT_ID = "chatgpt-client-id"
 KEY_HOST_ID = "chatgpt-host-id"
+KEY_ACCOUNT = "chatgpt-account"  # the ID token's ``sub``: an id, not a secret
 
 # Refresh a little early so a token never expires in the middle of a request.
 EARLY_REFRESH_SECONDS = 60
 SIGN_IN_TIMEOUT_SECONDS = 300.0
 REQUEST_TIMEOUT_SECONDS = 15.0
 REVOKE_ATTEMPTS = 3
+DEFAULT_EXPIRES_IN_SECONDS = 3600.0  # the documented access-token lifetime
+LOCK_STALE_SECONDS = 30.0
+LOCK_WAIT_SECONDS = 10.0
+IDLE_CONNECTION_SECONDS = 5.0
 
 # Error codes from the token endpoint that mean "this refresh token is finished, sign in again".
 _SIGN_IN_AGAIN_CODES = frozenset(
@@ -108,7 +120,7 @@ class Account:
 class Pkce:
     """The PKCE pair: a secret ``verifier`` we keep, and its hash ``challenge`` we send."""
 
-    verifier: str
+    verifier: str = field(repr=False)  # a secret: never shown in logs or tracebacks
     challenge: str
 
 
@@ -143,18 +155,35 @@ def check_id_token(
         AIError: With a plain sentence when the token is unreadable or a claim is wrong.
     """
     claims = _decode_payload(id_token)
-    audiences = claims.get("aud")
-    audience_list = [audiences] if isinstance(audiences, str) else audiences
-    exp = claims.get("exp")
     if claims.get("iss") != issuer:
         raise AIError("OpenAI's sign-in answer came from an unexpected source, so it was refused.")
-    if not isinstance(audience_list, list) or audience not in audience_list:
+    if not _is_for(claims, audience):
         raise AIError("OpenAI's sign-in answer was meant for another app, so it was refused.")
-    if not isinstance(exp, int | float) or exp <= now:
+    if not _is_finite_number(claims.get("exp")) or claims["exp"] <= now:
         raise AIError("OpenAI's sign-in answer had already expired. Please sign in again.")
+    if "iat" in claims and not _is_finite_number(claims["iat"]):
+        raise AIError("OpenAI's sign-in answer could not be read.")
     if claims.get("nonce") != nonce:
         raise AIError("OpenAI's sign-in answer did not match this sign-in attempt.")
+    subject = claims.get("sub")
+    if not isinstance(subject, str) or not subject:
+        raise AIError("OpenAI's sign-in answer did not say who signed in, so it was refused.")
     return claims
+
+
+def _is_finite_number(value: object) -> bool:
+    """True for a real, finite number (not ``True``, ``NaN`` or infinity)."""
+    return isinstance(value, int | float) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def _is_for(claims: Mapping[str, Any], audience: str) -> bool:
+    """True if the token is meant for us. With several audiences, ``azp`` must be us too."""
+    audiences = claims.get("aud")
+    if isinstance(audiences, str):
+        return audiences == audience
+    if isinstance(audiences, list):
+        return audience in audiences and claims.get("azp") == audience
+    return False
 
 
 def _decode_payload(token: str) -> dict[str, Any]:
@@ -166,7 +195,7 @@ def _decode_payload(token: str) -> dict[str, Any]:
     try:
         padded = parts[1] + "=" * (-len(parts[1]) % 4)
         payload = json.loads(base64.urlsafe_b64decode(padded))
-    except ValueError as error:
+    except (ValueError, RecursionError) as error:  # RecursionError: absurdly nested JSON
         raise unreadable from error
     if not isinstance(payload, dict):
         raise unreadable
@@ -178,28 +207,55 @@ def _decode_payload(token: str) -> dict[str, Any]:
 # ----------------------------------------------------------------------------------------
 
 
-class _OneShotServer(http.server.HTTPServer):
-    """A web server that remembers the one valid answer it received."""
+class _OneShotServer(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    """A web server that remembers the one valid answer it received.
+
+    Each visitor gets its own thread, so one idle connection can never stall the sign-in
+    (and the overall deadline in ``LoopbackServer.wait`` really holds).
+    """
+
+    daemon_threads = True
+    block_on_close = False  # don't wait for idle visitors when closing
+    # POSIX: lets us rebind soon after a sign-in (it does NOT let two programs listen on one
+    # port). Windows: the opposite default is dangerous, so we claim the port exclusively below.
+    allow_reuse_address = sys.platform != "win32"
 
     def __init__(self, port: int, expected_state: str) -> None:
-        # 127.0.0.1 only: nobody else on the network can reach this server.
-        super().__init__(("127.0.0.1", port), _CallbackHandler)
         self.expected_state = expected_state
         self.result: dict[str, str] | None = None
+        # 127.0.0.1 only: nobody else on the network can reach this server.
+        super().__init__(("127.0.0.1", port), _CallbackHandler)
+
+    def server_bind(self) -> None:
+        if sys.platform == "win32":
+            # Without this, another program could bind the same port and steal the code.
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
+
+    def handle_error(self, request: object, client_address: object) -> None:
+        """Stay quiet: the default prints a traceback (which can show request details)."""
 
 
 class _CallbackHandler(http.server.BaseHTTPRequestHandler):
     """Accepts only ``GET /auth/callback?...state=<ours>``; refuses everything else."""
 
+    timeout = IDLE_CONNECTION_SECONDS  # a connection that says nothing is dropped
+
     def do_GET(self) -> None:  # the name is fixed by http.server
         server = cast(_OneShotServer, self.server)
+        if self.headers.get("Host") != f"127.0.0.1:{server.server_address[1]}":
+            # A web page could point a lookalike name at 127.0.0.1; only our exact address counts.
+            self._reply(400, "Refused", "This address is not used by wow-coach.")
+            return
         address = urlsplit(self.path)
         if address.path != CALLBACK_PATH:
             self._reply(404, "Not found", "This address is not used by wow-coach.")
             return
         params = {key: values[0] for key, values in parse_qs(address.query).items()}
-        # compare_digest: a constant-time comparison, a good habit for secret-like values
-        if not secrets.compare_digest(params.get("state", ""), server.expected_state):
+        # compare_digest on bytes: a constant-time comparison that also accepts any text
+        if not secrets.compare_digest(
+            params.get("state", "").encode(), server.expected_state.encode()
+        ):
             self._reply(400, "Refused", "This sign-in answer does not belong to wow-coach.")
             return
         server.result = params
@@ -245,7 +301,7 @@ class LoopbackServer:
         """Return the callback's query parameters, or ``None`` if time ran out."""
         deadline = time.monotonic() + timeout_seconds
         while self._server.result is None and time.monotonic() < deadline:
-            self._server.handle_request()
+            self._server.handle_request()  # returns after at most 0.2 s, see __init__
         return self._server.result
 
     def close(self) -> None:
@@ -256,6 +312,63 @@ class LoopbackServer:
 # ----------------------------------------------------------------------------------------
 # The sign-in manager.
 # ----------------------------------------------------------------------------------------
+
+
+class RefreshFileLock:
+    """A tiny lock file so two wow-coach programs don't refresh the sign-in at the same time.
+
+    Refresh tokens rotate: if two programs both use the old one, OpenAI may treat the second as
+    stolen and end the sign-in. The file holds nothing secret (it is empty), counts as stale
+    after about 30 seconds (a crashed program must not block us forever) and is always removed.
+    """
+
+    def __init__(
+        self,
+        path: Path,
+        *,
+        clock: Callable[[], float] = time.time,
+        sleep: Callable[[float], None] = time.sleep,
+        wait_seconds: float = LOCK_WAIT_SECONDS,
+        stale_seconds: float = LOCK_STALE_SECONDS,
+    ) -> None:
+        self._path = path
+        self._clock = clock
+        self._sleep = sleep
+        self._wait = wait_seconds
+        self._stale = stale_seconds
+
+    @contextlib.contextmanager
+    def held(self) -> Iterator[None]:
+        """Hold the lock inside a ``with`` block. Raises ``AIError`` if it stays taken."""
+        self._acquire()
+        try:
+            yield
+        finally:
+            self._path.unlink(missing_ok=True)
+
+    def _acquire(self) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        give_up_at = self._clock() + self._wait
+        while True:
+            try:
+                # O_EXCL: creating the file fails if it exists, so only one program wins.
+                os.close(os.open(self._path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+                return
+            except FileExistsError:
+                if self._is_stale():
+                    self._path.unlink(missing_ok=True)
+                    continue
+                if self._clock() >= give_up_at:
+                    raise AIError(
+                        "Another wow-coach window is renewing the sign-in. Please try again."
+                    ) from None
+                self._sleep(0.1)
+
+    def _is_stale(self) -> bool:
+        try:
+            return self._clock() - self._path.stat().st_mtime > self._stale
+        except FileNotFoundError:
+            return False  # it just disappeared: the next try will take it
 
 
 class _TokenEndpointRejected(AIError):  # noqa: N818
@@ -280,6 +393,7 @@ class ChatGPTSignIn:
         clock: Callable[[], float] = time.time,
         sleep: Callable[[float], None] = time.sleep,
         timeout_seconds: float = SIGN_IN_TIMEOUT_SECONDS,
+        lock_path: Path | None = None,
     ) -> None:
         """Create the manager.
 
@@ -291,6 +405,8 @@ class ChatGPTSignIn:
             clock: Seconds since 1970 (replaced in tests).
             sleep: Waits some seconds (replaced in tests).
             timeout_seconds: How long to wait for the player to finish in the browser.
+            lock_path: A lock file (put it in the data folder) that stops two wow-coach
+                programs from refreshing at once. ``None`` means no cross-program lock.
         """
         self._keychain = keychain
         self._port = port
@@ -305,7 +421,10 @@ class ChatGPTSignIn:
         )
         self._access_token: str | None = None
         self._expires_at = 0.0
-        self._lock = threading.Lock()  # one refresh at a time: refresh tokens rotate
+        self._lock = threading.Lock()  # one sign-in, refresh or sign-out at a time
+        self._file_lock = (
+            RefreshFileLock(lock_path, clock=clock, sleep=sleep) if lock_path else None
+        )
 
     @property
     def is_signed_in(self) -> bool:
@@ -323,7 +442,12 @@ class ChatGPTSignIn:
             PlanUseNotEnabled: The player did not allow using their ChatGPT plan.
             AIError: Anything else that went wrong, in a plain sentence.
         """
+        with self._lock:
+            return self._sign_in_locked(on_url)
+
+    def _sign_in_locked(self, on_url: Callable[[str], None] | None) -> Account:
         saved_client_id = self._keychain.get(KEY_CLIENT_ID)
+        old_refresh_token = self._keychain.get(KEY_REFRESH_TOKEN)
         state, nonce, pkce = new_random_value(), new_random_value(), new_pkce()
         server = LoopbackServer(self._port, state)  # listen BEFORE the browser opens
         try:
@@ -348,7 +472,25 @@ class ChatGPTSignIn:
                 "resource": RESOURCE,
             }
         )
-        return self._accept_tokens(tokens, client_id, nonce)
+        try:
+            account = self._accept_tokens(tokens, client_id, nonce)
+        except AIError:
+            # We got tokens but refuse them: don't leave a live sign-in behind at OpenAI.
+            self._revoke_unwanted(tokens, client_id)
+            raise
+        if saved_client_id and old_refresh_token and old_refresh_token != self._new_refresh(tokens):
+            self._revoke(old_refresh_token, saved_client_id)  # the new sign-in replaces it
+        return account
+
+    @staticmethod
+    def _new_refresh(tokens: Mapping[str, Any]) -> str | None:
+        value = tokens.get("refresh_token")
+        return value if isinstance(value, str) and value else None
+
+    def _revoke_unwanted(self, tokens: Mapping[str, Any], client_id: str) -> None:
+        refresh_token = self._new_refresh(tokens)
+        if refresh_token is not None:
+            self._revoke(refresh_token, client_id)
 
     def access_token(self) -> str:
         """Return a valid access token, refreshing it first if it is (nearly) expired.
@@ -373,16 +515,32 @@ class ChatGPTSignIn:
             True if OpenAI confirmed the revoking; False if we could not reach it (tell the
             player with ``REVOKE_NOT_CONFIRMED``). The tokens are forgotten either way.
         """
-        confirmed = True
-        refresh_token = self._keychain.get(KEY_REFRESH_TOKEN)
-        client_id = self._keychain.get(KEY_CLIENT_ID)
-        if refresh_token is not None and client_id is not None:
-            confirmed = self._revoke(refresh_token, client_id)
-        # Keep the client id and host id: OpenAI remembers the registration, and so should we.
-        self._keychain.delete(KEY_REFRESH_TOKEN)
-        self._access_token = None
-        self._expires_at = 0.0
-        return confirmed
+        with self._lock:
+            confirmed = True
+            refresh_token = self._keychain.get(KEY_REFRESH_TOKEN)
+            client_id = self._keychain.get(KEY_CLIENT_ID)
+            if refresh_token is not None and client_id is not None:
+                confirmed = self._revoke(refresh_token, client_id)
+            # Keep the client id and host id: OpenAI remembers the registration, and so should
+            # we. The account id goes, so the player may sign in with another account next.
+            self._keychain.delete(KEY_REFRESH_TOKEN)
+            self._keychain.delete(KEY_ACCOUNT)
+            self._access_token = None
+            self._expires_at = 0.0
+            return confirmed
+
+    def forget_registration(self) -> None:
+        """Throw away the saved client id and sign-in, without contacting OpenAI.
+
+        Use this when OpenAI no longer knows the saved client id (for example sign-in keeps
+        failing with an "invalid client" message), or to switch to another ChatGPT account.
+        The next ``sign_in`` registers wow-coach again. The host id is kept.
+        """
+        with self._lock:
+            for key in (KEY_REFRESH_TOKEN, KEY_CLIENT_ID, KEY_ACCOUNT):
+                self._keychain.delete(key)
+            self._access_token = None
+            self._expires_at = 0.0
 
     # -- building the sign-in address ----------------------------------------------------
 
@@ -422,7 +580,7 @@ class ChatGPTSignIn:
             raise AIError("OpenAI did not accept the sign-in. Please try again.")
         issued = params.get("client_id")
         if saved is None:
-            if not issued:
+            if not issued or issued == REGISTRATION_CLIENT_ID:
                 raise AIError("OpenAI did not finish registering wow-coach. Please try again.")
             # Save it before using the code, so a failed code does not force a new registration.
             self._keychain.set(KEY_CLIENT_ID, issued)
@@ -446,31 +604,45 @@ class ChatGPTSignIn:
         if not isinstance(id_token, str):
             raise AIError("OpenAI's sign-in answer had no ID token. Please try again.")
         claims = check_id_token(id_token, audience=client_id, nonce=nonce, now=self._clock())
+        subject = str(claims["sub"])
+        saved_subject = self._keychain.get(KEY_ACCOUNT)
+        if saved_subject is not None and saved_subject != subject:
+            raise AIError(
+                "This is a different ChatGPT account than the one wow-coach was set up with. "
+                "Sign out first, then sign in with the other account."
+            )
         # A valid ID token only proves who the player is, not that they allowed plan use.
         if PLAN_SCOPE not in str(tokens.get("scope", "")).split():
             raise PlanUseNotEnabled(
                 "You signed in, but did not allow wow-coach to use your ChatGPT plan. "
                 "Sign in again and accept that permission."
             )
-        refresh_token = tokens.get("refresh_token")
-        if not isinstance(refresh_token, str):
+        refresh_token = self._new_refresh(tokens)
+        if refresh_token is None:
             raise AIError("OpenAI did not give a renewable sign-in. Please try again.")
         self._keep_access_token(tokens)
         self._keychain.set(KEY_REFRESH_TOKEN, refresh_token)
+        self._keychain.set(KEY_ACCOUNT, subject)
         email = claims.get("email")
-        return Account(subject=str(claims.get("sub", "")), email=email if email else None)
+        return Account(subject=subject, email=email if isinstance(email, str) and email else None)
 
     def _keep_access_token(self, tokens: Mapping[str, Any]) -> str:
         """Remember the access token (memory only) and return it."""
         access_token = tokens.get("access_token")
-        expires_in = tokens.get("expires_in")
-        if not isinstance(access_token, str) or not isinstance(expires_in, int | float):
+        if not isinstance(access_token, str) or not access_token:
             raise AIError("OpenAI's sign-in answer was incomplete. Please try again.")
+        self._expires_at = self._clock() + _expires_in(tokens.get("expires_in"))
         self._access_token = access_token
-        self._expires_at = self._clock() + float(expires_in)
         return access_token
 
     def _refresh_locked(self) -> str:
+        if self._file_lock is None:
+            return self._refresh_once()
+        with self._file_lock.held():
+            return self._refresh_once()
+
+    def _refresh_once(self) -> str:
+        """Refresh the access token. Call this only while holding the locks."""
         refresh_token = self._keychain.get(KEY_REFRESH_TOKEN)
         client_id = self._keychain.get(KEY_CLIENT_ID)
         if refresh_token is None or client_id is None:
@@ -485,18 +657,20 @@ class ChatGPTSignIn:
                 }
             )
         except _TokenEndpointRejected as error:
-            if error.code in _SIGN_IN_AGAIN_CODES:
+            if error.code not in _SIGN_IN_AGAIN_CODES:
+                raise
+            self._access_token = None
+            # Only forget the token we sent. If another program has already saved a newer one,
+            # that one may be fine: leave it alone.
+            if self._keychain.get(KEY_REFRESH_TOKEN) == refresh_token:
                 self._keychain.delete(KEY_REFRESH_TOKEN)
-                self._access_token = None
-                raise NotSignedIn(
-                    "Your ChatGPT sign-in has ended. Please sign in again."
-                ) from error
-            raise
-        access_token = self._keep_access_token(tokens)
-        new_refresh_token = tokens.get("refresh_token")
-        if isinstance(new_refresh_token, str):  # refresh tokens rotate: keep the newest
+            raise NotSignedIn("Your ChatGPT sign-in has ended. Please sign in again.") from error
+        # Refresh tokens rotate: the old one is dead now, so save the new one FIRST, before
+        # anything below can fail and lose it.
+        new_refresh_token = self._new_refresh(tokens)
+        if new_refresh_token is not None:
             self._keychain.set(KEY_REFRESH_TOKEN, new_refresh_token)
-        return access_token
+        return self._keep_access_token(tokens)
 
     def _post_token_form(self, form: Mapping[str, str]) -> dict[str, Any]:
         """POST a form to the token endpoint and return the JSON answer."""
@@ -504,7 +678,7 @@ class ChatGPTSignIn:
             response = self._client.post(TOKEN_URL, data=dict(form))
         except httpx2.TimeoutException as error:
             raise AIError("OpenAI's sign-in service took too long to answer.") from error
-        except httpx2.TransportError as error:
+        except httpx2.HTTPError as error:
             raise AIError(
                 "Could not reach OpenAI's sign-in service. Check your internet."
             ) from error
@@ -539,6 +713,19 @@ class ChatGPTSignIn:
 def _json_or_empty(response: httpx2.Response) -> dict[str, Any]:
     try:
         body = response.json()
-    except ValueError:
+    except ValueError, RecursionError:  # not JSON, or absurdly nested
         return {}
     return cast(dict[str, Any], body) if isinstance(body, dict) else {}
+
+
+def _expires_in(value: object) -> float:
+    """How many seconds the access token lives. Missing means the documented 3600."""
+    if value is None:
+        return DEFAULT_EXPIRES_IN_SECONDS
+    try:
+        seconds = float(value) if isinstance(value, str | int | float) else math.nan
+    except ValueError:
+        seconds = math.nan
+    if isinstance(value, bool) or not math.isfinite(seconds) or seconds <= 0:
+        raise AIError("OpenAI's sign-in answer was incomplete. Please try again.")
+    return seconds

@@ -172,3 +172,22 @@ No numeric rate limits are published; the plan's own usage limit applies.
 6. Exact models on a Plus vs Pro plan; `visibility` values besides `list`.
 7. Logo/button asset reuse.
 8. How the preview may change.
+
+## 9. Hardening decisions after the security review (2026-11-08)
+
+- A refresh reply's new refresh token is saved to the keychain before anything else is checked,
+  because the old one is dead the moment OpenAI answers.
+- Memory-only secrets happen ONLY when the computer has no keychain at all. A locked or broken
+  keychain is an error ("unlock it"), never "no secrets", so wow-coach can't register twice.
+- The loopback server serves each visitor in its own thread (an idle connection can't stall
+  the sign-in), checks the `Host` header, compares `state` as bytes and is silent on errors.
+  On Windows it binds with `SO_EXCLUSIVEADDRUSE`. On Linux and macOS it keeps `SO_REUSEADDR`
+  (deviation from "off"): without it the port stays blocked for about a minute after a sign-in
+  (TIME_WAIT), and on POSIX it does not let a second program listen on the same port.
+  UNVERIFIED on a real Windows machine.
+- Refreshes are serialized in the program (a lock) and between programs (an empty lock file
+  in the data folder, stale after 30 seconds, always removed).
+- A token set that we receive and then refuse (no plan permission, a bad ID-token claim) is
+  revoked at once. A new sign-in revokes the old refresh token. A different account than the
+  saved one is refused until the player signs out (or uses `forget_registration()`).
+- Usage: every ATTEMPT is counted before sending; a cap of 0 means no calls.

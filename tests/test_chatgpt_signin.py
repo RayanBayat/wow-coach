@@ -76,6 +76,10 @@ class FakeAuth:
         self.refresh_counter = 0
         self.revoke_statuses: list[int] = [200]
         self.revoke_calls = 0
+        self.subject = "user-1"
+        # Changes to the 200 token reply: a value replaces a key, None removes it.
+        self.override: dict[str, object | None] = {}
+        self.on_token_request: Callable[[], None] | None = None  # runs before a token reply
 
     def transport(self) -> httpx2.MockTransport:
         return httpx2.MockTransport(self._handle)
@@ -89,21 +93,22 @@ class FakeAuth:
             return httpx2.Response(status)
         assert str(request.url) == signin.TOKEN_URL
         self.forms.append(form)
+        if self.on_token_request is not None:
+            self.on_token_request()
         if self.token_status != 200:
             return httpx2.Response(self.token_status, json={"error": self.error_code})
         self.refresh_counter += 1
-        claims = self.id_claims or good_claims(self.nonce)
-        return httpx2.Response(
-            200,
-            json={
-                "id_token": make_jwt(claims),
-                "access_token": SECRET_ACCESS,
-                "refresh_token": f"{SECRET_REFRESH}-{self.refresh_counter}",
-                "token_type": "Bearer",
-                "expires_in": 3600,
-                "scope": self.scope,
-            },
-        )
+        claims = self.id_claims or {**good_claims(self.nonce), "sub": self.subject}
+        reply: dict[str, object | None] = {
+            "id_token": make_jwt(claims),
+            "access_token": SECRET_ACCESS,
+            "refresh_token": f"{SECRET_REFRESH}-{self.refresh_counter}",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": self.scope,
+            **self.override,
+        }
+        return httpx2.Response(200, json={k: v for k, v in reply.items() if v is not None})
 
 
 class Fixture:
@@ -399,7 +404,7 @@ def test_id_token_claim_checks(change: dict[str, object], message: str) -> None:
 
 
 def test_id_token_accepts_an_audience_list_that_contains_ours() -> None:
-    token = make_jwt({**good_claims("n1"), "aud": ["x", ISSUED_CLIENT_ID]})
+    token = make_jwt({**good_claims("n1"), "aud": ["x", ISSUED_CLIENT_ID], "azp": ISSUED_CLIENT_ID})
     assert check_id_token(token, audience=ISSUED_CLIENT_ID, nonce="n1", now=NOW)["sub"] == "user-1"
 
 
@@ -534,9 +539,8 @@ def test_no_token_ever_appears_in_logs_or_output(
         fx.manager.refresh()
     fx.manager.sign_out()
     captured = capsys.readouterr()
-    # The fake "browser" in these tests is a separate HTTP client that logs its own visit to
-    # the loopback address; that is test machinery, not wow-coach, so leave those lines out.
-    log_lines = [line for line in caplog.text.splitlines() if "127.0.0.1" not in line]
-    seen = "\n".join(log_lines) + captured.out + captured.err
-    for secret in (SECRET_ACCESS, SECRET_REFRESH, "one-time-code"):
+    seen = caplog.text + captured.out + captured.err
+    # Look for the token VALUES themselves, in every line. (The one-time code is left out: the
+    # fake browser's own HTTP client logs its visit, which is test machinery, not wow-coach.)
+    for secret in (SECRET_ACCESS, SECRET_REFRESH):
         assert secret not in seen
