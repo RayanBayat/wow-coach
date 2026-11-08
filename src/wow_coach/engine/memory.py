@@ -10,22 +10,30 @@
 Both files hold no secrets. A damaged file counts as empty, and writes are atomic.
 """
 
+import contextlib
 import json
 import os
 import tempfile
-from collections.abc import Mapping
+import time
+from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Final
 
 from wow_coach.datafolder import data_folder
 
 ANSWERED_FILE: Final = "answered-questions.json"
-NAMES_FILE: Final = "hidden-names.json"
+NAMES_FILE: Final = "hidden-names-v2.json"
+# The first version wrongly stored monster killers as player names ("Hogger"). Remembered
+# names last for good, so the old file is deleted instead of read.
+OLD_NAMES_FILE: Final = "hidden-names.json"
 MAX_IDS_PER_CHARACTER: Final = 100
 MAX_NAMES_PER_CHARACTER: Final = 200
 MAX_CHARACTERS: Final = 50
-MAX_FILE_BYTES: Final = 200_000
+MAX_FILE_BYTES: Final = 1_200_000  # 50 characters x 200 names x 100 characters, at most
 MAX_ITEM_CHARS: Final = 100
+LOCK_WAIT_SECONDS: Final = 2.0
+LOCK_STALE_SECONDS: Final = 30.0
+LOCK_POLL_SECONDS: Final = 0.05
 
 
 def _load(path: Path) -> dict[str, list[str]]:
@@ -45,20 +53,74 @@ def _load(path: Path) -> dict[str, list[str]]:
     return clean
 
 
+def _fit(data: dict[str, list[str]]) -> str:
+    """The JSON text for ``data``, dropping the oldest characters until it fits the limit."""
+    text = json.dumps(data, ensure_ascii=False)
+    while len(text.encode("utf-8")) > MAX_FILE_BYTES and len(data) > 1:
+        del data[next(iter(data))]
+        text = json.dumps(data, ensure_ascii=False)
+    return text
+
+
 def _save(path: Path, data: dict[str, list[str]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    text = _fit(data)
     handle, temp_name = tempfile.mkstemp(dir=path.parent, prefix=".mem-", suffix=".part")
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as file:
-            json.dump(data, file, ensure_ascii=False)
+            file.write(text)
         Path(temp_name).replace(path)
     except BaseException:
         Path(temp_name).unlink(missing_ok=True)
         raise
 
 
+def _lock_is_stale(lock: Path) -> bool:
+    try:
+        return time.time() - lock.stat().st_mtime > LOCK_STALE_SECONDS
+    except OSError:
+        return False
+
+
+@contextlib.contextmanager
+def _locked(path: Path) -> Iterator[None]:
+    """Hold ``<file>.lock`` (made with O_EXCL, so only one program gets it) while running.
+
+    Waits about 2 seconds, takes over a lock older than 30 seconds (a crashed program), and
+    always removes its own lock. If the lock can't be had in time we go on without it: a
+    rare lost update of a small list is better than blocking the coach.
+    """
+    lock = path.with_name(path.name + ".lock")
+    lock.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    held = False
+    while not held:
+        try:
+            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+            held = True
+        except FileExistsError:
+            if _lock_is_stale(lock):
+                with contextlib.suppress(OSError):
+                    lock.unlink()
+            elif time.monotonic() > deadline:
+                break
+            else:
+                time.sleep(LOCK_POLL_SECONDS)
+    try:
+        yield
+    finally:
+        if held:
+            with contextlib.suppress(OSError):
+                lock.unlink()
+
+
 def _add(path: Path, key: str, items: set[str] | list[str], cap: int) -> None:
     """Add items to a character's list (newest last), keeping the newest ``cap``."""
+    with _locked(path):
+        _add_locked(path, key, items, cap)
+
+
+def _add_locked(path: Path, key: str, items: set[str] | list[str], cap: int) -> None:
     data = _load(path)
     old = data.pop(key, [])  # popped and re-added, so this character moves to the end
     fresh = [i[:MAX_ITEM_CHARS] for i in sorted(items) if i] if isinstance(items, set) else items
@@ -76,6 +138,8 @@ class LocalMemory:
         folder = data_folder(environ=environ)
         self._answered = folder / ANSWERED_FILE
         self._names = folder / NAMES_FILE
+        with contextlib.suppress(OSError):
+            (folder / OLD_NAMES_FILE).unlink(missing_ok=True)
 
     def answered_ids(self, character_key: str) -> set[str]:
         """Question ids this program has already answered for the character."""

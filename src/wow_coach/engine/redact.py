@@ -5,13 +5,15 @@ of group members, mail senders and players who attacked the character are replac
 "a player". The character's own name is never touched.
 
 Names are matched as whole words (letters, digits and "_" all count as part of a word), so
-"Ann" does not change "Annex" or "Ann2". Names of 4 or more letters match in any case, so
-"gorbo" and "GORBO" are hidden too. Shorter names must match exactly: "Will" is hidden but the
-common word "will" survives.
+"Ann" does not change "Annex" or "Ann2". A name is always hidden as seen ("Gorbo") and in
+ALL CAPS ("GORBO"). Names of 4 or more letters are also hidden in any other case ("gorbo"),
+unless the lower-case word is an ordinary word (``commonwords.py``): a group-mate called
+"Will" is hidden as "Will" or "WILL", but "What will I get?" stays readable.
 """
 
 import re
 
+from wow_coach.engine.commonwords import COMMON_WORDS
 from wow_coach.report_values import Table, as_table, as_tables, as_text
 from wow_coach.savedvars import Character
 
@@ -50,26 +52,36 @@ def _mail_names(snapshot: Table) -> set[str]:
     return {sender for sender in senders if sender and looks_like_player_name(sender)}
 
 
-def _killer_name(event: Table, attackers: list[Table]) -> str | None:
-    """The killing blow's name, unless an attacker of that name is known to be a monster."""
-    name = as_text(as_table(event.get("killer")).get("name"))
-    if not name:
-        return None
-    monsters = {as_text(a.get("name")) for a in attackers if a.get("isPlayer") is False}
-    return None if name in monsters else name
+def _attacker_names(history: list[Table]) -> tuple[set[str], set[str]]:
+    """(players, monsters) among all attackers in the history.
+
+    The addon writes ``isPlayer = true`` for a player and leaves the key out for a monster
+    (Lua's ``false or nil`` is nil), so only ``True`` means a player.
+    """
+    players: set[str] = set()
+    monsters: set[str] = set()
+    for event in history:
+        for attacker in as_tables(event.get("attackers")):
+            name = as_text(attacker.get("name"))
+            if name:
+                (players if attacker.get("isPlayer") is True else monsters).add(name)
+    return players, monsters - players
+
+
+def _killer_is_player(name: str, players: set[str], monsters: set[str]) -> bool:
+    """Same idea as triggers/events.py, but also catching a killer with no attacker data."""
+    if name in players:
+        return True
+    return name not in monsters and looks_like_player_name(name)
 
 
 def _event_names(history: list[Table]) -> set[str]:
     """Names in history events: players who attacked or killed, and who sent an item."""
-    names: set[str] = set()
+    players, monsters = _attacker_names(history)
+    names = set(players)
     for event in history:
-        attackers = as_tables(event.get("attackers"))
-        for attacker in attackers:
-            name = as_text(attacker.get("name"))
-            if attacker.get("isPlayer") is True and name:
-                names.add(name)
-        killer = _killer_name(event, attackers)
-        if killer:
+        killer = as_text(as_table(event.get("killer")).get("name"))
+        if killer and _killer_is_player(killer, players, monsters):
             names.add(killer)
         sender = as_text(event.get("from"))
         if sender and looks_like_player_name(sender):
@@ -77,19 +89,30 @@ def _event_names(history: list[Table]) -> set[str]:
     return names
 
 
-def other_player_names(character: Character) -> set[str]:
-    """Every other player's name found in the character's save."""
+def other_player_names(character: Character, *, own: frozenset[str] = frozenset()) -> set[str]:
+    """Every other player's name found in the character's save.
+
+    ``own`` holds the names of the player's other characters (alts), which are never hidden.
+    """
     found = _group_names(character.snapshot) | _mail_names(character.snapshot)
     found |= _event_names(as_tables(character.history))
     # "Name-Realm" forms: hide the bare name too, because the report may print either.
     found |= {name.split("-", 1)[0] for name in found}
-    return without_own_names(found, character)
+    return without_own_names(found, character, own=own)
 
 
-def without_own_names(names: set[str], character: Character) -> set[str]:
-    """``names`` without this character's own name and without names too short to match."""
-    own = {name.lower() for name in own_names(character)}
-    return {n for n in names if len(n) >= MIN_NAME_LENGTH and n.lower() not in own}
+def without_own_names(
+    names: set[str], character: Character, *, own: frozenset[str] = frozenset()
+) -> set[str]:
+    """``names`` without the player's own characters and without names too short to match."""
+    mine = {name.lower() for name in own_names(character) | own}
+    return {n for n in names if len(n) >= MIN_NAME_LENGTH and n.lower().split("-")[0] not in mine}
+
+
+def _any_case(name: str) -> bool:
+    """True when "gorbo" and "Gorbo" may both be hidden: long enough, and not a common word."""
+    bare = name.split("-", 1)[0].lower()
+    return len(bare) >= IGNORE_CASE_FROM and bare not in COMMON_WORDS
 
 
 def redact_names(text: str, names: set[str]) -> str:
@@ -98,10 +121,11 @@ def redact_names(text: str, names: set[str]) -> str:
         return text
     # Longest first, so "Annabel" is handled before "Ann".
     ordered = sorted(names, key=len, reverse=True)
-    long_names = [re.escape(n) for n in ordered if len(n) >= IGNORE_CASE_FROM]
-    short_names = [re.escape(n) for n in ordered if len(n) < IGNORE_CASE_FROM]
     parts = []
-    if long_names:
-        parts.append(f"(?i:{'|'.join(long_names)})")
-    parts.extend(short_names)
+    any_case = [re.escape(n) for n in ordered if _any_case(n)]
+    if any_case:
+        parts.append(f"(?i:{'|'.join(any_case)})")
+    # Every name, exactly as seen and in ALL CAPS ("GORBO"), even when it is a common word.
+    parts.extend(re.escape(n) for n in ordered)
+    parts.extend(re.escape(n.upper()) for n in ordered if n.upper() != n)
     return re.sub(rf"(?<!\w)(?:{'|'.join(parts)})(?!\w)", REPLACEMENT, text)
