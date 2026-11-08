@@ -1,10 +1,9 @@
 # Plan: the in-game Coach panel and the wow-coach companion app
 
-Status: **draft for the owner's review** (2026-11-08; updated the same day: **Sign in with
-ChatGPT is the only AI connection for now**). Nothing here is built yet. Based on
-release 0.7.0. Facts marked *verified* were checked in Blizzard's Forever UI source
+Status: the Coach panel is built (0.8.0); the companion app is planned (0.9.0 and later).
+Last updated 2026-11-08. Facts marked *verified* were checked in Blizzard's Forever UI source
 (github.com/Gethe/wow-ui-source, branch `forever`) or on the official page linked. Everything
-else is a design choice, and open choices are listed in "Decisions for the owner" near the end.
+else is a design choice.
 
 ## 1. What the player gets
 
@@ -13,7 +12,7 @@ else is a design choice, and open choices are listed in "Decisions for the owner
 2. **A companion app on the PC** (the `wow-coach` program, grown up). It reads the save, asks
    the AI the player chose and writes the answer back for the panel. It also shows answers in
    its own window right away, so there is no need to wait for a reload.
-3. **Sign in with ChatGPT is the only AI connection** (the owner's decision, 2026-11-08). The
+3. **Sign in with ChatGPT is the only AI connection** (decided 2026-11-08). The
    player signs in on OpenAI's own page, and the answers use their ChatGPT plan.
    - There are no API keys and no other providers in the companion for now.
    - The code keeps a small provider interface (C5), so others can be added later without a
@@ -114,10 +113,10 @@ https://legal.overwolf.com/docs/curseforge/mod-authors-terms):
 - New dependencies must have licenses compatible with MIT.
 - **Don't copy code from the Sign in with ChatGPT DevKit**: its "Noncommercial License v1.0"
   doesn't fit an MIT repo. Implement from OpenAI's public protocol documentation (OAuth 2.0
-  with PKCE and a loopback redirect) and check those docs' terms first (decision D5).
+  with PKCE and a loopback redirect) and check those docs' terms first.
 - Wiki text keeps its CC BY-SA attribution wherever it is shown.
 
-**Privacy** (the owner is in the EU):
+**Privacy** (including EU players, under the GDPR):
 - Everything stays on the player's PC except what goes to the AI company they chose. Say that
   plainly in the app and the README.
 - No telemetry, ever.
@@ -348,17 +347,16 @@ class Answer:
   - When to speak: triggers, the triage model, quiet hours.
   - Usage: the log and the caps.
   - Privacy: what is sent where.
-- **Later options:** desktop notifications ("Your coach answered") and text-to-speech
-  (decision D8).
+- **Later options:** desktop notifications ("Your coach answered") and text-to-speech.
 
 ## 8. Milestones (each one is a release that works by itself)
 
 | Release | Scope | Done when |
 |---|---|---|
-| **0.8.0 Coach panel** | The panel, Ask in game, the advice file and data addon, `setup` creating it, MCP tools `questions_from_game` and `send_advice_to_game`, the live-mode agent answering `reason: ask`. Built alongside but not shipped: the Sign in with ChatGPT spike (D5) | In game: ask, then the Claude Code coach answers, then after `/reload` the panel shows it. Restart once after the update. All tests pass, and the compliance tests (9) pass. The spike proves sign-in plus one answer on the owner's account |
+| **0.8.0 Coach panel** | The panel, Ask in game, the advice file and data addon, `setup` creating it, MCP tools `questions_from_game` and `send_advice_to_game`, the live-mode agent answering `reason: ask`. Built alongside but not shipped: a Sign in with ChatGPT spike | In game: ask, then the Claude Code coach answers, then after `/reload` the panel shows it. Restart once after the update. All tests pass, and the compliance tests (9) pass. The spike proves sign-in plus one answer on a real account |
 | **0.9.0 Companion app** | Sign in with ChatGPT, keychain, `wow-coach ask`, `wow-coach app`, the usage log and caps, conversation history | A player with no terminal knowledge (beyond one install line) can sign in with ChatGPT and get answers in the window and the panel |
 | **0.10.0 When to speak** | Triggers, rules, the timer, quiet hours, optional triage, notifications | Defaults are manual only. Each automatic rule respects cooldowns and caps, shown by tests |
-| **1.0.0 Easy install + CurseForge** | Installers (decision D4), CurseForge "Forever" listing for CoachLink, privacy page, user guide with screenshots | Listed on CurseForge. A fresh Windows PC goes from zero to an answer in about 10 minutes |
+| **1.0.0 Easy install + CurseForge** | Installers (signing them costs money each year: decide before 1.0), CurseForge "Forever" listing for CoachLink, privacy page, user guide with screenshots | Listed on CurseForge. A fresh Windows PC goes from zero to an answer in about 10 minutes |
 
 ## 9. Tests, including compliance tests
 
@@ -385,83 +383,11 @@ class Answer:
     reuses ChatGPT web-session cookies (only the official sign-in).
   - The advice writer refuses any path outside `AddOns/CoachLink_Advice/`.
   - Secrets never appear in files written by the app (tests with fake keys).
-- **In game** (the owner, because agents can't run the game): a short checklist per release.
+- **In game** (a person, because automated tests can't run the game): a short checklist per release.
   Never close the game by force; quit through the menu. No big disk work on `/data` while it
   runs (the advice file is a few KB).
 
-## 10. How we build it: parallel work that doesn't collide
-
-### 10.1 Branches and folders
-
-- **`feat/coach-panel`**: the integration branch, from `main` at v0.7.0. Only the integrator
-  (the lead agent, Opus) commits here: the contracts, merges, and the **shared files** below.
-- **One branch and one git worktree per workstream** (`ws/<letter>-<name>`). Each is created
-  by the Agent tool with worktree isolation, from `feat/coach-panel`, so every agent has its
-  own folder and its own `.venv`.
-- **Shared files: only the integrator edits them.** Agents write the change they need into
-  their final report instead:
-  - `pyproject.toml`, `uv.lock`, `CHANGELOG.md`, `README.md`, `AGENTS.md`, `docs/design.md`,
-    `SKILL.md`, `agents/wow-coach.md`
-  - `addon/CoachLink/CoachLink.toc`, `CoachLink.lua`
-  - `server.py`, `cli.py`, `setup.py`, `.github/workflows/`
-- **All new dependencies are added in phase 0**, with exact latest versions, so no agent ever
-  touches `uv.lock`.
-- **Agents:**
-  - Commit on their own branch, with every gate green. No push, no merge.
-  - No attribution lines. No personal data (the existing grep gate).
-  - Never touch the real game folder. Tests use temporary folders only.
-
-### 10.2 Workstreams, owners and models
-
-| ID | Workstream | Owns (only these paths) | Model | Phase |
-|---|---|---|---|---|
-| 0 | Contracts, dependency pins, .toc lines, CI job for the panel test, `FakeProvider`, compliance test skeleton | shared files, `ai/base.py`, `advice/contract.py`, `triggers/contract.py`, `tests/test_compliance.py` | Opus (lead) | 0 |
-| A | Coach panel (Lua) | `addon/CoachLink/CoachLinkPanel.lua`, `addon/CoachLink/Bindings.xml`, `addon/tests/run_panel_test.lua` | Sonnet | 1 |
-| B | Advice serializer, writer, data addon install, questions reader | `src/wow_coach/advice/*` except `contract.py`, `tests/test_advice_*.py` | Sonnet | 1 |
-| D | Sign in with ChatGPT, the `ChatGPTPlan` provider, keychain, usage caps | `ai/chatgpt_signin.py`, `ai/chatgpt_plan.py`, `keychain.py`, `usage.py`, their tests | Sonnet, then an Opus security review | 1 (built during 0.8.0 as a spike, shipped in 0.9.0) |
-| F | Coach engine (prompt, redaction, JSON answers, conversations) | `coach_engine.py`, `tests/test_coach_engine.py` | Sonnet | 2 |
-| G | App window | `src/wow_coach/app/*`, `tests/test_app_*.py` | Sonnet, then an Opus security review | 2 (after F's API is merged) |
-| E | Triggers, rules, triage | `src/wow_coach/triggers/*` except `contract.py`, their tests | Sonnet | 3 (0.10.0) |
-| H | Installers and packaging | `packaging/*`, the release workflow (integrator merges it) | Sonnet | 4 (1.0.0) |
-| M | Mechanical chores: version pins, link checks, fixture trimming, CurseForge text, doc tidy | as assigned per task | **Haiku** | any |
-
-**What runs in parallel:**
-- 0.8.0: A, B and D (the sign-in spike, which tests the riskiest part early).
-- 0.9.0: F and the rest of D, then G.
-- 0.10.0: E alone.
-
-These sets never share a file, and each depends only on the phase 0 contracts. That's why the
-contracts come first.
-
-### 10.3 Order of work in each milestone
-
-1. **Phase 0 (lead):** write the contracts and stub modules with failing tests, pin the new
-   dependencies, add the .toc lines and the CI job. Commit to `feat/coach-panel`.
-2. **Phase 1 (parallel agents):** each agent gets a brief with its goal, owned paths, contracts,
-   rules (sections 3 and 10.1), and "test first". Each reports its branch, commits, gate output
-   and integration notes.
-3. **Review:**
-   - Security-sensitive branches (B, D, G) get a fresh-context Opus review that sees the code,
-     not the author's conclusions.
-   - Findings go back to the same agent (SendMessage), which keeps its context.
-4. **Merge (lead):** in dependency order (B, then A for 0.8.0; D stays on its branch until
-   0.9.0), with `--no-ff`. All gates run after each merge, then the end-to-end test.
-5. **Shared files (lead):** design.md, the CHANGELOG, README and skill. Haiku does the
-   mechanical parts.
-6. **Owner's in-game check**, then release: tag `v0.X.0`, and the release workflow builds the
-   zip.
-7. **Clean up:** delete the merged workstream branches and worktrees.
-
-### 10.4 Cost control
-
-- Sonnet does the building, Haiku the chores, and Opus only contracts, reviews and
-  integration.
-- One agent per workstream, at most 3 or 4 at once.
-- Briefs point at files instead of pasting them.
-- The repo's own AI calls are never exercised for real in tests. A real sign-in test happens
-  only by hand, on the owner's account and with the owner's OK.
-
-## 11. Risks
+## 10. Risks
 
 | Risk | What we do |
 |---|---|
@@ -472,18 +398,4 @@ contracts come first.
 | Wrong advice | Every answer says which AI wrote it and "can be wrong". Wiki facts carry their source link |
 | Being seen as "AI slop" | Open code, tests and CI, an honest changelog and privacy page. Say openly that AI helped build it |
 | Linux keychain missing | Keys in memory only, with a clear message. Never plain text |
-| Sign in with ChatGPT access is gated or changes. It is now the only connection, so this is the biggest risk | The spike runs during 0.8.0, on the owner's account, before anything depends on it. 0.8.0 works without it (the Claude Code coach fills the panel). If it fails, adding API keys is the fallback, behind the existing provider interface |
-
-## 12. Decisions for the owner
-
-| # | Question | Recommendation |
-|---|---|---|
-| D1 | App window technology | A local web page in the browser (0.9.0). A native window (`pywebview`) can come later |
-| D2 | AI client code | With one connection: a small client on the existing `httpx2`, so there are no new AI dependencies. Only `keyring` gets added |
-| D3 | Which AI connections | **Decided 2026-11-08: Sign in with ChatGPT only, for now** |
-| D4 | Installers for 1.0.0 | Start with the `uvx` one-liner (free). Signed Windows and macOS installers cost money each year for code signing; decide before 1.0 |
-| D5 | Sign in with ChatGPT license | Implement from OpenAI's protocol docs, never copy DevKit code. Check the docs' terms and test with your account first |
-| D6 | Ask Blizzard's UI team for a written view before CurseForge | Yes, before 1.0.0 (the address is in the addon policy) |
-| D7 | Push workstream branches for CI on 3 systems, or keep them local | Local until the merge; the integration branch gets pushed for CI before each release |
-| D8 | Text-to-speech and desktop notifications | Notifications in 0.10.0, speech later and optional |
-| D9 | Does Ask reload by itself? | Yes: the click saves and reloads, like `/coach`. The panel says so on the button |
+| Sign in with ChatGPT access is gated or changes. It is now the only connection, so this is the biggest risk | The spike runs during 0.8.0, on a real account, before anything depends on it. 0.8.0 works without it (the Claude Code coach fills the panel). If it fails, adding API keys is the fallback, behind the existing provider interface |
