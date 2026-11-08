@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButto
 from wow_coach.desktop.icons import icon
 from wow_coach.desktop.state import CharacterView, StateView
 from wow_coach.desktop.theme import SPACE, SPACE_SMALL, Colors
+from wow_coach.desktop.tray import OVERLAY_TOOLTIP
 from wow_coach.desktop.widgets.bubbles import plain_label
 from wow_coach.desktop.widgets.formatting import Freshness, gold_text
 
@@ -79,6 +80,7 @@ class HeaderCard(QFrame):
 
     character_chosen = Signal(str)
     keep_on_top_clicked = Signal()
+    overlay_clicked = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -101,6 +103,11 @@ class HeaderCard(QFrame):
         )
         self.keep_button.clicked.connect(self.keep_on_top_clicked)
 
+        self.overlay_button = QPushButton("Overlay")
+        self.overlay_button.setProperty("kind", "chip")
+        self.overlay_button.setToolTip(OVERLAY_TOOLTIP)
+        self.overlay_button.clicked.connect(self.overlay_clicked)
+
         top = QHBoxLayout()
         top.setSpacing(SPACE)
         top.addWidget(self._name)
@@ -110,6 +117,7 @@ class HeaderCard(QFrame):
         buttons = QHBoxLayout()
         buttons.setSpacing(SPACE_SMALL)
         buttons.addWidget(self.keep_button)
+        buttons.addWidget(self.overlay_button)
         buttons.addStretch(1)
         column = QVBoxLayout(self)
         column.setContentsMargins(SPACE + 4, SPACE, SPACE + 4, SPACE)
@@ -133,6 +141,10 @@ class HeaderCard(QFrame):
         if state.selected in state.characters:
             self._picker.setCurrentIndex(state.characters.index(state.selected))
         self._picker.blockSignals(False)
+
+    def set_overlay_hint(self, hint: str) -> None:
+        """Say in the Overlay button's tooltip how to open the overlay (for example the key)."""
+        self.overlay_button.setToolTip(f"{OVERLAY_TOOLTIP} {hint}")
 
     def show_card_open(self, is_open: bool) -> None:
         """Change the "Keep on top" button's words while the small card is shown."""

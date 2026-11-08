@@ -301,10 +301,21 @@ def test_closing_hides_to_the_tray_and_tells_the_player_once(qtbot: QtBot, tmp_p
 def test_the_tray_menu_opens_the_window(qtbot: QtBot, tmp_path: Path) -> None:
     window, tray = _window_with_tray(qtbot, tmp_path, available=True)
     names = [action.text() for action in tray.menu.actions() if not action.isSeparator()]
-    assert names == ["Open WoW Coach", "Quit"]
+    assert names == ["Open WoW Coach", "Show or hide the overlay", "Quit"]
     window.hide()
     tray.menu.actions()[0].trigger()
     assert window.isVisible()
+
+
+def test_the_tray_menu_can_show_or_hide_the_overlay(qtbot: QtBot, tmp_path: Path) -> None:
+    _window, tray = _window_with_tray(qtbot, tmp_path, available=True)
+    asked: list[bool] = []
+    tray.overlay_requested.connect(lambda: asked.append(True))
+    entry = tray.menu.actions()[1]
+    entry.trigger()
+    assert asked == [True]
+    tray.set_overlay_hint("Press Ctrl+Shift+Space anywhere to show or hide the overlay.")
+    assert "Ctrl+Shift+Space" in entry.toolTip()
 
 
 def test_quit_really_closes_instead_of_hiding(
