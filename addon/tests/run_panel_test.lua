@@ -78,6 +78,7 @@ local frameMethods = {
         if was and self.scripts.OnHide then self.scripts.OnHide(self) end
     end,
     IsShown = function(self) return self.shown end,
+    SetShown = function(self, shown) if shown then self:Show() else self:Hide() end end,
     SetEnabled = function(self, enabled) self.enabled = enabled and true or false end,
     Enable = function(self) self.enabled = true end,
     Disable = function(self) self.enabled = false end,
@@ -607,6 +608,46 @@ inCombat = false
 fire("PLAYER_REGEN_ENABLED")
 check(panel() and panel().shown == true, "it opens when the fight ends")
 
+
+
+-------------------------------------------------------------------------------
+-- Test 11: the "Show answer" button
+-------------------------------------------------------------------------------
+
+coach = startSession()
+coach.togglePanel()
+check(CoachLinkPanelShowAnswer.shown == false, "Show answer is hidden when no question waits")
+CoachLinkDB = { characters = { ["Testchar-Testrealm"] = { questions = {
+    { id = "7-1", text = "Where is Brill?", askedAt = FAKE_NOW - 60 },
+} } } }
+panel():Hide()
+coach.togglePanel()
+check(CoachLinkPanelShowAnswer.shown == true, "Show answer appears while a question waits")
+check(has(bodyText(), "click Show answer"), "the waiting line tells the player to click Show answer")
+CoachLinkPanelShowAnswer.scripts.OnClick(CoachLinkPanelShowAnswer)
+check(reloads == 1, "clicking Show answer reloads the UI")
+
+inCombat = true
+fire("PLAYER_REGEN_DISABLED")
+check(CoachLinkPanelShowAnswer.enabled == false, "Show answer is disabled in combat")
+CoachLinkPanelShowAnswer.scripts.OnClick(CoachLinkPanelShowAnswer)
+check(reloads == 1, "a click in combat does not reload")
+inCombat = false
+fire("PLAYER_REGEN_ENABLED")
+check(CoachLinkPanelShowAnswer.enabled == true, "Show answer works again after the fight")
+
+-- After the reload the answer is still missing: the line and the button stay.
+panel():Hide()
+coach.togglePanel()
+check(CoachLinkPanelShowAnswer.shown == true and has(bodyText(), "Waiting for your coach"),
+    "without an answer the waiting line and button stay")
+
+-- The question is answered (its id is in answeredIds): the button goes.
+CoachLinkAdvice = { characters = { ["Testchar-Testrealm"] = { answeredIds = { "7-1" }, answers = {} } } }
+panel():Hide()
+coach.togglePanel()
+check(CoachLinkPanelShowAnswer.shown == false and not has(bodyText(), "Waiting for your coach"),
+    "an answered question removes the line and the button")
 
 
 -------------------------------------------------------------------------------
