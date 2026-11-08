@@ -4,6 +4,13 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- A level-up in the history now stores the level reached. Before, it stored the level before
+  the level-up ([#3](https://github.com/RayanBayat/wow-coach/issues/3)).
+
 ## [0.6.0] - 2026-11-08
 
 The addon now saves everything about your character, and `/coach copy` gives only your data.

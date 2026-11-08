@@ -489,7 +489,7 @@ end
 installFakeGame()
 local namespace = loadAddon()
 fire("PLAYER_ENTERING_WORLD", true, false)
-fire("PLAYER_LEVEL_UP", 7)
+fire("PLAYER_LEVEL_UP", 8)   -- the game still says level 7 while this event runs
 fire("QUEST_TURNED_IN", 364, 250, 0)
 fire("PLAYER_DEAD")
 fire("BANKFRAME_OPENED")       -- the player visits the bank...
@@ -605,6 +605,8 @@ for _, event in ipairs(character.history) do
 end
 check(table.concat(kinds, ",") == "login,level,quest,death", "history events in order")
 check(character.history[4].text == "Died in Brill (level 7)", "death text")
+check(character.history[2].text == "Reached level 8" and character.history[2].level == 8,
+    "a level-up event stores the new level, not the old one")
 check(#character.progress == 1, "the snapshot added one progress point")
 local firstPoint = character.progress[1]
 check(firstPoint.time == FAKE_NOW and firstPoint.reason == "coach", "progress point has time and reason")

@@ -143,7 +143,7 @@ and saves from older addons simply lack them.
 | `time` | number | Unix time (seconds) |
 | `kind` | string | `"level"`, `"death"`, `"quest"`, `"login"` |
 | `text` | string | A sentence, for example `"Reached level 7"`, `"Died in Brill (level 6)"` |
-| `level` | number | Character level at the time |
+| `level` | number | Character level at the time. For a `"level"` event it is the level reached (saves from addon 0.6.0 and older store the level before it) |
 | `zone` | string | Zone at the time |
 
 ### Progress point fields

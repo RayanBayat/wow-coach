@@ -965,18 +965,26 @@ local function takeSnapshot(reason)
 end
 
 -- Add one event (level up, death, quest...) to this character's history.
-local function addHistory(kind, text)
+-- `extra` holds more fields for this event (optional); it can also replace
+-- `level`, for events where UnitLevel is not up to date yet.
+-- Returns the event table, so a caller can add details that arrive later.
+local function addHistory(kind, text, extra)
     local history = characterTable().history
-    table.insert(history, {
+    local event = {
         time = time(),
         kind = kind,
         text = text,
         level = UnitLevel("player"),
         zone = GetRealZoneText(),
-    })
+    }
+    for key, value in pairs(extra or {}) do
+        event[key] = value
+    end
+    table.insert(history, event)
     while #history > MAX_HISTORY do
         table.remove(history, 1)  -- drop the oldest
     end
+    return event
 end
 
 
@@ -997,7 +1005,8 @@ function handlers.PLAYER_ENTERING_WORLD(isInitialLogin)
 end
 
 function handlers.PLAYER_LEVEL_UP(newLevel)
-    addHistory("level", "Reached level " .. tostring(newLevel))
+    -- While this event runs, UnitLevel still returns the old level.
+    addHistory("level", "Reached level " .. tostring(newLevel), { level = newLevel })
 end
 
 function handlers.PLAYER_DEAD()
