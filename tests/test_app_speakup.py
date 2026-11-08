@@ -8,6 +8,7 @@ from wow_coach.ai.base import PlanLimitReached
 from wow_coach.app.events import Event, Mailbox
 from wow_coach.app.server import CoachServer
 from wow_coach.app.watcher import Watcher
+from wow_coach.triggers.prompt import STATUS_UPDATED
 
 NOW = 2_100
 
@@ -99,13 +100,15 @@ def test_update_my_next_steps_asks_after_any_save_that_changed_something(
     assert rig.alerts.notified[-1][0] == "Your coach answered"
 
 
-def test_a_reload_with_nothing_new_does_not_ask(tmp_path: Path) -> None:
+def test_every_reload_asks_even_when_nothing_changed(tmp_path: Path) -> None:
+    # The owner asked for it: a /reload means "look at me again and tell me what's next".
     rig, watcher, _ = setup(tmp_path, {"on_save": "advice"})
     write_save(rig.wow_dir, mtime=2_000, zone="Silverpine Forest", reason="coach")
     watcher.check_once()
-    write_save(rig.wow_dir, mtime=2_050, zone="Silverpine Forest", reason="coach")  # same
+    write_save(rig.wow_dir, mtime=2_050, zone="Silverpine Forest", reason="logout")  # same
     watcher.check_once()
-    assert len(rig.coach.asked) == 1
+    assert len(rig.coach.asked) == 2
+    assert rig.coach.asked[1] == STATUS_UPDATED
 
 
 def test_a_question_from_the_game_gets_its_own_answer_not_a_second_one(tmp_path: Path) -> None:

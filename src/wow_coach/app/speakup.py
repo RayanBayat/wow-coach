@@ -6,11 +6,11 @@ The steps for one save, in plain words:
    (you died, you levelled up...).
 2. ``worth_knowing`` applies the player's choice and the quiet rule. No AI is used.
 3. What is worth knowing becomes ONE desktop notification (one short text).
-4. If the player chose "advice" ("Update my next steps"), every save that changed something
-   that matters (``triggers/status.py``) also makes ONE "status updated, what next?" coach
-   request, which mentions the events if there were any. Its answer shows in the chat and on
-   the small keep-on-top card. So one save never costs more than one unasked AI call, and a
-   /reload with nothing new gives nothing.
+4. If the player chose "advice" ("Update my next steps"), EVERY save also makes ONE
+   "status updated, what next?" coach request, which mentions the events if there were any.
+   The player asked for this on purpose: a /reload means "look at me again". Its answer shows
+   in the chat and on the small keep-on-top card. One save never costs more than one unasked
+   AI call.
 5. A save that carries a question typed in the game gets no extra request: that question
    gets its own answer.
 
@@ -27,7 +27,6 @@ from wow_coach.savedvars import Character
 from wow_coach.triggers.decide import notification_text, worth_knowing
 from wow_coach.triggers.events import events_between
 from wow_coach.triggers.prompt import coach_request_for
-from wow_coach.triggers.status import status_changed
 
 # The addon saves with this reason when the player asked a question in the game's Coach panel.
 ASKED_IN_GAME: Final = "ask"
@@ -58,8 +57,6 @@ class SpeakUp:
             core.notify_text(notification_text(events))
         if settings.on_save != "advice" or (settings.quiet_in_instances and in_instance):
             return
-        if not events and not status_changed(before, newest):
-            return  # a /reload with nothing new: nothing to update
         if newest.snapshot.get("reason") == ASKED_IN_GAME:
             return  # this save carries a question typed in the game: it gets its own answer
         with core.ai_lock:  # one AI call at a time
