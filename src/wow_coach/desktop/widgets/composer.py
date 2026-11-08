@@ -97,7 +97,7 @@ class Composer(QFrame):
 
     def use_icons(self, colors: Colors) -> None:
         """Draw the Send button's icon in the current theme's colors."""
-        self._send.setIcon(icon("send", colors.on_accent, 16))
+        self._send.setIcon(icon("send", colors.on_button, 16))
 
     def set_text(self, text: str, cursor: int | None = None) -> None:
         """Put text in the box, with the cursor at ``cursor`` (default: the end), and focus it."""

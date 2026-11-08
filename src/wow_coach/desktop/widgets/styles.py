@@ -18,16 +18,22 @@ def chat_style(c: Colors) -> str:
     """The stylesheet for the whole Coach page."""
     return f"""
 QFrame#coachBubble, QFrame#typingBubble {{
-    background: {c.surface_raised}; border: 1px solid {c.border}; border-radius: {RADIUS}px;
+    background: {c.parchment}; border: 1px solid {c.parchment_edge}; border-radius: {RADIUS}px;
+}}
+QFrame#coachBubble QLabel {{ color: {c.on_parchment}; }}
+QFrame#coachBubble QLabel[role="subtitle"] {{ color: {c.on_parchment}; }}
+QFrame#coachBubble QLabel[role="muted"], QFrame#coachBubble QLabel[role="small"] {{
+    color: {c.parchment_muted};
 }}
 QFrame#playerBubble {{
-    background: {c.player_bubble}; border: none; border-radius: {RADIUS}px;
+    background: {c.player_bubble}; border: 1px solid {with_alpha(c.info, 0.35)};
+    border-radius: {RADIUS}px;
 }}
 QFrame#playerBubble QLabel {{ color: {c.on_player_bubble}; }}
 QFrame#playerBubble QLabel[role="small"] {{ color: {c.on_player_bubble}; }}
 QFrame#warningCallout {{
-    background: {with_alpha(c.warning, 0.14)}; border: none;
-    border-left: 3px solid {c.warning}; border-radius: {RADIUS_SMALL}px;
+    background: {with_alpha(c.button, 0.12)}; border: none;
+    border-left: 3px solid {c.button}; border-radius: {RADIUS_SMALL}px;
 }}
 QFrame#errorNotice {{
     background: {with_alpha(c.danger, 0.12)}; border: 1px solid {with_alpha(c.danger, 0.5)};
@@ -57,7 +63,7 @@ QLabel[dot="muted"] {{ background: {c.muted}; }}
 QFrame#composer {{
     background: {c.surface}; border: 1px solid {c.border}; border-radius: {RADIUS}px;
 }}
-QFrame#composer[focused="true"] {{ border-color: {c.accent}; }}
+QFrame#composer[focused="true"] {{ border-color: {c.trim}; }}
 QPlainTextEdit#composerEdit {{
     background: transparent; border: none; padding: 4px 6px;
 }}

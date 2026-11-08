@@ -19,7 +19,7 @@ from wow_coach.desktop.pages.coach import (
     CoachPage,
 )
 from wow_coach.desktop.quick_actions import QUICK_ACTIONS
-from wow_coach.desktop.theme import DARK, LIGHT
+from wow_coach.desktop.theme import WOW
 from wow_coach.desktop.widgets.refresh_banner import HINT_AFTER_SECONDS
 from wow_coach.desktop.widgets.styles import chat_style
 
@@ -478,11 +478,10 @@ def test_a_failed_state_read_does_not_wipe_the_chat(qtbot: QtBot, tmp_path: Path
     assert setup.page.chat.message_count() == count
 
 
-def test_the_page_style_exists_for_both_color_schemes() -> None:
-    assert DARK.warning in chat_style(DARK) or "rgba" in chat_style(DARK)
-    assert LIGHT.success in chat_style(LIGHT)
-    assert DARK.success in chat_style(DARK)
-    assert chat_style(DARK) != chat_style(LIGHT)
+def test_coach_answers_are_drawn_on_parchment_with_dark_ink() -> None:
+    style = chat_style(WOW)
+    assert WOW.parchment in style and WOW.on_parchment in style
+    assert WOW.success in style
 
 
 # ---- the busy queue retries on its own -------------------------------------------------------

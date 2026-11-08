@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 
+import pytest
 from desktop_support import KEY, FakeCore, make_bridge, sample_state
 from pytestqt.qtbot import QtBot
 
@@ -9,7 +10,14 @@ from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.main_window import MainWindow
 from wow_coach.desktop.run import platform_arguments
 from wow_coach.desktop.state import StateView, read_state
-from wow_coach.desktop.theme import ASSETS_FOLDER, DARK, LIGHT, asset_url, stylesheet
+from wow_coach.desktop.theme import (
+    ASSETS_FOLDER,
+    HEADING_FONT,
+    WOW,
+    asset_url,
+    load_heading_font,
+    stylesheet,
+)
 
 # ---- the typed state -----------------------------------------------------------------
 
@@ -182,14 +190,21 @@ def test_window_hands_new_state_to_the_pages(qtbot: QtBot) -> None:
 # ---- the theme and the platform --------------------------------------------------------
 
 
-def test_both_color_schemes_make_a_stylesheet() -> None:
-    assert DARK.accent in stylesheet(DARK)
-    assert LIGHT.accent in stylesheet(LIGHT)
+def test_the_game_style_uses_gold_headings_and_red_buttons() -> None:
+    style = stylesheet(WOW)
+    assert WOW.accent in style  # gold
+    assert WOW.button in style and WOW.on_button in style  # red buttons, gold letters
+    assert HEADING_FONT in style
+
+
+@pytest.mark.usefixtures("qapp")  # fonts need a running Qt app
+def test_the_heading_font_ships_with_the_app_and_loads() -> None:
+    assert load_heading_font() is True
 
 
 def test_every_theme_picture_exists_and_matches_its_colors() -> None:
     # The pictures are drawn in the theme's own colors, so they must change with the tokens.
-    for colors in (DARK, LIGHT):
+    for colors in (WOW,):
         for picture, color in (
             ("chevron-down", colors.muted),
             ("chevron-up", colors.muted),

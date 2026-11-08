@@ -147,7 +147,7 @@ class CompactCard(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setBrush(QColor(colors.surface))
-        painter.setPen(QColor(colors.border))
+        painter.setPen(QColor(colors.trim))
         painter.drawRoundedRect(self.rect().adjusted(1, 1, -1, -1), RADIUS, RADIUS)
 
     def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802 - Qt's method name

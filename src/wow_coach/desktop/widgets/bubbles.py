@@ -275,7 +275,7 @@ class TypingIndicator(QWidget):
         """Draw the dots; each one is a little behind the one before it."""
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        color = QColor(current_colors().muted)
+        color = QColor(current_colors().parchment_muted)  # the dots sit on parchment
         phase = self._clock() * 1000 / (self.STEP_MS * self.CYCLE_STEPS) * 2 * math.pi
         for index in range(3):
             wave = (math.sin(phase - index * 0.9) + 1) / 2  # 0..1
