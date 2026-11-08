@@ -356,6 +356,7 @@ def test_not_signed_in_turns_off_asking_and_offers_sign_in(qtbot: QtBot, tmp_pat
     assert all(not chip.isEnabled() for chip in page._chip_buttons)
     page.send_question("Hello?")
     assert setup.core.asked == []
+    assert page.sign_in_card.button.text() == "Open the ChatGPT page"
     seen: list[str] = []
     page.navigate.connect(seen.append)
     page.sign_in_card.button.click()

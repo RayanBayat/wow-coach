@@ -63,7 +63,7 @@ class OpenQuestionsBar(QFrame):
 
 
 class SignInCard(QFrame):
-    """Tells the player the coach needs a ChatGPT sign-in, with a button to do it."""
+    """Tells the player the coach needs a ChatGPT sign-in, with a button that goes to the page where that happens."""
 
     sign_in = Signal()
 
@@ -72,12 +72,12 @@ class SignInCard(QFrame):
         self.setProperty("role", "card")
         title = plain_label("Sign in to start chatting", "subtitle")
         body = plain_label(
-            "Your coach thinks with your own ChatGPT account, so it needs you to sign in once. "
-            "It only takes a minute and you can sign out any time."
+            "Your coach thinks with your own ChatGPT account, so you sign in once on the "
+            "ChatGPT page. It only takes a minute and you can sign out any time."
         )
-        self.button = QPushButton("Sign in with ChatGPT")
+        self.button = QPushButton("Open the ChatGPT page")
         self.button.setProperty("kind", "primary")
-        self.button.setToolTip("Opens the ChatGPT page, where you sign in.")
+        self.button.setToolTip("Goes to the ChatGPT page, where you can sign in.")
         self.button.clicked.connect(self.sign_in)
         column = QVBoxLayout(self)
         column.setContentsMargins(SPACE + 4, SPACE, SPACE + 4, SPACE)
