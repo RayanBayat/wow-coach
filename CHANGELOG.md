@@ -22,8 +22,18 @@ All notable changes to this project are written here. The format follows
     and Windows).
   - It keeps running in the tray when you close the window, and only one copy runs at a time.
   - Light and dark mode follow your computer.
+  - If it can't find your game (for example the game disk isn't connected yet), it asks
+    you to choose the folder instead of not opening.
+  - After you change the game folder, a **Restart WoW Coach** button applies it.
+- **`wow-coach-app`**: starts the app directly, without a console window on Windows. The app
+  menu and log-in shortcuts use it.
 - **"Save for the coach" key** in the addon (Options → Keybindings → CoachLink): one key does
   what `/coach` does.
+
+### Fixed
+
+- `/coach` and the new key no longer reload the interface during a fight. They say "Can't save
+  during a fight" instead.
 
 ### Changed
 

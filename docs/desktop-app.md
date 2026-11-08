@@ -32,6 +32,9 @@ itself, while you play. When you close the window, the coach keeps running next 
    wow-coach app
    ```
 
+   (`wow-coach-app` does the same without a terminal, and is what the app-menu shortcut
+   runs.) If WoW Coach can't find your game, it asks you to choose the `_forever_` folder.
+
    If the terminal says `wow-coach: command not found`, run `uv tool update-shell`, close the
    terminal, open a new one and try again.
 3. In the app, open **Setup**:
@@ -57,7 +60,8 @@ itself, while you play. When you close the window, the coach keeps running next 
   log out, type `/reload`, or press your **Save for the coach** key.
 - **Refresh game data:** click it, then press your **Save for the coach** key in WoW. The game
   reloads for a few seconds, and the app updates by itself. If you type a question while it
-  waits, the question is sent as soon as the fresh data arrives.
+  waits, the question is sent as soon as the fresh data arrives. (The key does nothing during a
+  fight, so a reload never catches you mid-combat. Press it again when the fight is over.)
 
   Why can't the app do this alone? Programs that press keys in your game break Blizzard's
   rules, so WoW Coach never does it. One key press from you is all it needs.
@@ -79,7 +83,8 @@ itself, while you play. When you close the window, the coach keeps running next 
   limit". More about speaking up: [the coach window guide](coach-window.md#when-the-coach-speaks-up-by-itself).
 - **ChatGPT:** your sign-in, how many questions you asked in the last hour and day,
   **Manage usage** (your ChatGPT settings), the model, and **Sign out**.
-- **Setup:** the checks above, any time.
+- **Setup:** the checks above, any time. After changing the game folder, click **Restart WoW
+  Coach**.
 - **Privacy:** what stays on your computer and what is sent to ChatGPT. The full text:
   [privacy notice](privacy.md).
 
