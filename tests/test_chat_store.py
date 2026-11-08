@@ -10,6 +10,7 @@ from wow_coach.engine.conversation import (
     MAX_STORED_MESSAGES,
     ChatAnswer,
     ChatMessage,
+    Lookup,
     append_messages,
     conversation_path,
     message_from_dict,
@@ -18,6 +19,7 @@ from wow_coach.engine.conversation import (
     now_iso,
     read_messages,
 )
+from wow_coach.engine.sources import SourceLink
 
 
 def message(
@@ -182,3 +184,61 @@ def test_two_writers_at_once_lose_nothing(tmp_path: Path) -> None:
 def test_now_iso_is_utc_and_parseable() -> None:
     stamp = now_iso(1_794_000_000.0)
     assert stamp.endswith("Z") and stamp.startswith("2026-")
+
+
+def test_sources_and_lookups_round_trip_inside_the_answer(tmp_path: Path) -> None:
+    path = tmp_path / "x.jsonl"
+    wiki = "https://warcraft.wiki.gg/wiki/Abigail_Shiel"
+    looked = 'Read the Warcraft Wiki page "Abigail Shiel"'
+    answer = ChatAnswer(
+        "T",
+        ("one",),
+        "why",
+        (),
+        sources=(SourceLink("Abigail Shiel", wiki),),
+        lookups=(Lookup("wiki", looked),),
+    )
+    original = ChatMessage(
+        "assistant", "T. one why", "app:1", "2026-11-07T10:00:00Z", answer=answer
+    )
+    append_messages(path, [original])
+    assert read_messages(path) == [original]
+    stored = json.loads(path.read_text(encoding="utf-8").splitlines()[0])["answer"]
+    assert stored["sources"] == [{"title": "Abigail Shiel", "url": wiki}]
+    assert stored["lookups"] == [{"kind": "wiki", "text": looked}]
+
+
+def test_an_answer_without_sources_keeps_the_old_shape() -> None:
+    answer = ChatAnswer("T", (), "t", ())
+    data = message_to_dict(ChatMessage("assistant", "x", "a:1", answer=answer))
+    assert data["answer"] == {"title": "T", "steps": [], "text": "t", "warnings": []}
+
+
+def test_stored_sources_with_unsafe_links_are_dropped_on_reading(tmp_path: Path) -> None:
+    path = tmp_path / "x.jsonl"
+    line = {
+        "role": "assistant",
+        "content": "hi",
+        "answer": {
+            "title": "T",
+            "steps": [],
+            "text": "t",
+            "warnings": [],
+            "sources": [
+                {"title": "bad", "url": "javascript:alert(1)"},
+                {"title": "file", "url": "file:///etc/passwd"},
+                {"url": "https://ok.example/"},
+                "nonsense",
+                {"title": 5, "url": "https://ok2.example/"},
+            ],
+            "lookups": [{"kind": "web", "text": "Searched"}, {"kind": 1}, "x"],
+        },
+    }
+    path.write_text(json.dumps(line) + "\n", encoding="utf-8")
+    answer = read_messages(path)[0].answer
+    assert answer is not None
+    assert [(s.title, s.url) for s in answer.sources] == [
+        ("", "https://ok.example/"),
+        ("", "https://ok2.example/"),
+    ]
+    assert answer.lookups == (Lookup("web", "Searched"),)

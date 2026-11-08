@@ -16,7 +16,7 @@ from wow_coach.advice.questions import open_questions
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.app_settings import AppSettings, settings_to_dict
 from wow_coach.characters import pick_character
-from wow_coach.engine.conversation import ChatMessage
+from wow_coach.engine.conversation import ChatMessage, answer_to_dict
 from wow_coach.errors import CoachDataMissing, WowCoachError
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
 from wow_coach.usage import DAY_SECONDS, HOUR_SECONDS
@@ -78,14 +78,7 @@ def message_to_json(message: ChatMessage) -> dict[str, object]:
         "source": message.source,
         "provider": message.provider,
         "model": message.model,
-        "answer": None
-        if answer is None
-        else {
-            "title": answer.title,
-            "steps": list(answer.steps),
-            "text": answer.text,
-            "warnings": list(answer.warnings),
-        },
+        "answer": None if answer is None else answer_to_dict(answer),
     }
 
 
