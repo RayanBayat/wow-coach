@@ -372,7 +372,7 @@ ChatGPT plan. The pieces (the plan, the rules and the reasons: `docs/plans/coach
 |---|---|---|
 | Sign-in | `ai/chatgpt_signin.py`, `keychain.py` | Sign in with ChatGPT: OAuth with PKCE, a one-shot loopback server on 127.0.0.1:1455, the refresh token in the system keychain (never a file), a refresh lock file, revoke on sign-out. Details and what a real sign-in showed: `docs/plans/chatgpt-signin-notes.md` |
 | The plan | `ai/chatgpt_plan.py`, `usage.py` | The Responses API with the plan token (`store: false`, streamed, JSON schema answers). Every attempt is counted in `usage.jsonl` before it is sent (only counted: wow-coach sets no limit of its own, the plan's own limit applies) |
-| The engine | `engine/` | The prompt (coaching rules from the skill, then fenced data blocks: status, history, journal, player notes, conversation, question; about 12 000 tokens at most). The notes are sent section by section, most useful first, and sections about the player's computer never (`engine/notes_digest.py`). Other players' names are replaced with "a player". The answer is JSON (title, steps, text, warnings), written to the Coach panel's file. The conversation is kept per character |
+| The engine | `engine/` | The prompt (coaching rules from the skill, then fenced data blocks: status, history, journal, player notes, conversation, question; about 12 000 tokens at most). The notes are sent section by section, most useful first, and sections about the player's computer never (`engine/notes_digest.py`). Other players' names are replaced with "a player". The answer is JSON (title, steps, text, warnings), written to the Coach panel's file. The conversation is one shared chat history per character, for any AI (see "The data folder: shared storage") |
 | Putting it together | `companion.py` | One builder for the CLI and the window: the same keychain entry, usage log and refresh lock. `LiveCoach` reads `settings.json` before every answer |
 | Settings | `app_settings.py` | `settings.json` in the data folder, no secrets. Every value is checked; a damaged file gives the defaults |
 | When to speak | `triggers/` | Two saves give events (death, level-up, quest ready, bags...). The player's rules per event (off, notify, coach), quiet hours, quiet in instances, a cooldown, a timer, and an optional triage step with the smallest plan model. One save never costs more than one unasked AI call |
@@ -434,6 +434,16 @@ limits and alerts work exactly as above. There is no web server in the desktop a
 | Shell | `desktop/tray.py`, `desktop/single_instance.py` | Closing hides to the tray (or quits without one). A per-user local socket keeps one copy running; a second start asks the first to show its window |
 | Setup | `desktop/setup_checks.py`, `desktop/shortcuts.py` | The same addon install code as `wow-coach setup`. App-menu and log-in shortcuts (`.desktop` files on Linux, `.lnk` through PowerShell with paths only in environment variables on Windows). A shortcut is never written when the program lives in a temporary uv cache |
 
+**The chat.** The Coach page draws the character's chat history (`conversations/<key>.jsonl`,
+the newest 200 messages that `AppCore.state()` sends as `conversation`), oldest at the top. An
+answer with a structured `answer` keeps the parchment layout (title, numbered steps, warnings).
+A plain-text reply (from the Claude coach) is a parchment bubble with the text, folded after 700
+characters behind "Show more". Messages are tagged "from the game", "from your Claude coach" or
+"from another app". Every message is drawn once: by `id`, and by answer time and title for an
+answer that arrived both as a live event and as a stored message. Answers that only the game's
+answer file has are placed among the messages by time. If older chats arrive later (the
+importer finished after the first draw), the chat is drawn again in time order.
+
 **Refreshing the game data.** Only the game can save the character, and only at a reload or a
 logout. An outside program pressing keys in the game would break Blizzard's rules, so the app
 never does. The addon has a "Save for the coach" key binding (the same as `/coach`); the
@@ -448,6 +458,96 @@ questions or status. Showing answers inside the game without a reload (loading p
 
 **Safety:** AI and game text are shown as plain text only (never rich text, Markdown or
 links). The only links opened are fixed ones in the code, plus OpenAI's sign-in page.
+
+## The data folder: shared storage
+
+wow-coach keeps everything it remembers in plain files in one folder, the **data folder**
+(`~/.local/share/wow-coach` on Linux, `~/Library/Application Support/wow-coach` on macOS,
+`%LOCALAPPDATA%\wow-coach` on Windows, or the folder in `WOW_COACH_DATA_DIR`). The files are
+plain JSON, JSON Lines or Markdown on purpose: any AI provider added later (Gemini, the
+Claude API...) and any other tool can read and write the same files, so a change of AI never
+loses what the coach knows. Readers must ignore fields they don't know, treat a damaged file
+as empty, and write by saving a temp file and renaming it over the old one. Files that two
+programs may change are locked with `<file>.lock` (`filelock.py`).
+
+| File | Format | What it holds |
+|---|---|---|
+| `settings.json` | JSON object | The choices made in the app (`app_settings.py`): `model`, `answer_questions_from_game`, `notify`, `share_other_player_names`, `send_coach_notes`, `use_claude_chats`, `triggers` (the speak-up rules). Missing or wrong values mean the defaults |
+| `config.json` | JSON object | `wow_dir`: the game folder saved by `wow-coach setup` (the `WOW_COACH_CONFIG_FILE` variable points to another file) |
+| `coach-notes.md` | Markdown | The player notes (how the player likes to be coached). The `WOW_COACH_NOTES_FILE` variable points to another file |
+| `characters/<Name-Realm>.md` | Markdown | The coach's journal of one character: goals, plans, decisions |
+| `conversations/<Name-Realm>.jsonl` | JSON Lines, format v1 below | The chat history of one character, from every AI and every place |
+| `import-state.json` | JSON object | How far each Claude Code transcript was read: `{"v": 1, "claude-code": {"<project>/<session>.jsonl": {"offset": bytes, "coach": true, "character": "Name"}}}` |
+| `answered-questions.json` | JSON object | `{"Name-Realm": ["question id", ...]}`: game questions already answered, so none is answered (and paid for) twice |
+| `hidden-names-v2.json` | JSON object | `{"Name-Realm": ["name", ...]}`: other players' names seen in earlier saves, kept hidden |
+| `triggers-state.json` | JSON object | When the coach last spoke up by itself: `{"last_coach_at": {"Name-Realm": unix time}, "last_timer_at": unix time}` |
+| `usage.jsonl` | JSON Lines | One line per AI call: `{"at": ISO time, "model", "input_tokens", "output_tokens"}` and `"tokens_only": true` for numbers that belong to an earlier counted call. No text |
+| `welcome-seen.flag` | Text | Exists once the welcome message was dismissed |
+| `instance.lock` | Lock file | Held by the running desktop app, so only one copy runs |
+| `chatgpt-refresh.lock` | Lock file | Held while a ChatGPT sign-in renewal runs, shared by the app and the command line |
+| `*.lock`, `.*.part` | Temporary | A lock, or a file being written; both disappear by themselves (a lock older than 30 s counts as left behind by a crash) |
+
+The ChatGPT sign-in is not in this folder: it lives in the system password store.
+
+### The chat history (`conversations/<Name-Realm>.jsonl`, format v1)
+
+One message per line, oldest first:
+
+```json
+{"v": 1, "id": "app:3f2a9c0e...", "at": "2026-11-07T22:14:07.767Z", "role": "assistant",
+ "content": "Next steps. Go to Brill; Train spells. You are level 7.",
+ "source": "game", "provider": "chatgpt", "model": "gpt-...",
+ "answer": {"title": "Next steps", "steps": ["Go to Brill", "Train spells"],
+            "text": "You are level 7.", "warnings": []}}
+```
+
+| Field | Meaning |
+|---|---|
+| `v` | The format version, `1` |
+| `id` | Unique and stable. The same message is never stored twice (`app:<random>`, `game:<question id>` for a question typed in the game, `claude-code:<line uuid>`, `outside:<hash>`) |
+| `at` | ISO 8601 time in UTC. The file is kept in time order |
+| `role` | `"user"` (the player) or `"assistant"` (a coach) |
+| `content` | The message as plain text, always present. This is what any AI is given as the conversation, so it is the provider-neutral part. For a structured answer it is `title. step; step. text` |
+| `source` | Where it happened: `"app"` (the window or `wow-coach ask`), `"game"` (the game's Coach panel), `"claude-code"` (imported from the player's Claude Code coach), `"outside"` (an answer another app wrote into `Advice.lua`) |
+| `provider` | Who answered: `"chatgpt"`, `"claude-code"`, or a short id of a future provider; `null` for the player |
+| `model` | The model id the provider reported, or `null` |
+| `answer` | The structured coach answer (`title`, `steps`, `text`, `warnings`), only for display; `null` otherwise |
+
+Rules for every reader and writer:
+
+- A line from an older wow-coach has only `role` and `content`. It reads with the defaults
+  `source: "app"` and no provider, model or answer. Unknown fields are ignored; a damaged line
+  is skipped and disappears at the next write.
+- Append by reading the file, adding the messages whose `id` is new, sorting by `at`, keeping
+  the newest 2 000 messages (and at most about 6 MB), and writing the whole file in one step
+  while holding the lock. `engine/conversation.py` does this (`ChatMessage`, `read_messages`,
+  `append_messages`).
+- A message keeps at most 6 000 characters of `content`.
+- The coach's prompt takes the newest messages from every source that fit its size cap and
+  names the speaker: `Player:`, `Coach:`, `Coach (Claude Code):`, `Coach (another app):`.
+  Other players' names are hidden there like everywhere else.
+
+### Importing the Claude Code coach chats
+
+`importers/claude_code.py` copies what the player said to their Claude coach
+(`claude --agent wow-coach`) into the chat history. Claude Code writes every session as
+`<config dir>/projects/<project>/<session>.jsonl` (`~/.claude`, or `CLAUDE_CONFIG_DIR`). The
+format is Claude Code's own and not documented, so the importer trusts nothing:
+
+- A session counts only if it has a line `{"type": "agent-setting", "agentSetting": "wow-coach"}`.
+- From `user` lines it takes text the player typed (a string, or text blocks) and skips
+  `isMeta` and `isSidechain` lines, tool results, notifications from other agents, and wrappers
+  such as `<command-...>`, `<local-command...>`, `<system-reminder>` and interruption marks.
+- From `assistant` lines it takes the text blocks only (never thinking or tool calls) and
+  joins the blocks of one reply (they share `message.id`). A reply that may still be growing is
+  kept for the next pass, unless Claude Code wrote its `turn_duration` end-of-turn line.
+- The character comes from the session's tool calls (a tool name containing `wow-coach` with an
+  input `character`), matched with `pick_character`; otherwise the most recently saved
+  character.
+- Each pass reads only new bytes (`import-state.json`) and ids are `claude-code:<line uuid>`,
+  so importing is incremental and repeating it changes nothing. The desktop app runs it once at
+  the start and then every 60 seconds in the watcher thread, unless the player turned off
+  "Use my Claude coach chats" (`use_claude_chats`).
 
 ## Logging out
 

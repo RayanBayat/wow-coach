@@ -55,6 +55,13 @@ itself, while you play. When you close the window, the coach keeps running next 
 - **Ask:** type in the box at the bottom and press Enter (Shift+Enter starts a new line), or
   click a quick button: **What next?**, **Check my gear**, **Spells to train**, **Plan my
   session**, **Why did I die?**, **Make gold**, **Explain a word**.
+- **Your whole history:** the chat shows everything you and your coaches said about this
+  character: what you asked in the app and in the game, the answers, and your chats with your
+  Claude coach (`claude --agent wow-coach`), which WoW Coach reads from Claude Code's own
+  session files every minute. Each message says where it came from ("from the game", "from your
+  Claude coach", "from another app"). Long replies fold behind **Show more**. WoW Coach's own
+  coach reads the recent messages too, so it knows what you already talked about. Don't want
+  that? Turn off **Use my Claude coach chats** in Settings.
 - **Game data: 12 min old:** the top of the page shows how fresh the coach's view of your
   character is. The game only hands your character to other programs when it saves: when you
   log out, type `/reload`, or press your **Save for the coach** key.

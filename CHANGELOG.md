@@ -8,6 +8,15 @@ All notable changes to this project are written here. The format follows
 
 ### Added
 
+- **One chat history that any AI can use, and your Claude coach chats in the app.** WoW Coach
+  keeps one chat file per character in a standard format (JSON Lines, documented in
+  [the design notes](docs/design.md#the-data-folder-shared-storage)), so a new AI (Gemini, the
+  Claude API...) can read and continue the same conversation. The app imports your
+  `claude --agent wow-coach` chats from Claude Code's own session files (read only, every
+  minute), shows the full history in the Coach page (tagged "from the game", "from your Claude
+  coach", "from another app"), and gives the recent messages to the coach so it knows what you
+  already talked about. Other players' names are still hidden. Turn it off with **Use my Claude
+  coach chats** in Settings ([privacy](docs/privacy.md)).
 - **The WoW Coach app** (`wow-coach app`): your coach in its own window instead of a browser
   page ([guide](docs/desktop-app.md)). Install it with the `desktop` extra (Qt for Python).
   - A chat with your coach, and quick buttons: What next?, Check my gear, Spells to train,
