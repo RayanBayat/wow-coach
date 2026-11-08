@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TextIO
 
-from wow_coach.advice.contract import ADVICE_ADDON_NAME
+from wow_coach.advice.paths import advice_addon_for
 from wow_coach.advice.writer import install_advice_addon, interface_from_herobridge
 from wow_coach.assets import AGENT_PATH, SKILL_PATH, notebook_template, read_asset
 from wow_coach.check import run_check
@@ -280,7 +280,7 @@ def create_advice_folder(addons: Path) -> bool:
         OSError: If the folder cannot be written.
         ValueError: If the addon's Interface number is not valid.
     """
-    existed = (addons / ADVICE_ADDON_NAME).is_dir()
+    existed = (addons / advice_addon_for(addons).folder_name).is_dir()
     install_advice_addon(addons, interface=interface_from_herobridge(addons))
     return not existed
 
@@ -289,7 +289,7 @@ def _setup_advice_folder(game: Path, say: Say) -> bool:
     """Create or refresh HeroBridge_Advice, the folder where the coach's answers for the
     in-game Coach panel go (a tiny data-only addon that wow-coach writes, see advice/)."""
     addons = game / "Interface" / "AddOns"
-    folder = addons / ADVICE_ADDON_NAME
+    folder = addons / advice_addon_for(addons).folder_name
     existed = folder.is_dir()
     try:
         create_advice_folder(addons)

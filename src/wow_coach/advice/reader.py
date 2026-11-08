@@ -10,6 +10,7 @@ from pathlib import Path
 from wow_coach.advice.contract import (
     ADVICE_FORMAT_VERSION,
     ADVICE_GLOBAL,
+    LEGACY_ADVICE_GLOBAL,
     MAX_FILE_BYTES,
     AdviceAnswer,
     AdviceFile,
@@ -34,7 +35,8 @@ def parse_advice_text(text: str) -> AdviceFile | None:
         variables = parse_saved_variables(text)
     except WowCoachError, RecursionError:
         return None
-    table = variables.get(ADVICE_GLOBAL)
+    # A file written for the old CoachLink_Advice addon uses the old global; same layout.
+    table = variables.get(ADVICE_GLOBAL) or variables.get(LEGACY_ADVICE_GLOBAL)
     if not isinstance(table, dict) or table.get("formatVersion") != ADVICE_FORMAT_VERSION:
         return None
     written_at = _read_int(table.get("writtenAt"))

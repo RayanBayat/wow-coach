@@ -71,7 +71,7 @@ def load_characters(path: Path) -> dict[str, Character]:
     if sibling is not None:
         try:
             other = _load_one_file(sibling)
-        except (WowCoachError, OSError):
+        except WowCoachError, OSError:
             return characters  # a damaged second file must not hide the one that works
         characters = _newer_per_character(characters, other, prefer_first_on_tie=_is_new_name(path))
     return characters
@@ -108,9 +108,11 @@ def _newer_per_character(
     merged = dict(second)
     for key, mine in first.items():
         theirs = second.get(key)
-        if theirs is None or _saved_at(mine) > _saved_at(theirs):
-            merged[key] = mine
-        elif _saved_at(mine) == _saved_at(theirs) and prefer_first_on_tie:
+        if (
+            theirs is None
+            or _saved_at(mine) > _saved_at(theirs)
+            or (_saved_at(mine) == _saved_at(theirs) and prefer_first_on_tie)
+        ):
             merged[key] = mine
     return merged
 

@@ -180,7 +180,9 @@ def test_both_files_use_the_newer_save_for_each_character(tmp_path: Path) -> Non
 def test_a_tie_prefers_the_herobridge_file(tmp_path: Path) -> None:
     old = make_file(tmp_path, "A", "CoachLink.lua", character_file("CoachLinkDB", 5))
     new = make_file(tmp_path, "A", "HeroBridge.lua", character_file("HeroBridgeDB", 5))
-    new.write_text(new.read_text().replace('["savedAt"] = 5,', '["savedAt"] = 5,\n["name"] = "New",'))
+    new.write_text(
+        new.read_text().replace('["savedAt"] = 5,', '["savedAt"] = 5,\n["name"] = "New",')
+    )
     for path in (old, new):
         assert load_characters(path)["Testchar-Testrealm"].snapshot["name"] == "New"
 

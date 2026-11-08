@@ -13,7 +13,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Final
 
-from wow_coach.advice.contract import ADVICE_ADDON_NAME
+from wow_coach.advice.paths import advice_addon_for
 from wow_coach.config import save_wow_dir
 from wow_coach.errors import WowCoachError
 from wow_coach.setup import (
@@ -119,7 +119,7 @@ def check_addon(game_dir: Path, app_version: str) -> tuple[Check, str | None, bo
 
 def check_answers_folder(game_dir: Path) -> Check:
     """Does the folder for the coach's answers (``HeroBridge_Advice``) exist?"""
-    folder = addons_folder(game_dir) / ADVICE_ADDON_NAME
+    folder = addons_folder(game_dir) / advice_addon_for(addons_folder(game_dir)).folder_name
     if folder.is_dir():
         return Check(Status.OK, "The answers folder is ready.")
     return Check(

@@ -2,7 +2,9 @@
 
 Safety rules (tested):
 
-* Everything is written inside ``<AddOns>/HeroBridge_Advice/`` and nowhere else.
+* Everything is written inside ``<AddOns>/HeroBridge_Advice/`` and nowhere else. (Only
+  when just the old CoachLink addon is installed, the folder is ``CoachLink_Advice``: see
+  ``advice_addon_for``.)
 * That folder and the files in it must not be symbolic links (or Windows junctions), so a
   link can never send our write somewhere else. ``<AddOns>`` itself may hold linked addons.
 * ``Advice.lua`` is replaced atomically: the new text goes to a temporary file in the same
@@ -20,12 +22,8 @@ import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
-from wow_coach.advice.contract import (
-    ADVICE_ADDON_NAME,
-    ADVICE_FILE_NAME,
-    ADVICE_TOC_NAME,
-    AdviceFile,
-)
+from wow_coach.advice.contract import ADVICE_FILE_NAME, AdviceFile
+from wow_coach.advice.paths import AdviceAddon, advice_addon_for
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.advice.safefile import read_plain_text
 from wow_coach.advice.serialize import advice_to_lua
@@ -53,22 +51,27 @@ class UnsafeAdvicePath(WowCoachError):  # noqa: N818
 
 
 def interface_from_herobridge(addons_dir: Path) -> str:
-    """Read ``## Interface:`` from ``HeroBridge.toc`` so our .toc is never "out of date"."""
+    """Read ``## Interface:`` from the addon's .toc so our .toc is never "out of date".
+
+    Looks at HeroBridge first, then at the old CoachLink (for players who have not switched).
+    """
     text = read_plain_text(addons_dir / "HeroBridge" / "HeroBridge.toc", MAX_TOC_BYTES)
+    if text is None:
+        text = read_plain_text(addons_dir / "CoachLink" / "CoachLink.toc", MAX_TOC_BYTES)
     match = None if text is None else _INTERFACE_LINE.search(text)
     value = match.group(1).strip() if match else ""
     return value if _INTERFACE_OK.fullmatch(value) else DEFAULT_INTERFACE
 
 
-def _toc_text(interface: str) -> str:
+def _toc_text(interface: str, addon: AdviceAddon) -> str:
     try:
         version = importlib.metadata.version("wow-coach")
     except importlib.metadata.PackageNotFoundError:
         version = "unknown"
     return (
         f"## Interface: {interface}\n"
-        "## Title: HeroBridge Advice\n"
-        "## Notes: Answers from the wow-coach program for the HeroBridge Coach panel. "
+        f"## Title: {addon.title}\n"
+        f"## Notes: Answers from the wow-coach program for the Coach panel. "
         "Data only, no code.\n"
         f"## Version: {version}\n"
         "\n"
@@ -88,7 +91,7 @@ def _safe_folder(addons_dir: Path) -> Path:
     """Return the data addon's folder, making it if needed, after the safety checks."""
     if not addons_dir.is_dir():
         raise UnsafeAdvicePath(f"The AddOns folder does not exist: {addons_dir}")
-    folder = addons_dir / ADVICE_ADDON_NAME
+    folder = addons_dir / advice_addon_for(addons_dir).folder_name
     _refuse_link(folder)
     if folder.exists() and not folder.is_dir():
         raise UnsafeAdvicePath(f"{folder} is not a folder.")
@@ -105,7 +108,7 @@ def _safe_file(folder: Path, name: str) -> Path:
     if path.exists() and not path.is_file():
         raise UnsafeAdvicePath(f"{path} is not a plain file.")
     if path.resolve().parent != folder.resolve():
-        raise UnsafeAdvicePath(f"{path} leaves the {ADVICE_ADDON_NAME} folder.")
+        raise UnsafeAdvicePath(f"{path} leaves the {folder.name} folder.")
     return path
 
 
@@ -191,6 +194,8 @@ def _locked(folder: Path) -> Iterator[None]:
 def install_advice_addon(addons_dir: Path, *, interface: str) -> Path:
     """Create or refresh ``HeroBridge_Advice/HeroBridge_Advice.toc``; return the folder.
 
+    (``CoachLink_Advice`` instead, when only the old CoachLink addon is installed.)
+
     The .toc has no ``SavedVariables`` line: this addon is data only.
 
     Raises:
@@ -200,8 +205,8 @@ def install_advice_addon(addons_dir: Path, *, interface: str) -> Path:
     if not _INTERFACE_OK.fullmatch(interface):
         raise ValueError(f"Not a valid Interface number: {interface!r}")
     folder = _safe_folder(addons_dir)
-    toc = _safe_file(folder, ADVICE_TOC_NAME)
-    text = _toc_text(interface)
+    toc = _safe_file(folder, f"{folder.name}.toc")
+    text = _toc_text(interface, advice_addon_for(addons_dir))
     if read_plain_text(toc, MAX_TOC_BYTES) != text:
         _write_atomically(toc, text)
     return folder
@@ -228,7 +233,7 @@ def write_advice(addons_dir: Path, advice: AdviceFile, *, interface: str) -> Pat
 
     The text is built and checked first, so a refused or too-large advice changes nothing.
     """
-    text = advice_to_lua(advice)
+    text = advice_to_lua(advice, advice_addon_for(addons_dir).global_name)
     folder = install_advice_addon(addons_dir, interface=interface)
     return _write_checked(folder, text)
 
@@ -248,5 +253,5 @@ def update_advice(
     folder = install_advice_addon(addons_dir, interface=interface)
     with _locked(folder):
         current = read_advice_file(folder / ADVICE_FILE_NAME) or AdviceFile(written_at=now)
-        text = advice_to_lua(change(current))
+        text = advice_to_lua(change(current), advice_addon_for(addons_dir).global_name)
         return _write_checked(folder, text)

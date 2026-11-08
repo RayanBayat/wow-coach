@@ -13,14 +13,13 @@ from pathlib import Path
 from typing import Final
 
 from wow_coach.advice.contract import (
-    ADVICE_ADDON_NAME,
-    ADVICE_FILE_NAME,
     AdviceAnswer,
     AdviceFile,
     Question,
 )
 from wow_coach.advice.limits import limit_answer
 from wow_coach.advice.merge import add_answer
+from wow_coach.advice.paths import advice_addon_for, advice_file_path
 from wow_coach.advice.questions import open_questions
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.advice.writer import interface_from_herobridge, update_advice
@@ -137,7 +136,7 @@ class ChatCoach:
     # ---- steps ---------------------------------------------------------------------
 
     def _advice_path(self) -> Path:
-        return self._wow_dir / "Interface" / "AddOns" / ADVICE_ADDON_NAME / ADVICE_FILE_NAME
+        return advice_file_path(self._wow_dir)
 
     def _load_character(self, wanted: str | None) -> Character:
         """Read the save and pick the character. Raises a plain ``WowCoachError`` if none."""
@@ -277,7 +276,7 @@ class ChatCoach:
     def _write(self, found: Character, answer: AdviceAnswer) -> tuple[bool, str]:
         """Put the answer in Advice.lua. Returns (written, a plain note for the player)."""
         addons_dir = self._wow_dir / "Interface" / "AddOns"
-        first_time = not (addons_dir / ADVICE_ADDON_NAME).exists()
+        first_time = not (addons_dir / advice_addon_for(addons_dir).folder_name).exists()
 
         def change(current: AdviceFile) -> AdviceFile:
             return add_answer(

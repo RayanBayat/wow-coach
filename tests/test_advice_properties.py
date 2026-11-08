@@ -5,6 +5,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from wow_coach.advice.contract import (
+    ADVICE_GLOBAL,
     MAX_FILE_BYTES,
     AdviceAnswer,
     AdviceFile,
@@ -73,7 +74,7 @@ def test_write_then_read_gives_the_same_advice(advice: AdviceFile) -> None:
     expected = limit_advice(advice)
     text = advice_to_lua(advice)
     assert len(text.encode("utf-8")) <= MAX_FILE_BYTES
-    full_size = len(_render_file(advice_data(expected)).encode("utf-8"))
+    full_size = len(_render_file(advice_data(expected), ADVICE_GLOBAL).encode("utf-8"))
     if full_size <= MAX_FILE_BYTES:
         assert parse_advice_text(text) == expected  # nothing had to be dropped
     else:

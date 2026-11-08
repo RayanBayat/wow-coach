@@ -21,9 +21,12 @@ from typing import Final
 # The data-only addon wow-coach writes, and what is inside it.
 ADVICE_ADDON_NAME: Final = "HeroBridge_Advice"
 ADVICE_FILE_NAME: Final = "Advice.lua"
-ADVICE_TOC_NAME: Final = f"{ADVICE_ADDON_NAME}.toc"
 ADVICE_GLOBAL: Final = "HeroBridgeAdvice"  # the one global variable Advice.lua sets
 ADVICE_FORMAT_VERSION: Final = 1
+# Before 0.11.0 the addon was called CoachLink and the answers addon CoachLink_Advice. If only
+# the old addon is installed, we keep writing under the old names so it still shows answers.
+LEGACY_ADVICE_ADDON_NAME: Final = "CoachLink_Advice"
+LEGACY_ADVICE_GLOBAL: Final = "CoachLinkAdvice"
 
 # Limits. The addon enforces the question limits; wow-coach enforces the answer limits
 # (it cuts text that is too long and keeps only the newest answers).

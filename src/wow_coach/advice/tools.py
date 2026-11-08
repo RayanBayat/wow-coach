@@ -9,7 +9,6 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from wow_coach.advice.contract import (
-    ADVICE_ADDON_NAME,
     MAX_SOURCE_CHARS,
     MAX_TITLE_CHARS,
     AdviceAnswer,
@@ -24,6 +23,7 @@ from wow_coach.advice.limits import (
     limit_answer,
 )
 from wow_coach.advice.merge import add_answer
+from wow_coach.advice.paths import advice_addon_for
 from wow_coach.advice.questions import open_questions
 from wow_coach.advice.writer import interface_from_herobridge, update_advice
 from wow_coach.errors import WowCoachError
@@ -153,7 +153,7 @@ def _shortened_note(sent: AdviceAnswer) -> str:
 def _when_visible(folder_was_new: bool) -> str:
     if folder_was_new:
         return (
-            f"This created the {ADVICE_ADDON_NAME} folder, which the game only notices after "
+            "This created the answers folder, which the game only notices after "
             "a full restart (quit WoW and start it again, a /reload is not enough). "
             "After that, new advice appears after each /reload."
         )
@@ -210,7 +210,7 @@ def _send(
     if not is_valid_character_key(character_key):
         return "Not sent: that is not a usable character name (no '|' or control characters)."
     addons_dir = wow_dir / "Interface" / "AddOns"
-    folder_was_new = not (addons_dir / ADVICE_ADDON_NAME).exists()
+    folder_was_new = not (addons_dir / advice_addon_for(addons_dir).folder_name).exists()
     wanted_id = (
         question_id.strip() if isinstance(question_id, str) and question_id.strip() else None
     )
