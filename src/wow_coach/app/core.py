@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Protocol
 
 from wow_coach.advice.contract import AdviceAnswer
-from wow_coach.ai.base import AIError
+from wow_coach.ai.base import AIError, PlanLimitReached, Provider
 from wow_coach.app.baseline import AdviceBaseline
 from wow_coach.app.contract import Alerts, SignIn
 from wow_coach.app.events import EventBus
@@ -34,15 +34,18 @@ from wow_coach.app_settings import (
 )
 from wow_coach.engine.contract import Coach, CoachReply
 from wow_coach.errors import WowCoachError
+from wow_coach.triggers.state import STATE_FILE_NAME
 
 _log = logging.getLogger(__name__)
 
 ALERT_TITLE = "Your coach answered"
+NOTICE_TITLE = "wow-coach"
 MAX_SPOKEN_CHARS = 400
 UNEXPECTED_ERROR = (
     "Something unexpected went wrong inside wow-coach. Nothing was changed. "
     "Please try again, and if it keeps happening, report it on the wow-coach GitHub page."
 )
+WELCOME_FILE_NAME = "welcome-seen.flag"
 BUSY_MESSAGE = "The coach is still busy with another answer. Try again in a moment."
 
 
@@ -74,6 +77,9 @@ class AppCore:
         wow_dir: Path,
         usage: CallCounter,
         on_settings_changed: Callable[[AppSettings], None] | None = None,
+        triage_provider: Provider | None = None,
+        small_model: Callable[[], str | None] | None = None,
+        trigger_state_file: Path | None = None,
     ) -> None:
         """Create the core.
 
@@ -85,6 +91,9 @@ class AppCore:
             settings_file: Where ``settings.json`` is saved.
             wow_dir: The game folder.
             usage: Counts recent AI calls (``UsageLog``).
+            triage_provider: The AI used for the optional triage step (None = no triage).
+            small_model: Gives the small model's name for triage (None = no triage).
+            trigger_state_file: Where cooldowns are remembered (default: next to settings).
             on_settings_changed: Called with the new settings after each save, so objects
                 that copied a setting (such as the usage caps) can follow.
         """
@@ -102,6 +111,10 @@ class AppCore:
         self._settings_lock = threading.Lock()
         self._on_settings_changed = on_settings_changed
         self._usage = usage
+        self.triage_provider = triage_provider
+        self._welcome_file = settings_file.with_name(WELCOME_FILE_NAME)
+        self._small_model = small_model
+        self.trigger_state_file = trigger_state_file or settings_file.with_name(STATE_FILE_NAME)
         self._signin_busy = threading.Lock()
         # (character, question id) pairs already answered: a question is never answered twice.
         self._answered: set[tuple[str, str]] = set()
@@ -132,7 +145,7 @@ class AppCore:
 
     def state(self, wanted_character: str | None) -> dict[str, object]:
         """Everything the page needs to draw itself."""
-        return build_state(
+        state = build_state(
             self.game(),
             wanted=wanted_character,
             signed_in=self.signin.is_signed_in,
@@ -140,6 +153,23 @@ class AppCore:
             counter=self._usage,
             alerts_available=self.alerts_available(),
         )
+        state["welcome_pending"] = self.welcome_pending()
+        return state
+
+    # ---- the welcome message (shown once, after the first sign-in) -----------------------
+
+    def welcome_pending(self) -> bool:
+        """True when the player is signed in and has not yet pressed "Got it".
+
+        The "seen" flag is a tiny file next to settings.json (in wow-coach's data folder),
+        so it survives a different browser or a cleared browser cache.
+        """
+        return self.signin.is_signed_in and not self._welcome_file.exists()
+
+    def dismiss_welcome(self) -> None:
+        """Remember that the welcome message was read."""
+        self._welcome_file.parent.mkdir(parents=True, exist_ok=True)
+        self._welcome_file.write_text("seen\n", encoding="utf-8")
 
     def alerts_available(self) -> dict[str, bool]:
         """What this computer can do outside the window (notify, read aloud)."""
@@ -214,6 +244,8 @@ class AppCore:
         """Run ``work``; any failure becomes an ``error`` event with a plain sentence."""
         try:
             work()
+        except PlanLimitReached as error:
+            self.publish_error(str(error), kind="limit")
         except AIError as error:
             self.publish_error(str(error))
         except WowCoachError as error:
@@ -224,9 +256,13 @@ class AppCore:
 
     # ---- events and alerts ------------------------------------------------------------
 
-    def publish_error(self, message: str) -> None:
-        """Tell every open window about a problem, in one plain sentence."""
-        self.bus.publish("error", {"message": message})
+    def publish_error(self, message: str, kind: str = "error") -> None:
+        """Tell every open window about a problem, in one plain sentence.
+
+        ``kind`` is "limit" when the plan's (or the player's own) usage limit was reached:
+        the page then offers "Manage usage" as the main action.
+        """
+        self.bus.publish("error", {"message": message, "kind": kind})
 
     def publish_reply(self, reply: CoachReply) -> None:
         """Send a finished answer to the window (and remember its question as answered)."""
@@ -262,6 +298,15 @@ class AppCore:
                 "question",
                 {"character": character_key, "questions": [question_to_json(q) for q in found]},
             )
+
+    def small_model(self) -> str | None:
+        """The small model's name for triage, or None when unknown."""
+        return None if self._small_model is None else self._small_model()
+
+    def notify_text(self, text: str) -> None:
+        """A desktop notification for something the coach noticed (if notifications are on)."""
+        if self.settings.notify:
+            self._safely(lambda: self.alerts.notify(NOTICE_TITLE, text))
 
     def alert(self, answer: AdviceAnswer, *, allow_speak: bool) -> None:
         """Notify (and maybe read aloud) according to the settings. Never raises."""

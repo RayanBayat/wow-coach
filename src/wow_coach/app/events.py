@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Final
 
 # The only event names the page understands.
-EVENT_KINDS: Final = ("answer", "question", "save", "error", "signin")
+EVENT_KINDS: Final = ("answer", "question", "save", "error", "signin", "decision")
 MAILBOX_SIZE: Final = 200
 
 

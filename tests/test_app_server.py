@@ -246,7 +246,7 @@ def test_an_ai_error_becomes_an_error_event_with_its_sentence(rig: Rig, client: 
     mailbox = rig.core.bus.subscribe()
     client.json("POST", "/api/ask", {"question": "hi"})
     data = wait_for_event(mailbox, "error")
-    assert data == {"message": "Your plan is used up. Try again in 5 minutes."}
+    assert data == {"message": "Your plan is used up. Try again in 5 minutes.", "kind": "limit"}
 
 
 def test_a_surprise_failure_never_shows_a_traceback(rig: Rig, client: Client) -> None:
@@ -347,3 +347,31 @@ def test_events_stream_sends_heartbeats_and_events(
     assert response.fp.readline() == b"event: save\n"  # type: ignore[union-attr]
     assert json.loads(response.fp.readline().removeprefix(b"data: ")) == {"saved_at": 5}  # type: ignore[union-attr]
     connection.close()
+
+
+def test_a_usage_limit_error_is_marked_as_a_limit(rig: Rig, client: Client) -> None:
+    rig.coach.error = PlanLimitReached("Your ChatGPT plan's usage limit is reached.")
+    mailbox = rig.core.bus.subscribe()
+    client.json("POST", "/api/ask", {"question": "hi"})
+    data = wait_for_event(mailbox, "error")
+    assert data["kind"] == "limit" and "ChatGPT" in str(data["message"])
+
+
+def test_other_errors_are_not_marked_as_limits(rig: Rig, client: Client) -> None:
+    rig.coach.error = NotSignedIn("You are not signed in with ChatGPT yet.")
+    mailbox = rig.core.bus.subscribe()
+    client.json("POST", "/api/ask", {"question": "hi"})
+    assert wait_for_event(mailbox, "error")["kind"] == "error"
+
+
+def test_the_welcome_message_shows_once_after_sign_in(rig: Rig, client: Client) -> None:
+    assert client.json("GET", "/api/state")[1]["welcome_pending"] is True
+    assert client.json("POST", "/api/welcome-seen")[0] == 200
+    assert client.json("GET", "/api/state")[1]["welcome_pending"] is False
+    rig.signin.signed_in = False
+    assert client.json("GET", "/api/state")[1]["welcome_pending"] is False
+
+
+def test_no_welcome_message_while_signed_out(tmp_path: Path) -> None:
+    rig = make_rig(tmp_path, signed_in=False)
+    assert rig.core.state(None)["welcome_pending"] is False

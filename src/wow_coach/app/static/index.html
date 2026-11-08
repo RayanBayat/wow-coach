@@ -19,11 +19,24 @@
     </nav>
   </header>
 
-  <p id="banner" class="banner" role="status" hidden></p>
+  <div id="banner" class="banner" role="status" hidden>
+    <span id="banner-text"></span>
+    <a id="banner-link" class="button-link" href="https://chatgpt.com/settings/usage"
+       target="_blank" rel="noopener noreferrer" hidden>Manage usage</a>
+  </div>
 
   <main>
     <!-- Screen 1: the coach -->
     <section id="screen-coach" class="screen">
+      <div id="welcome" class="card" hidden>
+        <h2>You're using your ChatGPT plan</h2>
+        <p>
+          Eligible usage in this app uses your ChatGPT plan. Manage usage in your ChatGPT
+          settings.
+        </p>
+        <button type="button" id="welcome-ok" class="primary">Got it</button>
+      </div>
+
       <div class="row">
         <label for="character">Character</label>
         <select id="character"></select>
@@ -42,12 +55,28 @@
         <label for="ask-input">Ask your coach</label>
         <textarea id="ask-input" rows="3" maxlength="500"
                   placeholder="For example: where do I go to level up next?"></textarea>
+        <p id="ask-privacy" class="muted">
+          Before you sign in: wow-coach sends your character's data and questions to OpenAI,
+          using your ChatGPT plan. Nothing else leaves this computer.
+          <a href="https://github.com/RayanBayat/wow-coach/blob/main/docs/privacy.md" target="_blank" rel="noopener noreferrer">Full privacy notice</a>
+        </p>
+        <p id="plan-line" class="muted" hidden>
+          Using ChatGPT plan.
+          <a href="https://chatgpt.com/settings/usage" target="_blank"
+             rel="noopener noreferrer">Manage usage</a>
+        </p>
         <div class="row">
           <button type="submit" id="ask-button" class="primary">Ask</button>
           <button type="button" id="next-button">What next?</button>
           <span id="thinking" class="muted" hidden>The coach is thinking...</span>
         </div>
       </form>
+
+      <section id="decisions-box" class="card" hidden>
+        <h2>Recent decisions</h2>
+        <p class="muted">Why the coach did or did not speak up by itself.</p>
+        <ul id="decisions" class="plain-list"></ul>
+      </section>
 
       <article id="newest" class="card answer" hidden></article>
       <section id="older-box" hidden>
@@ -64,6 +93,10 @@
       <div class="card">
         <h2>ChatGPT</h2>
         <div id="signed-out-box">
+          <p id="signin-notice" class="notice">
+            When you sign in, wow-coach sends your character's data, your questions and the recent conversation to OpenAI, using your ChatGPT plan. Other players' names are hidden unless you allow them. Nothing else leaves this computer.
+            <a href="https://github.com/RayanBayat/wow-coach/blob/main/docs/privacy.md" target="_blank" rel="noopener noreferrer">Read the full privacy notice</a>
+          </p>
           <p>
             wow-coach uses your own ChatGPT plan to think. OpenAI shows its own sign-in page
             in your browser, and wow-coach never sees your password.
@@ -135,6 +168,41 @@
 
         <button type="submit" class="primary">Save settings</button>
         <span id="settings-saved" class="muted" hidden>Saved.</span>
+      </form>
+
+      <form id="triggers-form" class="card">
+        <h2>When should the coach speak up?</h2>
+        <p class="muted">
+          Every rule starts as "Off": the coach only answers when you ask. "Notify me" shows
+          a short note and uses nothing from your plan. "Ask the coach" gives you advice and
+          uses one call.
+        </p>
+        <div id="trigger-rules"></div>
+
+        <label for="every-minutes">Ask the coach every ... minutes (0 = never, otherwise 5 to 240)</label>
+        <input type="number" id="every-minutes" min="0" max="240">
+        <label for="cooldown">At least ... minutes between answers the coach starts by itself</label>
+        <input type="number" id="cooldown" min="0" max="240">
+        <label class="check">
+          <input type="checkbox" id="quiet-instances">
+          Stay quiet in dungeons and raids
+        </label>
+        <div class="row">
+          <label for="quiet-from">Quiet hours from</label>
+          <input type="number" id="quiet-from" min="0" max="23" placeholder="never">
+          <label for="quiet-to">to</label>
+          <input type="number" id="quiet-to" min="0" max="23" placeholder="never">
+          <span class="muted">(hour of the day, 0 to 23; leave empty for no quiet hours)</span>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="use-triage">
+          Use a small AI to decide whether an event is worth waking the coach
+        </label>
+        <label for="rules-text">In your own words: when should the coach speak up?</label>
+        <textarea id="rules-text" rows="3" maxlength="500"
+                  placeholder="For example: only if I die twice in 10 minutes"></textarea>
+        <button type="submit" class="primary">Save rules</button>
+        <span id="triggers-saved" class="muted" hidden>Saved.</span>
       </form>
     </section>
 

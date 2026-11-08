@@ -244,6 +244,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             "/api/settings": self._post_settings,
             "/api/signin": self._post_signin,
             "/api/signout": self._post_signout,
+            "/api/welcome-seen": self._post_welcome_seen,
         }
         route = routes.get(path)
         if route is None:
@@ -361,6 +362,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if not self.app.core.start_sign_in():
             return self._fail(409, "A sign-in is already open in your browser.")
         return self._json(202, {"started": True})
+
+    def _post_welcome_seen(self, body: Json) -> None:
+        del body
+        try:
+            self.app.core.dismiss_welcome()
+        except OSError:
+            return self._fail(500, "wow-coach could not remember that. It may show again.")
+        return self._json(200, {"ok": True})
 
     def _post_signout(self, body: Json) -> None:
         del body
