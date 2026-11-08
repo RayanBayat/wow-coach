@@ -40,7 +40,7 @@ WEAPON_SKILL = {
 }
 
 # The item's ``equipSlot`` (the game's INVTYPE_* text) -> the worn slots it could go in.
-# The worn names are the ones the addon saves (``GEAR_SLOTS`` in CoachLink.lua).
+# The worn names are the ones the addon saves (``GEAR_SLOTS`` in HeroBridge.lua).
 # I could not check these English texts in Blizzard's UI source (its global strings
 # file is not published there), so they come from the game's usual wording; the raw
 # ``INVTYPE_*`` names are listed too because the addon saves those when it has no text.

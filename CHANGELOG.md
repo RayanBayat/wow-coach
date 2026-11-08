@@ -6,6 +6,24 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-08
+
+### Changed
+
+- **The in-game addon CoachLink is now called HeroBridge.** It is a gateway that gives any
+  program easy access to your character (and carries answers back into the game), so "coach"
+  was too narrow. The WoW Coach app, the project and the `wow-coach` program keep their names,
+  and `/coach` still works (`/herobridge` does the same).
+  - New names: addon folder `HeroBridge`, saved file `HeroBridge.lua`, answers addon
+    `HeroBridge_Advice`, release zip `HeroBridge-<version>.zip`, key bindings under HeroBridge.
+  - **Nothing is lost.** wow-coach still reads an old `CoachLink.lua` until you switch, and keeps
+    writing answers to the old `CoachLink_Advice` while only CoachLink is installed. When both
+    saves exist, each character comes from the newer one.
+  - **To switch:** close WoW, then run `wow-coach setup` or click **Update HeroBridge** on the
+    app's Setup page. It installs HeroBridge, copies your saved characters and old answers, and
+    removes the old `CoachLink` and `CoachLink_Advice` folders (a linked developer copy is left
+    alone). It refuses while WoW is running.
+
 ## [0.10.0] - 2026-11-08
 
 WoW Coach is now a real desktop app in a game-style look: chat with your coach, quick

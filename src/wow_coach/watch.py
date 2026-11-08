@@ -1,4 +1,4 @@
-"""``wow-coach watch``: print one line each time the CoachLink addon saves.
+"""``wow-coach watch``: print one line each time the HeroBridge addon saves.
 
 An AI app can run this in the background; every printed line tells it "the player just
 typed /coach (or logged out), go read the new snapshot".
@@ -28,10 +28,17 @@ type ChangeTimes = dict[Path, int]
 
 
 def change_times(wow_dir: Path) -> ChangeTimes:
-    """Last-changed time of every account's CoachLink.lua (empty until the first save)."""
-    pattern = "WTF/Account/*/SavedVariables/CoachLink.lua"
+    """Last-changed time of every account's save file (empty until the first save).
+
+    Both names count: HeroBridge.lua, and CoachLink.lua from before 0.11.0.
+    """
+    paths = [
+        path
+        for file_name in ("HeroBridge.lua", "CoachLink.lua")
+        for path in wow_dir.glob(f"WTF/Account/*/SavedVariables/{file_name}")
+    ]
     times: ChangeTimes = {}
-    for path in wow_dir.glob(pattern):
+    for path in paths:
         try:
             times[path] = path.stat().st_mtime_ns
         except OSError:
@@ -102,4 +109,4 @@ def watch(
             continue
         sleep(SETTLE_SECONDS)
         last_seen = change_times(wow_dir)
-        _say(out, f"CoachLink saved at {clock():%H:%M:%S}: {describe_newest_snapshot(wow_dir)}")
+        _say(out, f"HeroBridge saved at {clock():%H:%M:%S}: {describe_newest_snapshot(wow_dir)}")

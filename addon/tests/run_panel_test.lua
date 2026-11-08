@@ -1,12 +1,12 @@
 --[[
-Test the Coach panel (CoachLinkPanel.lua) outside the game, with a fake WoW API.
+Test the Coach panel (HeroBridgePanel.lua) outside the game, with a fake WoW API.
 
     luajit addon/tests/run_panel_test.lua
 
 What it does:
   1. Defines a small fake game: frames that remember what the panel did to them,
      a clock, a chat log and a /reload counter.
-  2. Loads CoachLinkText.lua, CoachLink.lua and CoachLinkPanel.lua in the .toc
+  2. Loads HeroBridgeText.lua, HeroBridge.lua and HeroBridgePanel.lua in the .toc
      order, like WoW does.
   3. Opens, closes, asks, fights, resizes and feeds it broken advice files, and
      checks what the player would see.
@@ -16,9 +16,9 @@ list in the panel's report). The look of the panel can only be judged in game.
 ]]
 
 local ADDON_FILES = {
-    "addon/CoachLink/CoachLinkText.lua",
-    "addon/CoachLink/CoachLink.lua",
-    "addon/CoachLink/CoachLinkPanel.lua",
+    "addon/HeroBridge/HeroBridgeText.lua",
+    "addon/HeroBridge/HeroBridge.lua",
+    "addon/HeroBridge/HeroBridgePanel.lua",
 }
 local FAKE_NOW = 1793995200  -- a fixed time, so the output is the same every run
 local ANSWER_AT = FAKE_NOW - 5 * 60  -- an answer written 5 minutes ago
@@ -44,7 +44,7 @@ end
 -- The fake game
 -------------------------------------------------------------------------------
 
-local eventHandler   -- the OnEvent script CoachLink.lua registers (it does not use ours)
+local eventHandler   -- the OnEvent script HeroBridge.lua registers (it does not use ours)
 local panelEvents    -- the events the panel registered, name -> true
 local panelHandler   -- the panel's own OnEvent script
 local chat           -- lines printed in the chat window
@@ -125,12 +125,12 @@ local frameLook = {
 
 local function installFakeGame()
     for name in pairs(_G) do
-        if type(name) == "string" and name:find("^CoachLink") then
+        if type(name) == "string" and name:find("^HeroBridge") then
             _G[name] = nil   -- frames and functions of the previous session
         end
     end
-    CoachLinkDB = nil
-    CoachLinkAdvice = nil
+    HeroBridgeDB = nil
+    HeroBridgeAdvice = nil
     framesCreated = {}
     chat = {}
     reloads = 0
@@ -158,7 +158,7 @@ local function installFakeGame()
         if name then _G[name] = frame end
         return frame
     end
-    -- CoachLink.lua's own snapshot code is not under test here: give it a ReloadUI
+    -- HeroBridge.lua's own snapshot code is not under test here: give it a ReloadUI
     -- that only counts, and no events to save from.
     ReloadUI = function() reloads = reloads + 1 end
 end
@@ -168,14 +168,14 @@ local function loadAddon()
     local namespace = {}
     for _, file in ipairs(ADDON_FILES) do
         local chunk = assert(loadfile(file))
-        chunk("CoachLink", namespace)
+        chunk("HeroBridge", namespace)
     end
     return namespace
 end
 
--- The panel's own event frame (CoachLink.lua has another one, for the snapshot).
+-- The panel's own event frame (HeroBridge.lua has another one, for the snapshot).
 local function findPanelEventFrame()
-    return CoachLinkPanelEvents
+    return HeroBridgePanelEvents
 end
 
 -- Start a fresh game session with the panel loaded. Returns the shared table.
@@ -230,15 +230,15 @@ local function advice(overrides)
     }
 end
 
-local function panel() return CoachLinkPanel end
-local function stepsText() return CoachLinkPanelSteps.text end
-local function bodyText() return CoachLinkPanelBody.text end
-local function footerText() return CoachLinkPanelFooter.text end
+local function panel() return HeroBridgePanel end
+local function stepsText() return HeroBridgePanelSteps.text end
+local function bodyText() return HeroBridgePanelBody.text end
+local function footerText() return HeroBridgePanelFooter.text end
 
 -- Type `text` in the ask box and click the button, like the player.
 local function typeAndClick(text)
-    CoachLinkPanelAskBox:SetText(text)
-    CoachLinkPanelAskButton.scripts.OnClick(CoachLinkPanelAskButton)
+    HeroBridgePanelAskBox:SetText(text)
+    HeroBridgePanelAskButton.scripts.OnClick(HeroBridgePanelAskButton)
 end
 
 
@@ -250,7 +250,7 @@ local coach = startSession()
 check(type(coach.togglePanel) == "function", "the panel sets ns.togglePanel")
 check(panelEvents and panelEvents.PLAYER_REGEN_DISABLED and panelEvents.PLAYER_REGEN_ENABLED
     and panelEvents.PLAYER_ENTERING_WORLD, "the panel listens to combat start, combat end and login")
-check(CoachLinkPanel == nil or not CoachLinkPanel.shown, "nothing is shown before the player asks")
+check(HeroBridgePanel == nil or not HeroBridgePanel.shown, "nothing is shown before the player asks")
 
 coach.togglePanel()
 check(panel() and panel().shown == true, "toggling opens the panel")
@@ -259,11 +259,11 @@ check(panel().shown == false, "toggling again closes it")
 coach.togglePanel()
 local escapes = 0
 for _, name in ipairs(UISpecialFrames) do
-    if name == "CoachLinkPanel" then escapes = escapes + 1 end
+    if name == "HeroBridgePanel" then escapes = escapes + 1 end
 end
 check(escapes == 1, "Esc closes the panel (listed once in UISpecialFrames)")
 check(panel().resizeBounds ~= nil and panel().resizeBounds[1] > 0, "the panel has a minimum size")
-check(CoachLinkPanelResize ~= nil and CoachLinkPanelResize.scripts.OnMouseDown ~= nil,
+check(HeroBridgePanelResize ~= nil and HeroBridgePanelResize.scripts.OnMouseDown ~= nil,
     "the panel has a resize grip")
 
 local usesOnUpdate = false
@@ -272,9 +272,9 @@ for _, frame in ipairs(framesCreated) do
 end
 check(not usesOnUpdate, "no frame uses OnUpdate")
 
-CoachLinkPanelResize.scripts.OnMouseDown(CoachLinkPanelResize)
+HeroBridgePanelResize.scripts.OnMouseDown(HeroBridgePanelResize)
 check(panel().sizing == "BOTTOMRIGHT", "the grip starts resizing from the bottom right")
-CoachLinkPanelResize.scripts.OnMouseUp(CoachLinkPanelResize)
+HeroBridgePanelResize.scripts.OnMouseUp(HeroBridgePanelResize)
 check(rawget(panel(), "sizing") == nil, "letting go stops resizing")
 
 
@@ -286,7 +286,7 @@ check(has(bodyText(), "ask") and has(bodyText(), "/reload"),
     "with no advice the panel explains how to ask and that answers need a /reload")
 check(has(stepsText(), "No steps"), "with no advice there are no steps")
 
-CoachLinkAdvice = advice()
+HeroBridgeAdvice = advice()
 panel():Hide()
 coach.togglePanel()
 check(has(stepsText(), "1. Turn in Fields of Grief in Brill.")
@@ -302,14 +302,14 @@ check(has(footerText(), "based on your save from " .. os.date("%H:%M", FAKE_NOW 
     "the footer says which save the answer is based on")
 check(has(footerText(), "AI can be wrong."), "the footer warns that AI can be wrong")
 
-CoachLinkAdvice = advice({ steps = {} })
+HeroBridgeAdvice = advice({ steps = {} })
 panel():Hide()
 coach.togglePanel()
 check(has(stepsText(), "1. Plan step one"), "with no answer steps, the plan's steps are used")
 
 -- Only a plan, no answers at all.
-CoachLinkAdvice = advice()
-CoachLinkAdvice.characters["Testchar-Testrealm"].answers = nil
+HeroBridgeAdvice = advice()
+HeroBridgeAdvice.characters["Testchar-Testrealm"].answers = nil
 panel():Hide()
 coach.togglePanel()
 check(has(stepsText(), "1. Plan step one"), "a plan alone still shows its steps")
@@ -320,13 +320,13 @@ check(has(stepsText(), "1. Plan step one"), "a plan alone still shows its steps"
 -------------------------------------------------------------------------------
 
 coach = startSession()
-CoachLinkDB = { characters = { ["Testchar-Testrealm"] = { questions = {
+HeroBridgeDB = { characters = { ["Testchar-Testrealm"] = { questions = {
     { id = "9-1", text = "Where is Brill?", askedAt = FAKE_NOW - 60 },
 } } } }
 coach.togglePanel()
 check(has(bodyText(), "Waiting for your coach: Where is Brill?"), "an unanswered question shows as waiting")
 
-CoachLinkAdvice = advice({ questionId = "9-1" })
+HeroBridgeAdvice = advice({ questionId = "9-1" })
 panel():Hide()
 coach.togglePanel()
 check(not has(bodyText(), "Waiting for your coach"), "an answered question is not shown as waiting")
@@ -340,23 +340,23 @@ coach = startSession()
 coach.togglePanel()
 typeAndClick("  What next?  ")
 check(reloads == 1, "the Ask button asks the coach (and reloads the UI)")
-check(CoachLinkDB.characters["Testchar-Testrealm"].questions[1].text == "What next?",
+check(HeroBridgeDB.characters["Testchar-Testrealm"].questions[1].text == "What next?",
     "the question is saved through askCoach")
 
 reloads = 0
-CoachLinkPanelAskBox:SetText("Second question")
-CoachLinkPanelAskBox.scripts.OnEnterPressed(CoachLinkPanelAskBox)
+HeroBridgePanelAskBox:SetText("Second question")
+HeroBridgePanelAskBox.scripts.OnEnterPressed(HeroBridgePanelAskBox)
 check(reloads == 1, "Enter in the box also asks")
 
 typeAndClick("   ")
-check(reloads == 1 and has(CoachLinkPanelStatus.text, "type a question"),
+check(reloads == 1 and has(HeroBridgePanelStatus.text, "type a question"),
     "an empty question is refused and the reason is shown in the panel")
 
-CoachLinkPanelAskBox.focused = true
-CoachLinkPanelAskBox.scripts.OnEscapePressed(CoachLinkPanelAskBox)
-check(CoachLinkPanelAskBox.focused == false and panel().shown == true,
+HeroBridgePanelAskBox.focused = true
+HeroBridgePanelAskBox.scripts.OnEscapePressed(HeroBridgePanelAskBox)
+check(HeroBridgePanelAskBox.focused == false and panel().shown == true,
     "Esc in the box only clears the focus")
-check(CoachLinkPanelAskButton.text:find("Ask (saves and reloads)", 1, true) ~= nil,
+check(HeroBridgePanelAskButton.text:find("Ask (saves and reloads)", 1, true) ~= nil,
     "the button says that asking saves and reloads")
 
 
@@ -369,14 +369,14 @@ coach.togglePanel()
 inCombat = true
 fire("PLAYER_REGEN_DISABLED")
 check(panel().shown == false, "the panel hides when combat starts")
-check(CoachLinkPanelAskButton.enabled == false, "Ask is disabled in combat")
+check(HeroBridgePanelAskButton.enabled == false, "Ask is disabled in combat")
 coach.togglePanel()
 check(panel().shown == false, "the panel never opens in combat")
 check(chatHas("fight"), "the player is told why it did not open")
 inCombat = false
 fire("PLAYER_REGEN_ENABLED")
 check(panel().shown == true, "the panel comes back after the fight")
-check(CoachLinkPanelAskButton.enabled == true, "Ask works again after the fight")
+check(HeroBridgePanelAskButton.enabled == true, "Ask works again after the fight")
 
 -- A panel that was closed stays closed after a fight.
 panel():Hide()
@@ -399,7 +399,7 @@ check(panel().shown == false, "closing after a fight is remembered")
 coach.togglePanel()
 inCombat = true
 typeAndClick("Help")
-check(reloads == 0 and has(CoachLinkPanelStatus.text, "fight"), "an ask in combat is refused with a reason")
+check(reloads == 0 and has(HeroBridgePanelStatus.text, "fight"), "an ask in combat is refused with a reason")
 inCombat = false
 
 
@@ -408,58 +408,58 @@ inCombat = false
 -------------------------------------------------------------------------------
 
 coach = startSession()
-CoachLinkDB = { formatVersion = 3, characters = { ["Other-Realm"] = { keep = "me" } } }
+HeroBridgeDB = { formatVersion = 3, characters = { ["Other-Realm"] = { keep = "me" } } }
 coach.togglePanel()
 panel():ClearAllPoints()
 panel():SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", 120, 640)
 panel():SetSize(500, 420)
 panel().scripts.OnDragStop(panel())
-local saved = CoachLinkDB.settings and CoachLinkDB.settings.panel
+local saved = HeroBridgeDB.settings and HeroBridgeDB.settings.panel
 check(saved and saved.point == "TOPLEFT" and saved.x == 120 and saved.y == 640,
     "the position is saved after dragging")
-CoachLinkPanelResize.scripts.OnMouseUp(CoachLinkPanelResize)
+HeroBridgePanelResize.scripts.OnMouseUp(HeroBridgePanelResize)
 check(saved.width == 500 and saved.height == 420, "the size is saved after resizing")
 check(saved.open == true, "'open' is saved")
-check(CoachLinkDB.formatVersion == 3 and CoachLinkDB.characters["Other-Realm"].keep == "me",
+check(HeroBridgeDB.formatVersion == 3 and HeroBridgeDB.characters["Other-Realm"].keep == "me",
     "other saved keys are left alone")
 
-local before = CoachLinkPanelBody.fontSize
-CoachLinkPanelFontBigger.scripts.OnClick(CoachLinkPanelFontBigger)
-check(CoachLinkPanelBody.fontSize == before + 1 and saved.fontSize == before + 1,
+local before = HeroBridgePanelBody.fontSize
+HeroBridgePanelFontBigger.scripts.OnClick(HeroBridgePanelFontBigger)
+check(HeroBridgePanelBody.fontSize == before + 1 and saved.fontSize == before + 1,
     "A+ makes the text bigger and saves it")
-CoachLinkPanelFontSmaller.scripts.OnClick(CoachLinkPanelFontSmaller)
-CoachLinkPanelFontSmaller.scripts.OnClick(CoachLinkPanelFontSmaller)
-check(CoachLinkPanelBody.fontSize == before - 1, "A- makes the text smaller")
-for _ = 1, 40 do CoachLinkPanelFontSmaller.scripts.OnClick(CoachLinkPanelFontSmaller) end
-check(CoachLinkPanelBody.fontSize >= 8, "the text cannot get unreadably small")
-for _ = 1, 60 do CoachLinkPanelFontBigger.scripts.OnClick(CoachLinkPanelFontBigger) end
-check(CoachLinkPanelBody.fontSize <= 24, "the text cannot get absurdly big")
-CoachLinkPanelFontSmaller.scripts.OnClick(CoachLinkPanelFontSmaller)
+HeroBridgePanelFontSmaller.scripts.OnClick(HeroBridgePanelFontSmaller)
+HeroBridgePanelFontSmaller.scripts.OnClick(HeroBridgePanelFontSmaller)
+check(HeroBridgePanelBody.fontSize == before - 1, "A- makes the text smaller")
+for _ = 1, 40 do HeroBridgePanelFontSmaller.scripts.OnClick(HeroBridgePanelFontSmaller) end
+check(HeroBridgePanelBody.fontSize >= 8, "the text cannot get unreadably small")
+for _ = 1, 60 do HeroBridgePanelFontBigger.scripts.OnClick(HeroBridgePanelFontBigger) end
+check(HeroBridgePanelBody.fontSize <= 24, "the text cannot get absurdly big")
+HeroBridgePanelFontSmaller.scripts.OnClick(HeroBridgePanelFontSmaller)
 local savedFont = saved.fontSize
 
 -- A new session (a /reload): the panel comes back where it was, because it was open.
-local keptDB = CoachLinkDB
+local keptDB = HeroBridgeDB
 coach = startSession()
-CoachLinkDB = keptDB
+HeroBridgeDB = keptDB
 fire("PLAYER_ENTERING_WORLD", false, true)
 check(panel() and panel().shown == true, "a panel that was open reopens after a reload")
 local p = panel().points[1]
 check(p and p[1] == "TOPLEFT" and p[4] == 120 and p[5] == 640, "the saved position is restored")
 check(panel().width == 500 and panel().height == 420, "the saved size is restored")
-check(CoachLinkPanelBody.fontSize == savedFont, "the saved font size is restored")
+check(HeroBridgePanelBody.fontSize == savedFont, "the saved font size is restored")
 
 -- Closed by the player: it stays closed after the next reload.
 panel():Hide()
 check(keptDB.settings.panel.open == false, "closing the panel is remembered")
-keptDB = CoachLinkDB
+keptDB = HeroBridgeDB
 coach = startSession()
-CoachLinkDB = keptDB
+HeroBridgeDB = keptDB
 fire("PLAYER_ENTERING_WORLD", false, true)
 check(panel() == nil or panel().shown ~= true, "a closed panel stays closed after a reload")
 
 -- Nonsense in the saved settings is ignored.
 coach = startSession()
-CoachLinkDB = { settings = { panel = { point = 5, x = "far", width = -1, height = 1e9, fontSize = "huge", open = "yes" } } }
+HeroBridgeDB = { settings = { panel = { point = 5, x = "far", width = -1, height = 1e9, fontSize = "huge", open = "yes" } } }
 fire("PLAYER_ENTERING_WORLD", true, false)
 local okShow = pcall(coach.togglePanel)
 check(okShow and panel().shown == true, "bad saved settings do not break the panel")
@@ -468,7 +468,7 @@ check(panel().width >= 300 and panel().width <= 1000 and panel().height >= 250 a
 
 -- A saved settings table with a wrong shape is replaced, not crashed on.
 coach = startSession()
-CoachLinkDB = { settings = "oops" }
+HeroBridgeDB = { settings = "oops" }
 fire("PLAYER_ENTERING_WORLD", true, false)
 okShow = pcall(coach.togglePanel)
 check(okShow and panel().shown == true, "a settings value of the wrong type does not break the panel")
@@ -479,9 +479,9 @@ check(okShow and panel().shown == true, "a settings value of the wrong type does
 -------------------------------------------------------------------------------
 
 coach = startSession()
-CoachLink_OnAddonCompartmentClick("CoachLink", "LeftButton")
+HeroBridge_OnAddonCompartmentClick("HeroBridge", "LeftButton")
 check(panel() and panel().shown == true, "a click in the minimap's addon list opens the panel")
-CoachLink_OnAddonCompartmentClick("CoachLink", "LeftButton")
+HeroBridge_OnAddonCompartmentClick("HeroBridge", "LeftButton")
 check(panel().shown == false, "a second click closes it")
 
 
@@ -491,7 +491,7 @@ check(panel().shown == false, "a second click closes it")
 
 local function openWith(adviceValue)
     coach = startSession()
-    CoachLinkAdvice = adviceValue
+    HeroBridgeAdvice = adviceValue
     local ok, err = pcall(coach.togglePanel)
     return ok, err
 end
@@ -536,7 +536,7 @@ check(not has(stepsText(), "|c"), "colour codes are removed from the steps")
 
 -- A broken questions list is ignored by the panel.
 coach = startSession()
-CoachLinkDB = { characters = { ["Testchar-Testrealm"] = { questions = { {}, "x", { id = 1, text = {} } } } } }
+HeroBridgeDB = { characters = { ["Testchar-Testrealm"] = { questions = { {}, "x", { id = 1, text = {} } } } } }
 check(pcall(coach.togglePanel), "a broken questions list does not error")
 
 
@@ -545,14 +545,14 @@ check(pcall(coach.togglePanel), "a broken questions list does not error")
 -------------------------------------------------------------------------------
 
 coach = startSession()
-CoachLinkAdvice = advice()
+HeroBridgeAdvice = advice()
 fire("PLAYER_ENTERING_WORLD", true, false)
 fire("PLAYER_ENTERING_WORLD", false, false)   -- a later loading screen
 check(count("your coach has new advice: /coach panel") == 1, "the new-advice line is printed once")
 
 coach = startSession()
-CoachLinkAdvice = advice()
-CoachLinkDB = { settings = { panel = { lastSeenAnswerAt = ANSWER_AT } } }
+HeroBridgeAdvice = advice()
+HeroBridgeDB = { settings = { panel = { lastSeenAnswerAt = ANSWER_AT } } }
 fire("PLAYER_ENTERING_WORLD", true, false)
 check(count("new advice") == 0, "no line when the answer was already seen")
 
@@ -561,26 +561,26 @@ fire("PLAYER_ENTERING_WORLD", true, false)
 check(count("new advice") == 0, "no line when there is no advice")
 
 coach = startSession()
-CoachLinkAdvice = advice()
+HeroBridgeAdvice = advice()
 fire("PLAYER_ENTERING_WORLD", true, false)
 coach.togglePanel()
-check(CoachLinkDB.settings.panel.lastSeenAnswerAt == ANSWER_AT, "showing the panel marks the answer as seen")
-local again = CoachLinkDB
+check(HeroBridgeDB.settings.panel.lastSeenAnswerAt == ANSWER_AT, "showing the panel marks the answer as seen")
+local again = HeroBridgeDB
 coach = startSession()
-CoachLinkDB = again
-CoachLinkAdvice = advice()
+HeroBridgeDB = again
+HeroBridgeAdvice = advice()
 fire("PLAYER_ENTERING_WORLD", false, true)
 check(count("new advice") == 0, "after it was seen, the next login stays quiet")
 
 coach = startSession()
-CoachLinkAdvice = advice({ answeredAt = ANSWER_AT + 100 })
-CoachLinkDB = { settings = { panel = { lastSeenAnswerAt = ANSWER_AT } } }
+HeroBridgeAdvice = advice({ answeredAt = ANSWER_AT + 100 })
+HeroBridgeDB = { settings = { panel = { lastSeenAnswerAt = ANSWER_AT } } }
 fire("PLAYER_ENTERING_WORLD", false, true)
 check(count("new advice") == 1, "a newer answer is announced again")
 
 -- An error inside a handler is caught.
 coach = startSession()
-CoachLinkAdvice = setmetatable({}, { __index = function() error("boom") end })
+HeroBridgeAdvice = setmetatable({}, { __index = function() error("boom") end })
 check(pcall(fire, "PLAYER_ENTERING_WORLD", true, false), "an error in an event handler does not escape")
 check(chatHas("error"), "...and the player is told about it")
 
@@ -590,21 +590,21 @@ check(chatHas("error"), "...and the player is told about it")
 -------------------------------------------------------------------------------
 
 -- The key binding: the strings the game shows, and the XML that runs /coach panel.
-check(type(BINDING_HEADER_COACHLINK) == "string" and type(BINDING_NAME_COACHLINK_TOGGLE) == "string",
+check(type(BINDING_HEADER_HEROBRIDGE) == "string" and type(BINDING_NAME_HEROBRIDGE_TOGGLE) == "string",
     "the key binding has a header and a name")
-local bindingsFile = assert(io.open("addon/CoachLink/Bindings.xml", "r"))
+local bindingsFile = assert(io.open("addon/HeroBridge/Bindings.xml", "r"))
 local bindingsXml = bindingsFile:read("*a")
 bindingsFile:close()
-check(has(bindingsXml, 'name="COACHLINK_TOGGLE"') and has(bindingsXml, 'SlashCmdList.COACHLINK("panel")'),
+check(has(bindingsXml, 'name="HEROBRIDGE_TOGGLE"') and has(bindingsXml, 'SlashCmdList.HEROBRIDGE("panel")'),
     "Bindings.xml toggles the panel through /coach panel")
-check(type(BINDING_NAME_COACHLINK_SAVE) == "string" and BINDING_NAME_COACHLINK_SAVE ~= "",
+check(type(BINDING_NAME_HEROBRIDGE_SAVE) == "string" and BINDING_NAME_HEROBRIDGE_SAVE ~= "",
     "the save key binding has a name")
-check(has(bindingsXml, 'name="COACHLINK_SAVE"') and has(bindingsXml, 'SlashCmdList.COACHLINK("");'),
+check(has(bindingsXml, 'name="HEROBRIDGE_SAVE"') and has(bindingsXml, 'SlashCmdList.HEROBRIDGE("");'),
     "Bindings.xml saves for the coach through /coach (the same path as typing it)")
 
 -- Opening at login must not happen during a fight.
 coach = startSession()
-CoachLinkDB = { settings = { panel = { open = true } } }
+HeroBridgeDB = { settings = { panel = { open = true } } }
 inCombat = true
 fire("PLAYER_ENTERING_WORLD", true, false)
 check(panel() == nil or panel().shown ~= true, "the panel does not reopen at login while in combat")
@@ -620,37 +620,37 @@ check(panel() and panel().shown == true, "it opens when the fight ends")
 
 coach = startSession()
 coach.togglePanel()
-check(CoachLinkPanelShowAnswer.shown == false, "Show answer is hidden when no question waits")
-CoachLinkDB = { characters = { ["Testchar-Testrealm"] = { questions = {
+check(HeroBridgePanelShowAnswer.shown == false, "Show answer is hidden when no question waits")
+HeroBridgeDB = { characters = { ["Testchar-Testrealm"] = { questions = {
     { id = "7-1", text = "Where is Brill?", askedAt = FAKE_NOW - 60 },
 } } } }
 panel():Hide()
 coach.togglePanel()
-check(CoachLinkPanelShowAnswer.shown == true, "Show answer appears while a question waits")
+check(HeroBridgePanelShowAnswer.shown == true, "Show answer appears while a question waits")
 check(has(bodyText(), "click Show answer"), "the waiting line tells the player to click Show answer")
-CoachLinkPanelShowAnswer.scripts.OnClick(CoachLinkPanelShowAnswer)
+HeroBridgePanelShowAnswer.scripts.OnClick(HeroBridgePanelShowAnswer)
 check(reloads == 1, "clicking Show answer reloads the UI")
 
 inCombat = true
 fire("PLAYER_REGEN_DISABLED")
-check(CoachLinkPanelShowAnswer.enabled == false, "Show answer is disabled in combat")
-CoachLinkPanelShowAnswer.scripts.OnClick(CoachLinkPanelShowAnswer)
+check(HeroBridgePanelShowAnswer.enabled == false, "Show answer is disabled in combat")
+HeroBridgePanelShowAnswer.scripts.OnClick(HeroBridgePanelShowAnswer)
 check(reloads == 1, "a click in combat does not reload")
 inCombat = false
 fire("PLAYER_REGEN_ENABLED")
-check(CoachLinkPanelShowAnswer.enabled == true, "Show answer works again after the fight")
+check(HeroBridgePanelShowAnswer.enabled == true, "Show answer works again after the fight")
 
 -- After the reload the answer is still missing: the line and the button stay.
 panel():Hide()
 coach.togglePanel()
-check(CoachLinkPanelShowAnswer.shown == true and has(bodyText(), "Waiting for your coach"),
+check(HeroBridgePanelShowAnswer.shown == true and has(bodyText(), "Waiting for your coach"),
     "without an answer the waiting line and button stay")
 
 -- The question is answered (its id is in answeredIds): the button goes.
-CoachLinkAdvice = { characters = { ["Testchar-Testrealm"] = { answeredIds = { "7-1" }, answers = {} } } }
+HeroBridgeAdvice = { characters = { ["Testchar-Testrealm"] = { answeredIds = { "7-1" }, answers = {} } } }
 panel():Hide()
 coach.togglePanel()
-check(CoachLinkPanelShowAnswer.shown == false and not has(bodyText(), "Waiting for your coach"),
+check(HeroBridgePanelShowAnswer.shown == false and not has(bodyText(), "Waiting for your coach"),
     "an answered question removes the line and the button")
 
 
@@ -661,9 +661,9 @@ check(CoachLinkPanelShowAnswer.shown == false and not has(bodyText(), "Waiting f
 
 if arg and arg[1] == "--advice-file" then
     startSession()
-    dofile(arg[2])   -- sets CoachLinkAdvice, as the game does when it loads CoachLink_Advice
+    dofile(arg[2])   -- sets HeroBridgeAdvice, as the game does when it loads HeroBridge_Advice
     fire("PLAYER_ENTERING_WORLD", true, false)
-    SlashCmdList.COACHLINK("panel")
+    SlashCmdList.HEROBRIDGE("panel")
     check(panel() and panel().shown == true, "a real Advice.lua: the panel opens")
     check(has(stepsText(), arg[3]), "a real Advice.lua: the panel shows the step")
     check(has(bodyText(), arg[4]), "a real Advice.lua: the panel shows the text")

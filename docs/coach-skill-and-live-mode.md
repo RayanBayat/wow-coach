@@ -10,7 +10,7 @@ Combine it with [Way 3](connect-an-ai-app.md) so the agent can read your charact
 
 ## Shortcut for Claude Code
 
-Run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup --claude-code`.
+Run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach setup --claude-code`.
 It copies the skill (and the ready-made coach agent, see
 [the Claude Code agent](claude-code-agent.md)) into `~/.claude`. For other agents, follow the
 steps below.
@@ -69,11 +69,11 @@ The skill tells the agent to:
 Normally you type `/coach` in the game, switch to the AI and ask. In **live mode** the AI
 answers on its own the moment you type `/coach`.
 
-How it works: the command `wow-coach watch` prints one line each time CoachLink saves, for
+How it works: the command `wow-coach watch` prints one line each time HeroBridge saves, for
 example:
 
 ```
-CoachLink saved at 21:56:54: Testchar level 8 (reason: coach)
+HeroBridge saved at 21:56:54: Testchar level 8 (reason: coach)
 ```
 
 Claude Code's **Monitor** tool runs a command in the background and shows each printed line to
@@ -89,7 +89,7 @@ message. Each line ends with the reason:
 To start it, say to Claude: `start live mode`. Claude runs this command with the Monitor tool:
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach watch
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach watch
 ```
 
 Monitors last at most 30 minutes. The skill tells Claude to restart it while the game runs.
@@ -98,7 +98,7 @@ may not have an equivalent of Monitor, and then you just ask after typing `/coac
 
 Test the watcher by itself in a terminal with the command above, then type `/coach` in the game.
 
-**You should see:** a new "CoachLink saved at ..." line within a few seconds.
+**You should see:** a new "HeroBridge saved at ..." line within a few seconds.
 
 ## Privacy
 

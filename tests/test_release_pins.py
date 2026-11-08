@@ -20,7 +20,7 @@ def project_version() -> str:
 
 
 def test_addon_version_matches_the_project() -> None:
-    toc = (ROOT / "addon" / "CoachLink" / "CoachLink.toc").read_text(encoding="utf-8")
+    toc = (ROOT / "addon" / "HeroBridge" / "HeroBridge.toc").read_text(encoding="utf-8")
     match = re.search(r"^## Version:\s*(\S+)", toc, re.MULTILINE)
     assert match is not None
     assert match.group(1) == project_version()

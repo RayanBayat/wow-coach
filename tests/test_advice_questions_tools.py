@@ -114,7 +114,7 @@ def make_game(tmp_path: Path) -> Path:
 
 
 def advice_path(game: Path) -> Path:
-    return game / "Interface" / "AddOns" / "CoachLink_Advice" / "Advice.lua"
+    return game / "Interface" / "AddOns" / "HeroBridge_Advice" / "Advice.lua"
 
 
 def test_first_send_says_restart(tmp_path: Path) -> None:
@@ -141,8 +141,8 @@ def test_question_is_filled_in_from_the_save(tmp_path: Path) -> None:
     game = make_game(tmp_path)
     save_folder = game / "WTF" / "Account" / "ACC" / "SavedVariables"
     save_folder.mkdir(parents=True)
-    (save_folder / "CoachLink.lua").write_text(
-        'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n["Testchar-Testrealm"] = {\n'
+    (save_folder / "HeroBridge.lua").write_text(
+        'HeroBridgeDB = {\n["formatVersion"] = 1,\n["characters"] = {\n["Testchar-Testrealm"] = {\n'
         '["snapshot"] = {},\n["questions"] = {\n'
         '{ ["id"] = "1794100000-1", ["text"] = "What next?", ["askedAt"] = 1794100000 },\n'
         "},\n},\n},\n}\n",
@@ -197,7 +197,7 @@ def test_long_text_is_cut_and_the_reply_says_so(tmp_path: Path) -> None:
 def test_damaged_old_file_is_replaced(tmp_path: Path) -> None:
     game = make_game(tmp_path)
     advice_path(game).parent.mkdir()
-    advice_path(game).write_text("CoachLinkAdvice = {", encoding="utf-8")
+    advice_path(game).write_text("HeroBridgeAdvice = {", encoding="utf-8")
     send(game)
     assert read_advice_file(advice_path(game)) is not None
 
@@ -206,6 +206,6 @@ def test_symlinked_folder_gives_a_sentence_not_an_error(tmp_path: Path) -> None:
     game = make_game(tmp_path)
     outside = tmp_path / "outside"
     outside.mkdir()
-    (game / "Interface" / "AddOns" / "CoachLink_Advice").symlink_to(outside)
+    (game / "Interface" / "AddOns" / "HeroBridge_Advice").symlink_to(outside)
     assert send(game).startswith("Not sent")
     assert list(outside.iterdir()) == []

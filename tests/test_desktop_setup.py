@@ -34,11 +34,13 @@ VERSION = "9.9.9"
 
 
 def addon_zip(version: str = VERSION) -> bytes:
-    """A tiny fake CoachLink release zip."""
+    """A tiny fake HeroBridge release zip."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("CoachLink/CoachLink.toc", f"## Interface: 16001\n## Version: {version}\n")
-        archive.writestr("CoachLink/CoachLink.lua", "-- code\n")
+        archive.writestr(
+            "HeroBridge/HeroBridge.toc", f"## Interface: 16001\n## Version: {version}\n"
+        )
+        archive.writestr("HeroBridge/HeroBridge.lua", "-- code\n")
     return buffer.getvalue()
 
 
@@ -50,9 +52,9 @@ def make_game(root: Path) -> Path:
 
 
 def install_fake_addon(game: Path, version: str) -> None:
-    folder = game / "Interface" / "AddOns" / "CoachLink"
+    folder = game / "Interface" / "AddOns" / "HeroBridge"
     folder.mkdir()
-    (folder / "CoachLink.toc").write_text(f"## Interface: 16001\n## Version: {version}\n")
+    (folder / "HeroBridge.toc").write_text(f"## Interface: 16001\n## Version: {version}\n")
 
 
 # ---- the checks ---------------------------------------------------------------------------
@@ -81,7 +83,7 @@ def test_addon_missing_old_and_current(tmp_path: Path) -> None:
     assert (check.status, installed, is_link) == (Status.ATTENTION, "1.0.0", False)
     assert "1.0.0" in check.sentence
     assert VERSION in check.sentence
-    toc = game / "Interface" / "AddOns" / "CoachLink" / "CoachLink.toc"
+    toc = game / "Interface" / "AddOns" / "HeroBridge" / "HeroBridge.toc"
     toc.write_text(f"## Version: {VERSION}\n")
     assert check_addon(game, VERSION)[0].status is Status.OK
 
@@ -90,14 +92,14 @@ def test_a_linked_addon_is_ok_and_never_replaced(tmp_path: Path) -> None:
     game = make_game(tmp_path)
     source = tmp_path / "dev-copy"
     source.mkdir()
-    (game / "Interface" / "AddOns" / "CoachLink").symlink_to(source, target_is_directory=True)
+    (game / "Interface" / "AddOns" / "HeroBridge").symlink_to(source, target_is_directory=True)
     assert check_addon(game, VERSION)[2] is True
 
     def no_download(_url: str) -> bytes:
         raise AssertionError("a linked addon must not be downloaded over")
 
     assert install_or_update_addon(game, VERSION, no_download).ok
-    assert not (source / "CoachLink.toc").exists()
+    assert not (source / "HeroBridge.toc").exists()
 
 
 def test_a_windows_junction_copy_is_left_alone(
@@ -106,7 +108,7 @@ def test_a_windows_junction_copy_is_left_alone(
     # A junction is Windows' folder link; Python's is_symlink() says False for it.
     game = make_game(tmp_path)
     install_fake_addon(game, "0.0.1")
-    addon = game / "Interface" / "AddOns" / "CoachLink"
+    addon = game / "Interface" / "AddOns" / "HeroBridge"
     real_is_junction = Path.is_junction
     monkeypatch.setattr(Path, "is_junction", lambda self: self == addon or real_is_junction(self))
     assert check_addon(game, VERSION)[2] is True
@@ -229,7 +231,7 @@ def test_the_page_shows_a_problem_without_a_game_folder(qtbot: QtBot, tmp_path: 
 def test_the_page_installs_the_addon_in_the_background(qtbot: QtBot, tmp_path: Path) -> None:
     game = make_game(tmp_path)
     page = make_page(qtbot, make_services(tmp_path), game)
-    assert page.addon_card.button.text() == "Install CoachLink"
+    assert page.addon_card.button.text() == "Install HeroBridge"
     page.addon_card.button.click()
     assert page.message.text() == RESTART_WOW_HINT
     assert page.addon_card.button.isHidden()  # up to date now
@@ -261,7 +263,7 @@ def test_the_page_offers_an_update_for_an_old_addon(qtbot: QtBot, tmp_path: Path
     game = make_game(tmp_path)
     install_fake_addon(game, "1.0.0")
     page = make_page(qtbot, make_services(tmp_path), game)
-    assert page.addon_card.button.text() == "Update CoachLink"
+    assert page.addon_card.button.text() == "Update HeroBridge"
 
 
 def test_the_page_creates_the_answers_folder(qtbot: QtBot, tmp_path: Path) -> None:
@@ -527,3 +529,57 @@ def test_on_windows_the_overlay_command_uses_windows_quoting() -> None:
     program = PureWindowsPath("C:/Program Files/WoW Coach/wow-coach-app.exe")
     command = overlay_command(program, platform="win32")
     assert command == '"C:\\Program Files\\WoW Coach\\wow-coach-app.exe" --toggle-overlay'
+
+
+# ---- coming from the old CoachLink addon (renamed HeroBridge in 0.11.0) --------------------
+
+
+def add_old_coachlink(game: Path) -> Path:
+    addons = game / "Interface" / "AddOns"
+    (addons / "CoachLink").mkdir()
+    (addons / "CoachLink" / "CoachLink.toc").write_text("## Version: 0.10.0\n")
+    folder = game / "WTF" / "Account" / "ACC" / "SavedVariables"
+    folder.mkdir(parents=True)
+    (folder / "CoachLink.lua").write_text(
+        'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n},\n}\n'
+    )
+    return folder
+
+
+def test_the_card_explains_the_rename_and_offers_update(qtbot: QtBot, tmp_path: Path) -> None:
+    game = make_game(tmp_path)
+    add_old_coachlink(game)
+    check = check_addon(game, VERSION)[0]
+    assert check.status is Status.ATTENTION
+    assert check.sentence == (
+        "CoachLink is now called HeroBridge. Close WoW, then click Update. "
+        "Your saved character comes along."
+    )
+    page = make_page(qtbot, make_services(tmp_path), game)
+    assert page.addon_card.button.text() == "Update HeroBridge"
+
+
+def test_update_moves_the_save_and_removes_the_old_addon(tmp_path: Path) -> None:
+    game = make_game(tmp_path)
+    save_folder = add_old_coachlink(game)
+    result = install_or_update_addon(game, VERSION, lambda _url: addon_zip(), lambda: False)
+    assert result.ok
+    assert "saved character" in result.sentence
+    assert (save_folder / "HeroBridge.lua").is_file()
+    assert (save_folder / "CoachLink.lua").is_file()
+    assert not (game / "Interface" / "AddOns" / "CoachLink").exists()
+    assert check_addon(game, VERSION)[0].status is Status.OK
+
+
+def test_update_refuses_while_the_game_runs_and_changes_nothing(tmp_path: Path) -> None:
+    game = make_game(tmp_path)
+    save_folder = add_old_coachlink(game)
+
+    def no_download(_url: str) -> bytes:
+        raise AssertionError("nothing may be downloaded while the game runs")
+
+    result = install_or_update_addon(game, VERSION, no_download, lambda: True)
+    assert not result.ok
+    assert "Close WoW" in result.sentence
+    assert (game / "Interface" / "AddOns" / "CoachLink").is_dir()
+    assert not (save_folder / "HeroBridge.lua").exists()

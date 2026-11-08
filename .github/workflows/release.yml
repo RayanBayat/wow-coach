@@ -1,6 +1,6 @@
 name: Release
 
-# Runs when you push a tag like v0.5.0. It builds CoachLink-<version>.zip
+# Runs when you push a tag like v0.5.0. It builds HeroBridge-<version>.zip
 # and publishes it on the GitHub Releases page. When CurseForge is set up (see
 # docs/curseforge.md), it also uploads the same zip there.
 
@@ -20,18 +20,18 @@ jobs:
       - name: Check the tag matches the addon version
         run: |
           tag_version="${GITHUB_REF_NAME#v}"
-          toc_version="$(sed -n 's/^## Version:[[:space:]]*//p' addon/CoachLink/CoachLink.toc | tr -d '\r')"
-          echo "tag: $tag_version, CoachLink.toc: $toc_version"
+          toc_version="$(sed -n 's/^## Version:[[:space:]]*//p' addon/HeroBridge/HeroBridge.toc | tr -d '\r')"
+          echo "tag: $tag_version, HeroBridge.toc: $toc_version"
           if [ "$tag_version" != "$toc_version" ]; then
-            echo "The tag $GITHUB_REF_NAME does not match the version in CoachLink.toc." >&2
+            echo "The tag $GITHUB_REF_NAME does not match the version in HeroBridge.toc." >&2
             exit 1
           fi
           echo "VERSION=$tag_version" >> "$GITHUB_ENV"
 
-      - name: Build the zip (folder CoachLink/ at the root)
+      - name: Build the zip (folder HeroBridge/ at the root)
         run: |
           cd addon
-          zip -r "../CoachLink-${VERSION}.zip" CoachLink
+          zip -r "../HeroBridge-${VERSION}.zip" HeroBridge
 
       - name: Take this version's notes from CHANGELOG.md
         run: |
@@ -47,7 +47,7 @@ jobs:
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "CoachLink-${VERSION}.zip" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+        run: gh release create "$GITHUB_REF_NAME" "HeroBridge-${VERSION}.zip" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
 
       # Optional: the same zip on CurseForge. It runs only after the owner set the repository
       # variables CURSEFORGE_PROJECT_ID and CURSEFORGE_GAME_VERSIONS and the secret
@@ -73,7 +73,7 @@ jobs:
           print(json.dumps({
               "changelog": changelog,
               "changelogType": "markdown",
-              "displayName": f"CoachLink {os.environ['VERSION']}",
+              "displayName": f"HeroBridge {os.environ['VERSION']}",
               "gameVersions": ids,
               "releaseType": "release",
           }))
@@ -81,5 +81,5 @@ jobs:
           curl --fail-with-body --silent --show-error \
             --header "X-Api-Token: ${CF_API_TOKEN}" \
             --form "metadata=<metadata.json" \
-            --form "file=@CoachLink-${VERSION}.zip" \
+            --form "file=@HeroBridge-${VERSION}.zip" \
             "https://wow.curseforge.com/api/projects/${PROJECT_ID}/upload-file"

@@ -1,21 +1,21 @@
 --[[
-Test CoachLink outside the game, with a fake ("mock") WoW API.
+Test HeroBridge outside the game, with a fake ("mock") WoW API.
 
 Run it with LuaJIT (WoW uses Lua 5.1, LuaJIT speaks the same language):
 
     luajit addon/tests/run_addon_test.lua [output-file]
 
 What it does:
-  1. Defines fake versions of every WoW function CoachLink calls, describing a
+  1. Defines fake versions of every WoW function HeroBridge calls, describing a
      made-up level 7 Undead Mage in Brill, with items in the bags and bank.
-  2. Loads CoachLink.lua, fires game events (login, level up, quest turn-in,
+  2. Loads HeroBridge.lua, fires game events (login, level up, quest turn-in,
      death, opening the bank, mailbox and Tailoring window, /played) and runs
      /coach, like a real play session.
-  3. Checks the resulting CoachLinkDB table.
+  3. Checks the resulting HeroBridgeDB table.
   4. Checks the plain-text export and /coach copy (the copy window).
   5. Runs again with the talent API broken, to prove one failing section is
      recorded in snapshot.errors instead of breaking the whole snapshot.
-  6. If an output file is given, writes CoachLinkDB there in the same text
+  6. If an output file is given, writes HeroBridgeDB there in the same text
      format WoW Forever uses (Windows line endings, no indentation), so the
      Python reader can be tested against real addon output.
 
@@ -23,8 +23,8 @@ It does NOT prove the real game API behaves like these fakes; that is checked
 in game (see docs/worklog.md).
 ]]
 
--- Same order as in CoachLink.toc.
-local ADDON_FILES = { "addon/CoachLink/CoachLinkText.lua", "addon/CoachLink/CoachLink.lua" }
+-- Same order as in HeroBridge.toc.
+local ADDON_FILES = { "addon/HeroBridge/HeroBridgeText.lua", "addon/HeroBridge/HeroBridge.lua" }
 local FAKE_NOW = 1793995200  -- a fixed time, so the output is the same every run
 
 local failures = 0
@@ -44,15 +44,15 @@ end
 -- The fake game
 -------------------------------------------------------------------------------
 
-local eventHandler   -- the OnEvent script CoachLink registers
+local eventHandler   -- the OnEvent script HeroBridge registers
 local registeredEvents = {}
 
 local function installFakeGame()
-    CoachLinkDB = nil
+    HeroBridgeDB = nil
     registeredEvents = {}
     SlashCmdList = {}
 
-    print = function() end  -- keep CoachLink's chat messages out of the test output
+    print = function() end  -- keep HeroBridge's chat messages out of the test output
     time = function() return FAKE_NOW end
     date = os.date
     GetTime = function() return 1000 end  -- seconds since the PC started; buffs end relative to it
@@ -388,12 +388,12 @@ local function installFakeGame()
         GetSpellBookItemInfo = function(index) return spellBook[index] end,
     }
 
-    -- Fake frames. Any method CoachLink calls on a frame does nothing, except the
+    -- Fake frames. Any method HeroBridge calls on a frame does nothing, except the
     -- few below that we want to watch. Frames made with CreateFrame are kept in
     -- createdFrames so the tests can look at them.
     strtrim = function(text) return (text:gsub("^%s+", ""):gsub("%s+$", "")) end
     InCombatLockdown = function() return false end
-    CoachLinkAdvice = nil   -- the CoachLink_Advice addon (written by wow-coach) is not installed
+    HeroBridgeAdvice = nil   -- the HeroBridge_Advice addon (written by wow-coach) is not installed
     UIParent = {}
     UISpecialFrames = {}
     ChatFontNormal = {}
@@ -500,7 +500,7 @@ local function runTimers()
 end
 
 local function fire(eventName, ...)
-    assert(registeredEvents[eventName], "CoachLink does not listen to " .. eventName)
+    assert(registeredEvents[eventName], "HeroBridge does not listen to " .. eventName)
     eventHandler(nil, eventName, ...)
 end
 
@@ -509,7 +509,7 @@ local function loadAddon()
     local namespace = {}
     for _, file in ipairs(ADDON_FILES) do
         local chunk = assert(loadfile(file))
-        chunk("CoachLink", namespace)
+        chunk("HeroBridge", namespace)
     end
     return namespace
 end
@@ -586,10 +586,11 @@ fire("TRADE_SKILL_SHOW")       -- ...opens Tailoring...
 fire("TIME_PLAYED_MSG", 7200, 1800)   -- ...and types /played
 bankContents[6][2] = { "item:2589", 1 }   -- changed after the bank was closed:
 fire("BAG_UPDATE_DELAYED")                -- not seen, so not saved
-SlashCmdList.COACHLINK("")   -- the player types /coach
+SlashCmdList.HEROBRIDGE("")   -- the player types /coach
+check(SLASH_HEROBRIDGE1 == "/coach" and SLASH_HEROBRIDGE2 == "/herobridge", "/coach and /herobridge are two names for the same command")
 
-local character = CoachLinkDB and CoachLinkDB.characters["Testchar-Testrealm"]
-check(CoachLinkDB.formatVersion == 1, "formatVersion is 1")
+local character = HeroBridgeDB and HeroBridgeDB.characters["Testchar-Testrealm"]
+check(HeroBridgeDB.formatVersion == 1, "formatVersion is 1")
 check(character ~= nil, "character stored under Name-Realm")
 local snapshot = character.snapshot
 check(snapshot.reason == "coach", "/coach marks the snapshot reason")
@@ -703,7 +704,7 @@ check(firstPoint.money == 12345 and firstPoint.zone == "Tirisfal Glades"
     and firstPoint.subZone == "Brill", "progress point has gold and place")
 check(firstPoint.questsDone == 1, "progress point counts complete quests")
 
-local goodDB = CoachLinkDB
+local goodDB = HeroBridgeDB
 
 
 -------------------------------------------------------------------------------
@@ -755,22 +756,22 @@ check(not text:find("Red Skeletal Horse", 1, true), "mounts you don't own are le
 check(not text:find("Brown Linen Robe", 1, true), "recipes you haven't learned are left out")
 check(not text:find("READ ERRORS", 1, true), "no error section when all reads worked")
 
-local dbBefore = serialize("CoachLinkDB", CoachLinkDB)
+local dbBefore = serialize("HeroBridgeDB", HeroBridgeDB)
 createdFrames = {}
-SlashCmdList.COACHLINK("copy")
+SlashCmdList.HEROBRIDGE("copy")
 local window, editBox = nil, nil
 for _, frame in ipairs(createdFrames) do
-    if frame.name == "CoachLinkCopyFrame" then window = frame end
+    if frame.name == "HeroBridgeCopyFrame" then window = frame end
     if frame.type == "EditBox" then editBox = frame end
 end
 check(window ~= nil and window.shown == true, "/coach copy shows the window")
 check(editBox ~= nil and editBox.text:find("Testchar, level 7", 1, true) ~= nil,
     "/coach copy fills the edit box")
 check(editBox.focused and editBox.highlighted, "edit box is focused and highlighted")
-check(UISpecialFrames[1] == "CoachLinkCopyFrame", "Esc closes the window")
-check(serialize("CoachLinkDB", CoachLinkDB) == dbBefore, "/coach copy leaves CoachLinkDB alone")
+check(UISpecialFrames[1] == "HeroBridgeCopyFrame", "Esc closes the window")
+check(serialize("HeroBridgeDB", HeroBridgeDB) == dbBefore, "/coach copy leaves HeroBridgeDB alone")
 local frameCount = #createdFrames
-SlashCmdList.COACHLINK("export")
+SlashCmdList.HEROBRIDGE("export")
 check(#createdFrames == frameCount and window.shown, "/coach export reuses the same window")
 
 -- Print what a player would paste, if asked: luajit run_addon_test.lua out.lua --show
@@ -781,14 +782,14 @@ end
 -- The chat messages of /coach help and of a window failure.
 local chat = {}
 print = function(message) table.insert(chat, message) end
-SlashCmdList.COACHLINK("help")
+SlashCmdList.HEROBRIDGE("help")
 check(table.concat(chat, "\n"):find("/coach copy", 1, true) ~= nil, "/coach help mentions copy")
 installFakeGame()
 print = function(message) table.insert(chat, message) end
 loadAddon()
 chat = {}
 CreateFrame = function() error("no UI today") end   -- after loading, so only the window fails
-SlashCmdList.COACHLINK("copy")
+SlashCmdList.HEROBRIDGE("copy")
 check(chat[1] and chat[1]:find("could not open the copy window", 1, true) ~= nil,
     "a window that cannot be built gives a chat message, not an error")
 
@@ -797,9 +798,9 @@ installFakeGame()
 chat = {}
 print = function(message) table.insert(chat, message) end
 local onlyMainFile = {}
-local mainChunk = assert(loadfile("addon/CoachLink/CoachLink.lua"))
-mainChunk("CoachLink", onlyMainFile)
-SlashCmdList.COACHLINK("copy")
+local mainChunk = assert(loadfile("addon/HeroBridge/HeroBridge.lua"))
+mainChunk("HeroBridge", onlyMainFile)
+SlashCmdList.HEROBRIDGE("copy")
 check(chat[1] and chat[1]:find("restart the game", 1, true) ~= nil,
     "copy without the text file asks for a game restart")
 print = function() end
@@ -812,8 +813,8 @@ print = function() end
 installFakeGame()
 C_Traits = nil  -- pretend a patch removed the talent API
 namespace = loadAddon()
-SlashCmdList.COACHLINK("")
-local broken = CoachLinkDB.characters["Testchar-Testrealm"].snapshot
+SlashCmdList.HEROBRIDGE("")
+local broken = HeroBridgeDB.characters["Testchar-Testrealm"].snapshot
 -- Talents and the Legacy perks both use the trait API, so both are listed.
 check(#broken.errors == 2 and broken.errors[1]:find("^talents: ") ~= nil
     and broken.errors[2]:find("^legacy: ") ~= nil, "broken talent API recorded in errors")
@@ -821,7 +822,7 @@ check(broken.legacy and broken.legacy.renown == 2, "a section that broke halfway
 check(broken.level == 7 and #broken.quests == 2, "other sections still saved")
 
 createdFrames = {}
-SlashCmdList.COACHLINK("copy")   -- the copy text must still appear, with the error listed
+SlashCmdList.HEROBRIDGE("copy")   -- the copy text must still appear, with the error listed
 local brokenBox
 for _, frame in ipairs(createdFrames) do
     if frame.type == "EditBox" then brokenBox = frame end
@@ -838,13 +839,13 @@ local SECRET = "SECRET-VALUE"
 issecretvalue = function(value) return value == SECRET end
 GetSubZoneText = function() return SECRET end
 fire("PLAYER_ENTERING_WORLD", true, false)
-SlashCmdList.COACHLINK("")  -- save once, so the character has a saved entry
-local savedEntry = CoachLinkDB.characters["Testchar-Testrealm"]
+SlashCmdList.HEROBRIDGE("")  -- save once, so the character has a saved entry
+local savedEntry = HeroBridgeDB.characters["Testchar-Testrealm"]
 check(savedEntry.snapshot.subZone == "(hidden by the game)", "a hidden value is saved as a note")
 savedEntry.history = savedEntry.history or {}
 table.insert(savedEntry.history, { time = 1, kind = "death", text = SECRET })
 createdFrames = {}
-SlashCmdList.COACHLINK("copy")
+SlashCmdList.HEROBRIDGE("copy")
 local secretBox
 for _, frame in ipairs(createdFrames) do
     if frame.type == "EditBox" then secretBox = frame end
@@ -867,8 +868,8 @@ CreateFrame = function(...)
     return frame
 end
 loadAddon()
-SlashCmdList.COACHLINK("")
-check(CoachLinkDB.characters["Testchar-Testrealm"].snapshot.level == 7,
+SlashCmdList.HEROBRIDGE("")
+check(HeroBridgeDB.characters["Testchar-Testrealm"].snapshot.level == 7,
     "an unknown event name does not stop the addon from loading")
 check(registeredEvents.PLAYER_LOGOUT == true, "the other events are still registered")
 
@@ -881,27 +882,27 @@ installFakeGame()
 loadAddon()
 local now = FAKE_NOW
 time = function() return now end
-local function progressList() return CoachLinkDB.characters["Testchar-Testrealm"].progress end
+local function progressList() return HeroBridgeDB.characters["Testchar-Testrealm"].progress end
 
-SlashCmdList.COACHLINK("")
+SlashCmdList.HEROBRIDGE("")
 now = FAKE_NOW + 30
-SlashCmdList.COACHLINK("")   -- nothing changed, 30 s later: a quick reload
+SlashCmdList.HEROBRIDGE("")   -- nothing changed, 30 s later: a quick reload
 check(#progressList() == 1, "same state within 60 s adds no new point")
 
 now = FAKE_NOW + 120
-SlashCmdList.COACHLINK("")   -- nothing changed, but 2 minutes later
+SlashCmdList.HEROBRIDGE("")   -- nothing changed, but 2 minutes later
 check(#progressList() == 2, "same state after 60 s adds a point")
 
 now = FAKE_NOW + 130
 UnitXP = function() return 1600 end
-SlashCmdList.COACHLINK("")   -- XP changed, only 10 s later
+SlashCmdList.HEROBRIDGE("")   -- XP changed, only 10 s later
 check(#progressList() == 3 and progressList()[3].xp == 1600, "a changed value adds a point at once")
 
 -- The cap: 600 snapshots with growing gold keep only the newest 500.
 for step = 1, 600 do
     now = FAKE_NOW + 1000 + step
     GetMoney = function() return 1000000 + step end
-    SlashCmdList.COACHLINK("")
+    SlashCmdList.HEROBRIDGE("")
 end
 check(#progressList() == 500, "progress log is capped at 500 points")
 check(progressList()[500].money == 1000600, "the newest point is kept")
@@ -911,8 +912,8 @@ check(progressList()[1].money == 1000101, "the oldest points are dropped")
 installFakeGame()
 C_QuestLog = nil
 loadAddon()
-SlashCmdList.COACHLINK("")
-local partial = CoachLinkDB.characters["Testchar-Testrealm"].progress
+SlashCmdList.HEROBRIDGE("")
+local partial = HeroBridgeDB.characters["Testchar-Testrealm"].progress
 check(#partial == 1 and partial[1].level == 7 and partial[1].zone == "Tirisfal Glades",
     "a broken quest reader still gives a progress point")
 check(partial[1].questsDone == nil, "unknown quests are nil, not zero")
@@ -936,8 +937,8 @@ runTimers()
 check(ChatFrame1:IsEventRegistered("TIME_PLAYED_MSG"), "after the answer, /played shows in chat again")
 
 now = FAKE_NOW + 600                         -- 10 minutes of play later
-SlashCmdList.COACHLINK("")
-local played = CoachLinkDB.characters["Testchar-Testrealm"].snapshot.timePlayed
+SlashCmdList.HEROBRIDGE("")
+local played = HeroBridgeDB.characters["Testchar-Testrealm"].snapshot.timePlayed
 check(played.total == 7800 and played.thisLevel == 2400 and played.seenAt == FAKE_NOW + 600,
     "play time from this session is moved forward to the save time")
 
@@ -954,8 +955,8 @@ fire("PLAYER_LEVEL_UP", 8)                   -- 5 minutes later: level 8
 runTimers()
 check(playedRequests == 3, "a level-up asks again, since the time at this level restarts")
 now = FAKE_NOW + 960
-SlashCmdList.COACHLINK("")
-played = CoachLinkDB.characters["Testchar-Testrealm"].snapshot.timePlayed
+SlashCmdList.HEROBRIDGE("")
+played = HeroBridgeDB.characters["Testchar-Testrealm"].snapshot.timePlayed
 check(played.total == 8160 and played.thisLevel == 60, "after a level-up the level time restarts at 0")
 
 -- No answer at all: the chat window must not stay quiet forever.
@@ -979,7 +980,7 @@ loadAddon()
 local clock = 1000
 GetTime = function() return clock end
 local function lastDeath()
-    local history = CoachLinkDB.characters["Testchar-Testrealm"].history
+    local history = HeroBridgeDB.characters["Testchar-Testrealm"].history
     return history[#history]
 end
 enemies = {
@@ -1065,7 +1066,7 @@ installFakeGame()
 loadAddon()
 local function itemEvents()
     local found = {}
-    for _, event in ipairs(CoachLinkDB.characters["Testchar-Testrealm"].history) do
+    for _, event in ipairs(HeroBridgeDB.characters["Testchar-Testrealm"].history) do
         if event.kind == "item" then
             table.insert(found, event)
         end
@@ -1109,7 +1110,7 @@ check(#itemEvents() == 5, "taking everything from a letter is recorded too")
 -- Test 8: a real logout, when the game has already unloaded the character
 -------------------------------------------------------------------------------
 
-local function savedCharacter() return CoachLinkDB.characters["Testchar-Testrealm"] end
+local function savedCharacter() return HeroBridgeDB.characters["Testchar-Testrealm"] end
 -- A fake game whose clock the test can move with `now`.
 local function installFakeGameWithClock()
     installFakeGame()
@@ -1120,7 +1121,7 @@ end
 -- No warning before the logout: the last full snapshot is kept.
 installFakeGameWithClock()
 loadAddon()
-SlashCmdList.COACHLINK("")          -- a full snapshot at FAKE_NOW
+SlashCmdList.HEROBRIDGE("")          -- a full snapshot at FAKE_NOW
 loadAddon()                         -- after the reload: a new UI session, same saved data
 now = FAKE_NOW + 600
 unloadCharacter()
@@ -1134,7 +1135,7 @@ check(#savedCharacter().progress == 1, "an unloaded logout adds no progress poin
 -- Logging out with Logout(): the snapshot is read while the character is still there.
 installFakeGameWithClock()
 loadAddon()
-SlashCmdList.COACHLINK("")
+SlashCmdList.HEROBRIDGE("")
 loadAddon()
 now = FAKE_NOW + 600
 GetMoney = function() return 20000 end
@@ -1171,7 +1172,7 @@ installFakeGameWithClock()
 C_SpellBook.GetSpellBookSkillLineInfo = function() return nil end
 C_Container = nil
 loadAddon()
-SlashCmdList.COACHLINK("")
+SlashCmdList.HEROBRIDGE("")
 local reloaded = savedCharacter().snapshot
 check(reloaded.reason == "coach" and reloaded.level == 7, "a broken bag API alone does not look unloaded")
 for _, message in ipairs(reloaded.errors) do
@@ -1222,45 +1223,45 @@ local questions = savedCharacter().questions
 check(#questions == 20 and questions[20].text == "Question 25", "only the newest 20 questions are kept")
 
 -- wow-coach answered the newest question: it is no longer open, and is dropped on the next ask.
-CoachLinkAdvice = { formatVersion = 1, characters = { ["Testchar-Testrealm"] = {
+HeroBridgeAdvice = { formatVersion = 1, characters = { ["Testchar-Testrealm"] = {
     answers = { { questionId = questions[20].id, title = "Next steps", steps = { "Go to Brill" } } },
 } } }
 local open = coach.openQuestions()
 check(#open == 19 and open[19].text == "Question 24", "answered questions are not open any more")
 check(coach.myAdvice().answers[1].steps[1] == "Go to Brill", "the panel can read this character's advice")
-CoachLinkAdvice.characters["Testchar-Testrealm"].answers = {}   -- the answer was pushed out...
-CoachLinkAdvice.characters["Testchar-Testrealm"].answeredIds = { questions[20].id, 42 }
+HeroBridgeAdvice.characters["Testchar-Testrealm"].answers = {}   -- the answer was pushed out...
+HeroBridgeAdvice.characters["Testchar-Testrealm"].answeredIds = { questions[20].id, 42 }
 check(#coach.openQuestions() == 19, "...but answeredIds still marks the question answered")
 coach.askCoach("One more")
 check(#savedCharacter().questions == 20 and savedCharacter().questions[20].text == "One more",
     "asking again drops the answered question")
-CoachLinkAdvice = { characters = { ["Someone-Else"] = { answers = {} } } }
+HeroBridgeAdvice = { characters = { ["Someone-Else"] = { answers = {} } } }
 check(coach.myAdvice() == nil, "advice for other characters is not shown")
-CoachLinkAdvice = "broken"
+HeroBridgeAdvice = "broken"
 check(coach.myAdvice() == nil and #coach.openQuestions() == 20, "a broken advice file is ignored")
 
 -- The slash commands.
 chat = {}
 print = function(message) table.insert(chat, message) end
-SlashCmdList.COACHLINK("ask Where is Brill?")
+SlashCmdList.HEROBRIDGE("ask Where is Brill?")
 check(savedCharacter().questions[20].text == "Where is Brill?", "/coach ask keeps the question's capitals")
-SlashCmdList.COACHLINK("ask")
+SlashCmdList.HEROBRIDGE("ask")
 check(chat[#chat]:find("type a question", 1, true) ~= nil, "/coach ask with no text says what to do")
-SlashCmdList.COACHLINK("panel")
+SlashCmdList.HEROBRIDGE("panel")
 check(chat[#chat]:find("restart the game", 1, true) ~= nil, "/coach panel without the panel file asks for a restart")
 coach.togglePanel = function() chat[#chat + 1] = "panel toggled" end
-SlashCmdList.COACHLINK("PANEL")
+SlashCmdList.HEROBRIDGE("PANEL")
 check(chat[#chat] == "panel toggled", "/coach panel opens the panel when it is loaded")
 
 -- /coach (and the "Save for the coach" key) reloads the UI, which is not allowed in a fight.
 local reloadsBefore = reloads
 InCombatLockdown = function() return true end
-SlashCmdList.COACHLINK("")
+SlashCmdList.HEROBRIDGE("")
 check(reloads == reloadsBefore, "/coach does not reload the UI during a fight")
 check(chat[#chat]:find("Can't save during a fight", 1, true) ~= nil,
     "/coach tells the player to press it again after the fight")
 InCombatLockdown = function() return false end
-SlashCmdList.COACHLINK("")
+SlashCmdList.HEROBRIDGE("")
 check(reloads == reloadsBefore + 1, "/coach reloads the UI again once the fight is over")
 print = function() end
 
@@ -1272,7 +1273,7 @@ print = function() end
 local outputPath = arg and arg[1]
 if outputPath then
     local file = assert(io.open(outputPath, "wb"))
-    file:write(serialize("CoachLinkDB", goodDB))
+    file:write(serialize("HeroBridgeDB", goodDB))
     file:close()
     io.stdout:write("wrote " .. outputPath .. "\n")
 end

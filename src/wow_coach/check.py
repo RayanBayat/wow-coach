@@ -18,13 +18,13 @@ from wow_coach.savedvars import Character, find_saved_variables, load_characters
 type Say = Callable[[str], None]
 
 NO_SAVE_HELP = (
-    "No save file yet: start WoW with the CoachLink addon enabled and type /coach "
+    "No save file yet: start WoW with the HeroBridge addon enabled and type /coach "
     "(the game writes the file when you type /coach, type /reload, or log out)."
 )
 ADDON_MISSING_HELP = (
-    "The CoachLink addon is not installed in {addons}. Download CoachLink-<version>.zip "
+    "The HeroBridge addon is not installed in {addons}. Download HeroBridge-<version>.zip "
     "from https://github.com/RayanBayat/wow-coach/releases/latest, unzip it into that "
-    "folder (so it holds CoachLink/CoachLink.toc), then restart WoW completely."
+    "folder (so it holds HeroBridge/HeroBridge.toc), then restart WoW completely."
 )
 
 
@@ -45,7 +45,8 @@ def _check_save_file(game_folder: Path, now: float, say: Say) -> bool:
     except CoachDataMissing:
         say(NO_SAVE_HELP)
         addons = game_folder / "Interface" / "AddOns"
-        if not (addons / "CoachLink").is_dir():
+        # The old CoachLink folder also counts as "installed" until the player updates.
+        if not (addons / "HeroBridge").is_dir() and not (addons / "CoachLink").is_dir():
             say(ADDON_MISSING_HELP.format(addons=addons))
         return False
     say(f"Save file: {save_file}")

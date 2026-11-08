@@ -18,18 +18,18 @@ def addon_zip_bytes() -> bytes:
     version = importlib.metadata.version("wow-coach")
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("CoachLink/CoachLink.toc", f"## Version: {version}\n")
+        archive.writestr("HeroBridge/HeroBridge.toc", f"## Version: {version}\n")
     return buffer.getvalue()
 
 
-FIXTURE = Path(__file__).parent / "fixtures" / "CoachLink.lua"
+FIXTURE = Path(__file__).parent / "fixtures" / "HeroBridge.lua"
 
 
 @pytest.fixture
 def wow_dir(tmp_path: Path) -> Path:
     folder = tmp_path / "game" / "WTF" / "Account" / "ACC" / "SavedVariables"
     folder.mkdir(parents=True)
-    (folder / "CoachLink.lua").write_bytes(FIXTURE.read_bytes())
+    (folder / "HeroBridge.lua").write_bytes(FIXTURE.read_bytes())
     return tmp_path / "game"
 
 
@@ -96,7 +96,7 @@ def test_progress_without_points_explains(
 
 
 def test_progress_prints_the_summary(wow_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
-    save = next(wow_dir.glob("WTF/Account/*/SavedVariables/CoachLink.lua"))
+    save = next(wow_dir.glob("WTF/Account/*/SavedVariables/HeroBridge.lua"))
     now = int(time.time())
     point = f'{{["time"] = {now - 60}, ["level"] = 7, ["xp"] = 5, ["subZone"] = "Brill"}},'
     text = save.read_text(encoding="utf-8")
@@ -215,5 +215,5 @@ def test_setup_command_runs_with_fake_downloads(
     assert main(["setup", "--wow-dir", str(wow_dir), "--yes"], download=fake_download) == 0
     out = capsys.readouterr().out
     assert "Step 1 of 5" in out
-    assert (wow_dir / "Interface" / "AddOns" / "CoachLink" / "CoachLink.toc").is_file()
+    assert (wow_dir / "Interface" / "AddOns" / "HeroBridge" / "HeroBridge.toc").is_file()
     assert not (tmp_path / "home").exists()  # no --claude-code, so ~/.claude is untouched

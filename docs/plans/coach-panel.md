@@ -129,11 +129,11 @@ https://legal.overwolf.com/docs/curseforge/mod-authors-terms):
 ```mermaid
 flowchart LR
     subgraph Game["WoW Forever (sandbox)"]
-        P["CoachLink addon<br/>snapshot + history<br/>+ Coach panel (new)"]
-        D["CoachLink_Advice addon (new)<br/>data only, written by the companion"]
+        P["HeroBridge addon<br/>snapshot + history<br/>+ Coach panel (new)"]
+        D["HeroBridge_Advice addon (new)<br/>data only, written by the companion"]
     end
-    SV[("SavedVariables<br/>CoachLink.lua<br/>(+ questions asked in game)")]
-    AF[("AddOns/CoachLink_Advice/<br/>Advice.lua")]
+    SV[("SavedVariables<br/>HeroBridge.lua<br/>(+ questions asked in game)")]
+    AF[("AddOns/HeroBridge_Advice/<br/>Advice.lua")]
     subgraph PC["Companion: wow-coach (Python)"]
         R["reader + watcher<br/>(exists)"]
         T["triggers + budget"]
@@ -157,14 +157,14 @@ flowchart LR
 
 ### 4.1 Why a separate data addon
 
-- The companion can't write into `CoachLink/`: the CurseForge app overwrites or flags changed
+- The companion can't write into `HeroBridge/`: the CurseForge app overwrites or flags changed
   files (TSM and Raider.IO users meet this).
-- So the companion owns its own folder, `Interface/AddOns/CoachLink_Advice/`, made by
+- So the companion owns its own folder, `Interface/AddOns/HeroBridge_Advice/`, made by
   `wow-coach setup`. It holds two files:
-  - `CoachLink_Advice.toc`: `## Interface:` copied from CoachLink.toc every time, so it never
+  - `HeroBridge_Advice.toc`: `## Interface:` copied from HeroBridge.toc every time, so it never
     shows as "out of date".
   - `Advice.lua`.
-- CoachLink.toc gets `## OptionalDeps: CoachLink_Advice`, so the data loads first. CoachLink
+- HeroBridge.toc gets `## OptionalDeps: HeroBridge_Advice`, so the data loads first. HeroBridge
   works the same without it.
 - One full game restart is needed after setup creates the folder.
 
@@ -182,11 +182,11 @@ questions = {   -- oldest first, at most 20
 - The text is at most 500 characters. `id` is time plus a counter.
 - Answered questions are pruned once the advice file has an answer with that id.
 
-**C2. The advice file** (`CoachLink_Advice/Advice.lua`, written only by the companion):
+**C2. The advice file** (`HeroBridge_Advice/Advice.lua`, written only by the companion):
 
 ```lua
 -- Written by wow-coach. Data only, rewritten each time; don't edit.
-CoachLinkAdvice = {
+HeroBridgeAdvice = {
   formatVersion = 1,
   writtenAt = 1794100100,
   characters = {
@@ -276,12 +276,12 @@ class Answer:
 ## 5. The addon side (Lua)
 
 - **Files:**
-  - New `CoachLinkPanel.lua`: one more file, so one game restart. Listed in the .toc after
-    `CoachLink.lua`.
+  - New `HeroBridgePanel.lua`: one more file, so one game restart. Listed in the .toc after
+    `HeroBridge.lua`.
   - New `Bindings.xml`.
-  - `CoachLink.lua` gets only the question store and the `ask` reason.
+  - `HeroBridge.lua` gets only the question store and the `ask` reason.
 - **Window:**
-  - Movable and resizable, with a remembered position and size (`CoachLinkDB.settings`). Esc
+  - Movable and resizable, with a remembered position and size (`HeroBridgeDB.settings`). Esc
     closes it, using `UISpecialFrames` like the copy window.
   - Contents: next steps (numbered), the latest answer (scrollable), the ask box, and a footer
     ("From ChatGPT, 5 min ago, based on your save from 21:02. AI can be wrong.").
@@ -294,7 +294,7 @@ class Answer:
 - **Taint safety:**
   - No secure templates and no protected calls. `ReloadUI()` only runs from a click or key
     press.
-  - Frames are named `CoachLink...`, and no Blizzard frame is changed.
+  - Frames are named `HeroBridge...`, and no Blizzard frame is changed.
 - **Performance:** event-driven only, no `OnUpdate`. The text is built once per load.
 - **Settings** (`Settings.RegisterCanvasLayoutCategory`): font size, and "show the panel when
   new advice arrives".
@@ -304,7 +304,7 @@ class Answer:
 
 | Module | Job |
 |---|---|
-| `advice/serialize.py`, `advice/writer.py`, `advice/install.py` | The safe Lua serializer and atomic writer (C2); create or refresh the `CoachLink_Advice` folder |
+| `advice/serialize.py`, `advice/writer.py`, `advice/install.py` | The safe Lua serializer and atomic writer (C2); create or refresh the `HeroBridge_Advice` folder |
 | `advice/questions.py` | Read the questions not yet answered from the save (C1) |
 | `ai/base.py` | The contracts (C5), `FakeProvider` |
 | `ai/chatgpt_signin.py` | Sign in with ChatGPT: OAuth PKCE with a 127.0.0.1 loopback and a fixed port; the access token in memory, the refresh token in the keychain; sign out revokes |
@@ -357,7 +357,7 @@ class Answer:
 | **0.8.0 Coach panel** | The panel, Ask in game, the advice file and data addon, `setup` creating it, MCP tools `questions_from_game` and `send_advice_to_game`, the live-mode agent answering `reason: ask`. Built alongside but not shipped: a Sign in with ChatGPT spike | In game: ask, then the Claude Code coach answers, then after `/reload` the panel shows it. Restart once after the update. All tests pass, and the compliance tests (9) pass. The spike proves sign-in plus one answer on a real account |
 | **0.9.0 Companion app** | Sign in with ChatGPT, keychain, `wow-coach ask`, `wow-coach app`, the usage log and caps, conversation history | A player with no terminal knowledge (beyond one install line) can sign in with ChatGPT and get answers in the window and the panel |
 | **0.10.0 When to speak** | Triggers, rules, the timer, quiet hours, optional triage, notifications | Defaults are manual only. Each automatic rule respects cooldowns and caps, shown by tests |
-| **1.0.0 Easy install + CurseForge** | Installers (signing them costs money each year: decide before 1.0), CurseForge "Forever" listing for CoachLink, privacy page, user guide with screenshots | Listed on CurseForge. A fresh Windows PC goes from zero to an answer in about 10 minutes |
+| **1.0.0 Easy install + CurseForge** | Installers (signing them costs money each year: decide before 1.0), CurseForge "Forever" listing for HeroBridge, privacy page, user guide with screenshots | Listed on CurseForge. A fresh Windows PC goes from zero to an answer in about 10 minutes |
 
 ## 9. Tests, including compliance tests
 
@@ -382,7 +382,7 @@ class Answer:
     `mss`, `PIL.ImageGrab`, `win32api`/`SendInput`) or reads another process's memory.
   - No code mentions consumer OAuth endpoints of Claude.ai or Google, and no code reads or
     reuses ChatGPT web-session cookies (only the official sign-in).
-  - The advice writer refuses any path outside `AddOns/CoachLink_Advice/`.
+  - The advice writer refuses any path outside `AddOns/HeroBridge_Advice/`.
   - Secrets never appear in files written by the app (tests with fake keys).
 - **In game** (a person, because automated tests can't run the game): a short checklist per release.
   Never close the game by force; quit through the menu. No big disk work on `/data` while it

@@ -326,7 +326,7 @@ def test_ai_error_propagates_and_nothing_is_written(tmp_path: Path) -> None:
 def test_a_failed_write_still_returns_the_answer(tmp_path: Path) -> None:
     world = make_world(tmp_path)
     folder = world.advice_file.parent
-    folder.parent.joinpath("CoachLink_Advice").write_text("a file, not a folder", encoding="utf-8")
+    folder.parent.joinpath("HeroBridge_Advice").write_text("a file, not a folder", encoding="utf-8")
     reply = coach_for(world, FakeProvider([GOOD_REPLY])).ask("hi")
     assert reply.answer.title == "Next steps"
     assert not reply.written_to_game
@@ -369,7 +369,7 @@ def test_error_midway_keeps_the_questions_already_answered(tmp_path: Path) -> No
 
 def block_the_advice_folder(world: World) -> None:
     """Make writing Advice.lua fail: a plain file sits where the folder should be."""
-    blocker = world.wow_dir / "Interface" / "AddOns" / "CoachLink_Advice"
+    blocker = world.wow_dir / "Interface" / "AddOns" / "HeroBridge_Advice"
     blocker.write_text("a file, not a folder", encoding="utf-8")
 
 
@@ -382,7 +382,7 @@ def save_with_questions(world: World, count: int) -> None:
     start = SAVE.index('["questions"] = {') + len('["questions"] = {\n')
     end = SAVE.index("},\n},\n},\n}", start)
     text = SAVE[:start] + lines + SAVE[end + 3 :]
-    save = world.wow_dir / "WTF" / "Account" / "ACCOUNT1" / "SavedVariables" / "CoachLink.lua"
+    save = world.wow_dir / "WTF" / "Account" / "ACCOUNT1" / "SavedVariables" / "HeroBridge.lua"
     save.write_text(text, encoding="utf-8")
 
 
@@ -404,7 +404,7 @@ def test_names_that_left_the_save_stay_hidden(tmp_path: Path) -> None:
     provider = FakeProvider([GOOD_REPLY, GOOD_REPLY])
     coach = coach_for(world, provider)
     coach.ask("first")  # Bobby is in the group here
-    save = world.wow_dir / "WTF" / "Account" / "ACCOUNT1" / "SavedVariables" / "CoachLink.lua"
+    save = world.wow_dir / "WTF" / "Account" / "ACCOUNT1" / "SavedVariables" / "HeroBridge.lua"
     save.write_text(SAVE.replace('["name"] = "Bobby"', '["name"] = "Someone"'), encoding="utf-8")
     coach.ask("Tell me about Bobby, who was in my old group.")
     assert "Bobby" not in prompt_text(provider, 1)

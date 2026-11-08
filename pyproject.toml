@@ -1,6 +1,6 @@
 [project]
 name = "wow-coach"
-version = "0.10.0"
+version = "0.11.0"
 description = "An AI coach for World of Warcraft: Forever: an addon saves your character, and any AI app can read it."
 readme = "README.md"
 license = "MIT"

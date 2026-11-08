@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).parent.parent
-ADDON_FILES = sorted((ROOT / "addon" / "CoachLink").glob("*.lua"))
+ADDON_FILES = sorted((ROOT / "addon" / "HeroBridge").glob("*.lua"))
 PYTHON_FILES = sorted((ROOT / "src" / "wow_coach").rglob("*.py"))
 
 # Game functions the addon must never CALL, and why. Hooking one by name (hooksecurefunc
@@ -150,7 +150,7 @@ def test_no_forbidden_tricks_or_logins(path: Path) -> None:
 
 def test_the_scan_sees_the_files() -> None:
     # A wrong path would make every test above pass without checking anything.
-    assert {path.name for path in ADDON_FILES} >= {"CoachLink.lua", "CoachLinkPanel.lua"}
+    assert {path.name for path in ADDON_FILES} >= {"HeroBridge.lua", "HeroBridgePanel.lua"}
     assert len(PYTHON_FILES) > 10
 
 

@@ -63,7 +63,7 @@ _log = logging.getLogger(__name__)
 STATUS_ICONS = {Status.OK: "ok", Status.ATTENTION: "attention", Status.PROBLEM: "problem"}
 STATUS_ICON_SIZE = 26
 KEYBINDING_SENTENCE = (
-    'In WoW, open Options → Keybindings → CoachLink and pick a key for "Save for the '
+    'In WoW, open Options → Keybindings → HeroBridge and pick a key for "Save for the '
     'coach (reloads the interface)". Press it whenever you want me to see your latest progress. '
     "Not in the list? Quit WoW completely and start it again once: the game only finds new "
     "key bindings when it starts."
@@ -308,7 +308,7 @@ class SetupPage(Page):
         self.restart_button.hide()
 
         self.game_card = SetupCard("Game folder")
-        self.addon_card = SetupCard("CoachLink addon")
+        self.addon_card = SetupCard("HeroBridge addon")
         self.answers_card = SetupCard("Answers folder")
         self.key_card = SetupCard('"Save for the coach" key')
         self.key_card.show_state("info", KEYBINDING_SENTENCE)
@@ -410,13 +410,13 @@ class SetupPage(Page):
         folder_ok = self._game_dir is not None and report.game_folder.status is Status.OK
         if not folder_ok or report.addon_is_link or report.addon.status is Status.OK:
             card.button.hide()
-        elif report.addon_installed is None:
+        elif report.addon_installed is None and not report.old_coachlink:
             card.show_button(
-                "Install CoachLink", "Download CoachLink and put it in your game.", primary=True
+                "Install HeroBridge", "Download HeroBridge and put it in your game.", primary=True
             )
         else:
             card.show_button(
-                "Update CoachLink", "Replace CoachLink with the matching version.", primary=True
+                "Update HeroBridge", "Replace HeroBridge with the matching version.", primary=True
             )
 
     def _show_answers(self, report: SetupReport) -> None:

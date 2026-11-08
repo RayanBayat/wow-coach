@@ -23,7 +23,7 @@ LEFT_OUT = {"list_characters", "questions_from_game", "send_advice_to_game"}
 def wow_dir(tmp_path: Path) -> Path:
     folder = tmp_path / "game" / "WTF" / "Account" / "ACC" / "SavedVariables"
     folder.mkdir(parents=True)
-    (folder / "CoachLink.lua").write_text(DATA, encoding="utf-8")
+    (folder / "HeroBridge.lua").write_text(DATA, encoding="utf-8")
     return tmp_path / "game"
 
 
@@ -86,7 +86,7 @@ def test_reading_tools_give_the_same_text_as_the_mcp_helpers(
 
 def test_a_missing_game_folder_is_a_sentence(tmp_path: Path, environ: dict[str, str]) -> None:
     tools = tools_by_name(tmp_path / "nope", environ)
-    assert "CoachLink" in tools["character_status"].run({})
+    assert "HeroBridge" in tools["character_status"].run({})
 
 
 def test_notes_round_trip_and_the_old_version_is_kept(

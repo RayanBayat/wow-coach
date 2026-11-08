@@ -5,8 +5,8 @@ Two channels, because a WoW addon can't use the network or read files while it r
 * **Questions, game -> wow-coach.** The Coach panel stores the player's questions in the
   addon's SavedVariables, under the character (``questions``). WoW writes that file at
   ``/reload``, logout or exit. ``Character.questions`` holds them after loading.
-* **Answers, wow-coach -> game.** wow-coach writes ``Interface/AddOns/CoachLink_Advice/
-  Advice.lua``. That is a tiny data-only addon of its own (not part of the CoachLink zip,
+* **Answers, wow-coach -> game.** wow-coach writes ``Interface/AddOns/HeroBridge_Advice/
+  Advice.lua``. That is a tiny data-only addon of its own (not part of the HeroBridge zip,
   so addon managers never overwrite it). The game reads it at the next ``/reload`` or
   login, and the Coach panel shows it.
 
@@ -19,11 +19,14 @@ from dataclasses import dataclass, field
 from typing import Final
 
 # The data-only addon wow-coach writes, and what is inside it.
-ADVICE_ADDON_NAME: Final = "CoachLink_Advice"
+ADVICE_ADDON_NAME: Final = "HeroBridge_Advice"
 ADVICE_FILE_NAME: Final = "Advice.lua"
-ADVICE_TOC_NAME: Final = f"{ADVICE_ADDON_NAME}.toc"
-ADVICE_GLOBAL: Final = "CoachLinkAdvice"  # the one global variable Advice.lua sets
+ADVICE_GLOBAL: Final = "HeroBridgeAdvice"  # the one global variable Advice.lua sets
 ADVICE_FORMAT_VERSION: Final = 1
+# Before 0.11.0 the addon was called CoachLink and the answers addon CoachLink_Advice. If only
+# the old addon is installed, we keep writing under the old names so it still shows answers.
+LEGACY_ADVICE_ADDON_NAME: Final = "CoachLink_Advice"
+LEGACY_ADVICE_GLOBAL: Final = "CoachLinkAdvice"
 
 # Limits. The addon enforces the question limits; wow-coach enforces the answer limits
 # (it cuts text that is too long and keeps only the newest answers).

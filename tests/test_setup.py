@@ -27,8 +27,8 @@ def make_zip(entries: dict[str, str]) -> bytes:
 def addon_zip(version: str = VERSION) -> bytes:
     return make_zip(
         {
-            "CoachLink/CoachLink.toc": f"## Title: CoachLink\n## Version: {version}\n",
-            "CoachLink/CoachLink.lua": "-- addon code\n",
+            "HeroBridge/HeroBridge.toc": f"## Title: HeroBridge\n## Version: {version}\n",
+            "HeroBridge/HeroBridge.lua": "-- addon code\n",
         }
     )
 
@@ -73,6 +73,7 @@ class Session:
             interactive=interactive,
             now=1_000_000.0,
             out=self.out,
+            game_is_running=lambda: False,  # never look at the real computer in a test
         )
 
     def run(self, choices: SetupChoices = NO_CHOICES, **world_options: object) -> tuple[int, str]:
@@ -82,11 +83,11 @@ class Session:
 
     @property
     def addon(self) -> Path:
-        return self.game / "Interface" / "AddOns" / "CoachLink"
+        return self.game / "Interface" / "AddOns" / "HeroBridge"
 
     @property
     def advice(self) -> Path:
-        return self.game / "Interface" / "AddOns" / "CoachLink_Advice"
+        return self.game / "Interface" / "AddOns" / "HeroBridge_Advice"
 
 
 @pytest.fixture
@@ -97,7 +98,7 @@ def session(tmp_path: Path) -> Session:
 def test_fresh_setup_installs_everything_and_remembers_the_folder(session: Session) -> None:
     code, text = session.run()
     assert code == 0
-    assert (session.addon / "CoachLink.toc").is_file()
+    assert (session.addon / "HeroBridge.toc").is_file()
     assert session.downloaded == [RELEASE_URL.format(v=VERSION)]
     assert load_saved_wow_dir(config_path(environ=session.environ)) == session.game
     assert "# Player notes" in Path(session.environ["WOW_COACH_NOTES_FILE"]).read_text("utf-8")
@@ -121,24 +122,24 @@ def test_second_run_changes_nothing_and_downloads_nothing(session: Session) -> N
     code, text = session.run()
     assert code == 0
     assert session.downloaded == []
-    assert f"CoachLink {VERSION} is already installed" in text
+    assert f"HeroBridge {VERSION} is already installed" in text
     assert "did not touch it" in text
 
 
 def test_older_addon_is_replaced_and_the_old_copy_removed(session: Session) -> None:
     session.addon.mkdir(parents=True)
-    (session.addon / "CoachLink.toc").write_text("## Version: 0.1.0\n", encoding="utf-8")
+    (session.addon / "HeroBridge.toc").write_text("## Version: 0.1.0\n", encoding="utf-8")
     (session.addon / "stale.lua").write_text("old", encoding="utf-8")
     code, _ = session.run()
     assert code == 0
-    assert "Version: 9.9.9" in (session.addon / "CoachLink.toc").read_text("utf-8")
+    assert "Version: 9.9.9" in (session.addon / "HeroBridge.toc").read_text("utf-8")
     assert not (session.addon / "stale.lua").exists()
     leftovers = [item.name for item in session.addon.parent.iterdir()]
-    assert sorted(leftovers) == ["CoachLink", "CoachLink_Advice"]  # no staging folders left
+    assert sorted(leftovers) == ["HeroBridge", "HeroBridge_Advice"]  # no staging folders left
 
 
 def test_a_linked_addon_is_left_alone(session: Session, tmp_path: Path) -> None:
-    developer_copy = tmp_path / "dev" / "CoachLink"
+    developer_copy = tmp_path / "dev" / "HeroBridge"
     developer_copy.mkdir(parents=True)
     session.addon.parent.mkdir(parents=True)
     try:
@@ -152,10 +153,12 @@ def test_a_linked_addon_is_left_alone(session: Session, tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "bad_name", ["../evil.lua", "CoachLink/../../evil.lua", "/abs/evil.lua", "Other/x.lua"]
+    "bad_name", ["../evil.lua", "HeroBridge/../../evil.lua", "/abs/evil.lua", "Other/x.lua"]
 )
 def test_unsafe_zip_is_refused_and_nothing_is_written(session: Session, bad_name: str) -> None:
-    session.zip_bytes = make_zip({"CoachLink/CoachLink.toc": "## Version: 9.9.9\n", bad_name: "x"})
+    session.zip_bytes = make_zip(
+        {"HeroBridge/HeroBridge.toc": "## Version: 9.9.9\n", bad_name: "x"}
+    )
     code, text = session.run()
     assert code == 1
     assert "unsafe entry" in text
@@ -165,10 +168,10 @@ def test_unsafe_zip_is_refused_and_nothing_is_written(session: Session, bad_name
 
 
 def test_zip_without_the_toc_file_is_refused(session: Session) -> None:
-    session.zip_bytes = make_zip({"CoachLink/CoachLink.lua": "x"})
+    session.zip_bytes = make_zip({"HeroBridge/HeroBridge.lua": "x"})
     code, text = session.run()
     assert code == 1
-    assert "CoachLink.toc" in text
+    assert "HeroBridge.toc" in text
 
 
 def test_not_a_zip_is_refused(session: Session) -> None:
@@ -191,11 +194,11 @@ def test_failed_swap_keeps_the_old_addon_working(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     session.addon.mkdir(parents=True)
-    (session.addon / "CoachLink.toc").write_text("## Version: 0.1.0\n", encoding="utf-8")
+    (session.addon / "HeroBridge.toc").write_text("## Version: 0.1.0\n", encoding="utf-8")
     real_rename = Path.rename
 
     def failing_rename(self: Path, target: Path) -> Path:
-        if self.name == "CoachLink" and self.parent.name == ".CoachLink-new":
+        if self.name == "HeroBridge" and self.parent.name == ".HeroBridge-new":
             raise PermissionError("pretend the folder is locked")
         return real_rename(self, target)
 
@@ -203,13 +206,13 @@ def test_failed_swap_keeps_the_old_addon_working(
     code, text = session.run()
     assert code == 1
     assert "PROBLEM" in text
-    assert "Version: 0.1.0" in (session.addon / "CoachLink.toc").read_text("utf-8")
+    assert "Version: 0.1.0" in (session.addon / "HeroBridge.toc").read_text("utf-8")
 
 
 def test_setup_creates_the_folder_for_the_coach_panel(session: Session) -> None:
     code, text = session.run()
     assert code == 0
-    toc = (session.advice / "CoachLink_Advice.toc").read_text("utf-8")
+    toc = (session.advice / "HeroBridge_Advice.toc").read_text("utf-8")
     assert "## Interface:" in toc
     assert "Advice.lua" in toc
     assert "Coach panel" in text
@@ -356,3 +359,62 @@ def test_setup_transcript_is_plain_words(session: Session) -> None:
     _, text = session.run(replace(NO_CHOICES, claude_code=True))
     print(text)  # shown with pytest -s; copied into the release notes
     assert text.count("OK:") >= 5
+
+
+# ---- players coming from the old CoachLink addon (renamed HeroBridge in 0.11.0) -----------
+
+OLD_SAVE = (
+    'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
+    '["Testchar-Testrealm"] = {\n["snapshot"] = {\n["savedAt"] = 42,\n},\n},\n},\n}\n'
+)
+
+
+def add_old_coachlink(session: Session) -> Path:
+    """Put an old CoachLink addon, its answers folder and its save in the fake game."""
+    addons = session.game / "Interface" / "AddOns"
+    for name in ("CoachLink", "CoachLink_Advice"):
+        (addons / name).mkdir(parents=True)
+    (addons / "CoachLink" / "CoachLink.toc").write_text("## Version: 0.10.0\n")
+    save_folder = session.game / "WTF" / "Account" / "ACC" / "SavedVariables"
+    save_folder.mkdir(parents=True)
+    (save_folder / "CoachLink.lua").write_text(OLD_SAVE)
+    return save_folder
+
+
+def test_setup_replaces_coachlink_and_moves_the_save(session: Session) -> None:
+    save_folder = add_old_coachlink(session)
+    code, text = session.run()
+    assert code == 0, text
+    assert (session.addon / "HeroBridge.toc").is_file()
+    assert not (session.game / "Interface" / "AddOns" / "CoachLink").exists()
+    assert not (session.game / "Interface" / "AddOns" / "CoachLink_Advice").exists()
+    assert session.advice.is_dir()
+    assert (save_folder / "HeroBridge.lua").read_text().startswith("HeroBridgeDB = {")
+    assert (save_folder / "CoachLink.lua").read_text() == OLD_SAVE
+    assert "CoachLink is now called HeroBridge" in text
+    assert "PROBLEM" not in text
+
+
+def test_setup_changes_nothing_while_the_game_runs(session: Session) -> None:
+    save_folder = add_old_coachlink(session)
+    world = replace(session.world(), game_is_running=lambda: True)
+    code = run_setup(NO_CHOICES, world)
+    assert code == 1
+    assert "WoW is still running" in session.out.getvalue()
+    assert (session.game / "Interface" / "AddOns" / "CoachLink").is_dir()
+    assert not (save_folder / "HeroBridge.lua").exists()
+    assert session.downloaded == []
+
+
+def test_setup_leaves_a_linked_coachlink_alone(session: Session, tmp_path: Path) -> None:
+    add_old_coachlink(session)
+    addons = session.game / "Interface" / "AddOns"
+    (addons / "CoachLink" / "CoachLink.toc").unlink()
+    (addons / "CoachLink").rmdir()
+    repo = tmp_path / "repo-copy"
+    repo.mkdir()
+    (addons / "CoachLink").symlink_to(repo, target_is_directory=True)
+    code, text = session.run()
+    assert code == 0
+    assert (addons / "CoachLink").is_symlink()
+    assert "left it alone" in text

@@ -2,7 +2,7 @@
 
 WoW saves addon data as plain Lua assignments, for example::
 
-    CoachLinkDB = {
+    HeroBridgeDB = {
     ["level"] = 7,
     ["bags"] = {
     ["free"] = 3,
@@ -91,7 +91,7 @@ class _Parser:
         self._pos += 1
 
     def _read_name(self) -> str:
-        """Read an identifier such as ``CoachLinkDB``."""
+        """Read an identifier such as ``HeroBridgeDB``."""
         self._skip_blanks()
         start = self._pos
         while self._pos < len(self._text) and (

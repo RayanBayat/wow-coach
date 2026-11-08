@@ -8,7 +8,7 @@ Last updated: 2026-11-08.
 
 ## The short version
 
-- The CoachLink addon writes your character's data to a file on your computer. Nothing else.
+- The HeroBridge addon writes your character's data to a file on your computer. Nothing else.
 - The `wow-coach` program reads that file on your computer.
 - When **you choose** to get answers from wow-coach's own coach (`wow-coach ask`, the coach
   window), it sends that data, your question, the last few messages of the conversation and
@@ -24,7 +24,7 @@ Last updated: 2026-11-08.
 |---|---|---|
 | Your character's snapshot: name, realm, level, zone, quests, gear, bags, bank, mail, spells, stats, reputations, history (deaths, items, quests) | The game's SavedVariables file on your computer | OpenAI, when wow-coach's own coach answers (only after you signed in). Any other AI app you connect |
 | Questions you type in the Coach panel or the coach window | The game's SavedVariables file, and a conversation file in wow-coach's data folder | OpenAI, as above |
-| The coach's answers | `Interface/AddOns/CoachLink_Advice/Advice.lua`, and the conversation file | Nobody else |
+| The coach's answers | `Interface/AddOns/HeroBridge_Advice/Advice.lua`, and the conversation file | Nobody else |
 | Your chats with your Claude coach (`claude --agent wow-coach`): what you typed and the coach's text replies, copied from Claude Code's own session files in `~/.claude/projects` (never its tool calls, thinking or other sessions), plus answers other apps write into the game's answer file | The same conversation file in wow-coach's data folder. The Claude Code files are only read, never changed | OpenAI, as part of the recent conversation that goes with each question to wow-coach's own coach (the newest messages that fit, about 6 000 characters). Other players' names in them are replaced with "a player" like everywhere else. Turn off "Use my Claude coach chats" in Settings to stop importing them and to keep them out of what is sent |
 | Your player notes and character journals (the coach writes them; they can hold personal notes, for example how you like to be coached or notes about your computer) | wow-coach's data folder | OpenAI, with each question to wow-coach's own coach (the whole journal and player notes, up to about 16 000 and 6 000 characters; longer notes keep their most useful sections), unless you turn off "send the coach's notes" in Settings. Sections about your computer (a heading with "computer", "PC" or "machine", such as "## This computer") are never sent. The AI app you use, when it reads them |
 | Other players' names (your group, mail senders, players who attacked you) | The game's SavedVariables file | Hidden from wow-coach's own coach (replaced with "a player") unless you turn on "share other players' names". Other AI apps can read them in the status report |
@@ -60,9 +60,9 @@ the requests (`store: false`).
 - **Don't use wow-coach's own coach.** Without `wow-coach signin`, nothing is sent to OpenAI.
 - **Sign out:** run `wow-coach signout`, or click **Sign out** in the coach window. You can
   also disconnect wow-coach in your ChatGPT settings.
-- **Delete everything:** delete wow-coach's data folder, the `CoachLink_Advice` folder in the
-  game's `Interface/AddOns`, and the CoachLink SavedVariables file
-  (`WTF/Account/<account>/SavedVariables/CoachLink.lua`).
+- **Delete everything:** delete wow-coach's data folder, the `HeroBridge_Advice` folder in the
+  game's `Interface/AddOns`, and the HeroBridge SavedVariables file
+  (`WTF/Account/<account>/SavedVariables/HeroBridge.lua`).
 - **Other players' names:** keep "share other players' names" off (the default).
 - **Your Claude coach chats:** turn off "Use my Claude coach chats" (Settings, Privacy) so they
   are not imported, not shown, and never sent to ChatGPT. Chats already imported stay in the

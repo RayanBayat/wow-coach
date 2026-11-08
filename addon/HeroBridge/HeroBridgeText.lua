@@ -1,12 +1,12 @@
 --[[
-CoachLink text export: turns a snapshot into plain text for pasting into an AI chat.
+HeroBridge text export: turns a snapshot into plain text for pasting into an AI chat.
 
 This file is "pure": it only does string work on tables you hand it. It never
 calls the game, so the test harness can check its output outside WoW.
 
 WoW gives every file of an addon the same two values through `...`: the addon
 name and one shared table. We put our function on that table (ns.formatSnapshotText)
-so CoachLink.lua can call it.
+so HeroBridge.lua can call it.
 
 The text is only your character's data: no instructions for the AI, so you can
 ask it whatever you like. No color codes and no Markdown, so it looks the same
@@ -609,15 +609,15 @@ end
 -- The public function
 -------------------------------------------------------------------------------
 
--- snapshot: the table CoachLink builds. history: list of events (may be empty).
+-- snapshot: the table HeroBridge builds. history: list of events (may be empty).
 -- now: Unix time, used for "5 min ago". Returns one string with "\n" line breaks.
--- CoachLink.lua uses this for the prices in the history ("Bought: ... for 2s 50c").
+-- HeroBridge.lua uses this for the prices in the history ("Bought: ... for 2s 50c").
 ns.moneyText = moneyText
 
 function ns.formatSnapshotText(snapshot, history, now)
     local out = {}
     local made = (date and now) and (", " .. date("%Y-%m-%d %H:%M", now)) or ""
-    table.insert(out, "World of Warcraft: Forever character sheet (CoachLink addon" .. made .. ")")
+    table.insert(out, "World of Warcraft: Forever character sheet (HeroBridge addon" .. made .. ")")
 
     addSection(out, "== CHARACTER ==", characterLines(snapshot, now))
     addSection(out, "== LOCATION ==", locationLines(snapshot))

@@ -1,4 +1,4 @@
-"""The ``wow-coach`` MCP server: lets Claude read the CoachLink data over stdio.
+"""The ``wow-coach`` MCP server: lets Claude read the HeroBridge data over stdio.
 
 The file is split in two layers:
 

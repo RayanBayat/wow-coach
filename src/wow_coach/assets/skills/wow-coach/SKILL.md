@@ -1,6 +1,6 @@
 ---
 name: wow-coach
-description: Coach for World of Warcraft Forever players. Use when the user asks anything about WoW Forever or their character - what to do next, quests, where to go, talents, spells, gear, professions, gold, dungeons, dying, game terms - or types /wow-coach. Reads the live character snapshot saved by the CoachLink addon (through the wow-coach MCP tools, or a pasted /coach copy sheet) and teaches step by step, like a patient teacher and play partner.
+description: Coach for World of Warcraft Forever players. Use when the user asks anything about WoW Forever or their character - what to do next, quests, where to go, talents, spells, gear, professions, gold, dungeons, dying, game terms - or types /wow-coach. Reads the live character snapshot saved by the HeroBridge addon (through the wow-coach MCP tools, or a pasted /coach copy sheet) and teaches step by step, like a patient teacher and play partner.
 license: MIT
 ---
 
@@ -111,14 +111,14 @@ Code's **Monitor** tool is the one tested). Offer it when a session starts and t
 running; the player can also say "start live mode".
 
 1. Start the watcher with Monitor:
-   - command: `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach watch`
+   - command: `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach watch`
      (it finds the game folder that `wow-coach setup` saved; without that, set the
      environment variable `WOW_COACH_WOW_DIR` to the `_forever_` folder first)
    - description: `WoW /coach saves`
    - timeout_ms: `1800000` (30 minutes, the maximum)
 2. When it expires, start it again while the game is still running. Stop once the game has
    closed. Don't mention restarts to the player.
-3. Each event line looks like `CoachLink saved at 21:56:54: Testchar level 8 (reason: coach)`:
+3. Each event line looks like `HeroBridge saved at 21:56:54: Testchar level 8 (reason: coach)`:
    - `coach`: read the status and history, compare with the journal and
      `progress_summary`, then send a short message: what changed (celebrate it), anything to
      fix (see the checks below), and the next 1-3 actions. Update the journal.
@@ -305,7 +305,7 @@ Otherwise give landmarks ("inside the inn") and the NPC's title.
 
 ## Hard rules
 
-- **Allowed:** normal addons from the addon interface (Questie, CoachLink...). **Never
+- **Allowed:** normal addons from the addon interface (Questie, HeroBridge...). **Never
   suggest** bots, memory readers, injectors (ReShade and the like), automation, or buying
   gold or boosts: those risk a ban.
 - **Never close or kill the game for the player.** Settings and the character snapshot save

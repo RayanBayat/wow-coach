@@ -2,7 +2,7 @@
 
 The Coach panel is a small window inside World of Warcraft: Forever. It shows your coach's
 next steps and answers, and has a box where you can ask the coach a question. It comes with
-the CoachLink addon from version 0.8.0.
+the HeroBridge addon from version 0.8.0.
 
 **How it works, in plain words:**
 - A WoW addon can't use the internet, so the coach itself runs on your PC: the Claude Code
@@ -14,7 +14,7 @@ the CoachLink addon from version 0.8.0.
 
 ## What you need
 
-- CoachLink 0.8.0 or newer.
+- HeroBridge 0.8.0 or newer.
 - A coach on your PC that can use wow-coach's tools: the
   [Claude Code agent](claude-code-agent.md) (the easiest), or another
   [AI app connected to wow-coach](connect-an-ai-app.md).
@@ -24,13 +24,13 @@ the CoachLink addon from version 0.8.0.
 
 1. Close World of Warcraft through the game menu: press Esc, then click **Exit Game**.
 2. Run this line in a terminal. It updates the addon and creates the folder where your coach
-   writes its answers (`Interface/AddOns/CoachLink_Advice`):
+   writes its answers (`Interface/AddOns/HeroBridge_Advice`):
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach setup
    ```
 
-   **You should see:** "Setup finished", and a line that says it created `CoachLink_Advice`.
+   **You should see:** "Setup finished", and a line that says it created `HeroBridge_Advice`.
 3. Start the game again. The game only notices new addon files after a full restart, not a
    `/reload`.
 
@@ -38,8 +38,8 @@ the CoachLink addon from version 0.8.0.
 
 Any of these:
 - Type `/coach panel` in the chat box.
-- Click the addon button on the minimap, then **CoachLink**.
-- Bind a key: Options, then Keybindings, then the **CoachLink** section.
+- Click the addon button on the minimap, then **HeroBridge**.
+- Bind a key: Options, then Keybindings, then the **HeroBridge** section.
 
 The panel remembers where you put it and how big it is. **A-** and **A+** change the text
 size. Esc closes it.
@@ -83,9 +83,9 @@ plan with you. After a reload, one chat line tells you when there is new advice.
 
 | What you see | What to do |
 |---|---|
-| "please restart the game once to finish updating CoachLink" | Exit the game through the menu and start it again |
+| "please restart the game once to finish updating HeroBridge" | Exit the game through the menu and start it again |
 | The panel says there is no advice yet | Ask a question, or ask your coach on the PC to send you next steps. Then `/reload` |
-| Your coach says it wrote an answer, but the panel shows nothing new | Type `/reload`. If it is still missing, check that `wow-coach setup` created `CoachLink_Advice`, and restart the game once |
+| Your coach says it wrote an answer, but the panel shows nothing new | Type `/reload`. If it is still missing, check that `wow-coach setup` created `HeroBridge_Advice`, and restart the game once |
 | The panel says "you can ask after the fight" | Wait until you are out of combat |
 
 More help: [troubleshooting](troubleshooting.md).

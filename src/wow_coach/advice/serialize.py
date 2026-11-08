@@ -2,7 +2,7 @@
 
 Rules that keep it safe:
 
-* The output is one header comment plus exactly one statement, ``CoachLinkAdvice = { ... }``.
+* The output is one header comment plus exactly one statement, ``HeroBridgeAdvice = { ... }``.
 * Only tables, double-quoted strings, whole numbers and booleans are ever written. There
   is no way for advice text to become code, because every string is escaped.
 * Every ``|`` is doubled to ``||``, so AI text can never make a WoW color code or link.
@@ -122,7 +122,7 @@ def _character_data(character: CharacterAdvice) -> dict[str, Data]:
 
 
 def advice_data(advice: AdviceFile) -> dict[str, Data]:
-    """The whole file as plain nested data (what ``CoachLinkAdvice`` should contain)."""
+    """The whole file as plain nested data (what ``HeroBridgeAdvice`` should contain)."""
     characters: dict[str, Data] = {
         key: _character_data(value) for key, value in sorted(advice.characters.items())
     }
@@ -166,8 +166,8 @@ def _render_table(entries: Sequence[tuple[str | None, Data]], depth: int) -> str
 # ---- public ---------------------------------------------------------------------
 
 
-def _render_file(data: dict[str, Data]) -> str:
-    return f"{HEADER}{ADVICE_GLOBAL} = {_render(data, 0)}\n"
+def _render_file(data: dict[str, Data], global_name: str) -> str:
+    return f"{HEADER}{global_name} = {_render(data, 0)}\n"
 
 
 def _drop_oldest_answer(advice: AdviceFile) -> AdviceFile | None:
@@ -186,8 +186,10 @@ def _drop_oldest_answer(advice: AdviceFile) -> AdviceFile | None:
     return replace(advice, characters={**advice.characters, oldest[1]: shorter})
 
 
-def advice_to_lua(advice: AdviceFile) -> str:
+def advice_to_lua(advice: AdviceFile, global_name: str = ADVICE_GLOBAL) -> str:
     """Return the full text of ``Advice.lua`` for ``advice``.
+
+    ``global_name`` is the variable the file sets (the old name for the old addon).
 
     The advice is first cut to the contract's limits. If the file is still too big, the
     oldest answers (of any character) are dropped until it fits.
@@ -198,20 +200,20 @@ def advice_to_lua(advice: AdviceFile) -> str:
         AdviceNotRepeatable: If reading the text back does not give the same data.
     """
     limited = limit_advice(advice)
-    text = _render_file(advice_data(limited))
+    text = _render_file(advice_data(limited), global_name)
     while len(text.encode("utf-8")) > MAX_FILE_BYTES and _answer_count(limited) > 1:
         shorter = _drop_oldest_answer(limited)
         if shorter is None:
             break
         limited = shorter
-        text = _render_file(advice_data(limited))
+        text = _render_file(advice_data(limited), global_name)
     size = len(text.encode("utf-8"))
     if size > MAX_FILE_BYTES:
         raise AdviceTooLarge(
             f"The Coach panel file would be {size} bytes even with a single answer, "
             f"more than the {MAX_FILE_BYTES} allowed."
         )
-    _check_round_trip(text, advice_data(limited))
+    _check_round_trip(text, advice_data(limited), global_name)
     return text
 
 
@@ -219,11 +221,11 @@ def _answer_count(advice: AdviceFile) -> int:
     return sum(len(character.answers) for character in advice.characters.values())
 
 
-def _check_round_trip(text: str, data: dict[str, Data]) -> None:
+def _check_round_trip(text: str, data: dict[str, Data], global_name: str) -> None:
     """Parse our own output and make sure it is exactly the data we meant to write."""
     try:
         parsed = parse_saved_variables(text)
     except WowCoachError as error:
         raise AdviceNotRepeatable(f"The advice text could not be read back: {error}") from error
-    if parsed != {ADVICE_GLOBAL: data}:
+    if parsed != {global_name: data}:
         raise AdviceNotRepeatable("The advice text read back differently from what was meant.")

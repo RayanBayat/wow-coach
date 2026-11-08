@@ -1,7 +1,13 @@
-# Install the CoachLink addon
+# Install the HeroBridge addon
 
-CoachLink is a small add-on for World of Warcraft: Forever. It saves your character so an AI
+HeroBridge is a small add-on for World of Warcraft: Forever. It saves your character so an AI
 can read it. You do this once.
+
+HeroBridge was called CoachLink before 0.11.0.
+
+**Already have CoachLink?** Close WoW completely, then run setup or click **Update HeroBridge** in
+the app. Your saved character is copied to HeroBridge, and the old CoachLink folders are removed.
+A folder that is a link (a developer's copy) is left alone.
 
 An **addon** is a folder of files that the game loads when it starts. Installing one means
 putting its folder in the right place.
@@ -11,9 +17,9 @@ You need: WoW Forever installed through the Battle.net app, and about 10 minutes
 ## Easiest: let the WoW Coach app do it
 
 If you use the [WoW Coach app](desktop-app.md), you do not need this page. Open the app, click
-**Setup**, and click **Install CoachLink** (or **Update CoachLink**) on the **CoachLink addon**
+**Setup**, and click **Install HeroBridge** (or **Update HeroBridge**) on the **HeroBridge addon**
 card. It downloads the addon that matches the app and puts it in your game, and it creates the
-`CoachLink_Advice` folder for the coach's answers. Then restart the game completely. This page
+`HeroBridge_Advice` folder for the coach's answers. Then restart the game completely. This page
 is for people who do not use the app, or who prefer to do it by hand.
 
 ## The shortcut: let wow-coach do it from a terminal
@@ -23,7 +29,7 @@ line finds your game folder, downloads the addon, installs it and remembers wher
 (it asks you to paste the folder if it cannot find it):
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach setup
 ```
 
 **You should see:** five steps, each with an `OK:` line. Quit the game completely and start
@@ -33,9 +39,9 @@ or old. If you prefer to do it by hand, read on.
 ## Step 1: Download the addon
 
 1. Open https://github.com/RayanBayat/wow-coach/releases/latest
-2. Under **Assets**, click `CoachLink-0.10.0.zip` (the number may be newer).
+2. Under **Assets**, click `HeroBridge-0.11.0.zip` (the number may be newer).
 
-**You should see:** a file called `CoachLink-0.10.0.zip` in your Downloads folder.
+**You should see:** a file called `HeroBridge-0.11.0.zip` in your Downloads folder.
 
 **If it didn't work:** if your browser says the file is unsafe, check that you came from the
 link above. The zip holds only text files.
@@ -76,23 +82,23 @@ in most file managers the shortcut is Ctrl+H.
 
 **You should see:** an `AddOns` folder, probably empty.
 
-## Step 4: Unzip CoachLink into AddOns
+## Step 4: Unzip HeroBridge into AddOns
 
-1. Open your Downloads folder and unzip `CoachLink-0.10.0.zip`.
+1. Open your Downloads folder and unzip `HeroBridge-0.11.0.zip`.
    - Windows: right-click the zip, **Extract All...**.
    - macOS: double-click the zip.
    - Linux: right-click, Extract, or run `unzip` in a terminal.
-2. You get a folder named `CoachLink`. Move or copy that whole folder into `AddOns`.
+2. You get a folder named `HeroBridge`. Move or copy that whole folder into `AddOns`.
 
 **You should see:** this exact path exists:
 
 ```
-_forever_\Interface\AddOns\CoachLink\CoachLink.toc
+_forever_\Interface\AddOns\HeroBridge\HeroBridge.toc
 ```
 
 **If it didn't work:** the most common mistake is one folder too many, such as
-`AddOns\CoachLink\CoachLink\CoachLink.toc`. Move the inner folder up one level so `CoachLink.toc`
-sits directly inside the first `CoachLink` folder.
+`AddOns\HeroBridge\HeroBridge\HeroBridge.toc`. Move the inner folder up one level so `HeroBridge.toc`
+sits directly inside the first `HeroBridge` folder.
 
 ## Step 5: Restart the game fully
 
@@ -104,21 +110,21 @@ A new addon is only noticed when the game starts fresh. Typing `/reload` is not 
 ## Step 6: Check that it is on
 
 1. On the character selection screen, click the **AddOns** button (bottom left).
-2. Find **CoachLink** in the list and make sure its box is ticked.
-3. If there is a box such as **Load out of date AddOns**, tick it only if CoachLink is shown as
+2. Find **HeroBridge** in the list and make sure its box is ticked.
+3. If there is a box such as **Load out of date AddOns**, tick it only if HeroBridge is shown as
    out of date and unticked. (The label may read slightly differently.)
 4. Log in with your character.
 
-**You should see:** nothing special on screen, or a short blue "CoachLink:" line in the chat.
+**You should see:** nothing special on screen, or a short blue "HeroBridge:" line in the chat.
 
-**If it didn't work:** if CoachLink isn't in the list at all, the folder is in the wrong place:
+**If it didn't work:** if HeroBridge isn't in the list at all, the folder is in the wrong place:
 repeat the check at the end of Step 4. Also confirm you restarted the whole game.
 
 ## Step 7: Test it
 
 1. In the chat box, type `/coach help` and press Enter.
 
-**You should see:** a short help text from CoachLink listing its commands.
+**You should see:** a short help text from HeroBridge listing its commands.
 
 2. Type `/coach` and press Enter. The screen reloads for a few seconds. That's normal: it is how
    the addon saves your character.
@@ -128,12 +134,12 @@ chat](use-with-any-ai-chat.md).
 
 ## Updating later
 
-With the app: **Setup**, then **Update CoachLink** on the CoachLink card. By hand: download
-the new zip, delete the old `CoachLink` folder in `AddOns`, unzip the new one in its
+With the app: **Setup**, then **Update HeroBridge** on the HeroBridge card. By hand: download
+the new zip, delete the old `HeroBridge` folder in `AddOns`, unzip the new one in its
 place and restart the game fully.
 
 ## Uninstalling
 
-Close the game and delete the `CoachLink` folder from `AddOns`. If you also used the Coach
-panel or the app, delete the `CoachLink_Advice` folder next to it too (it holds the coach's
+Close the game and delete the `HeroBridge` folder from `AddOns`. If you also used the Coach
+panel or the app, delete the `HeroBridge_Advice` folder next to it too (it holds the coach's
 answers). To remove the app itself, see [Uninstall](desktop-app.md#uninstall).

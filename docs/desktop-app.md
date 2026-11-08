@@ -75,7 +75,7 @@ uv --version
 Paste this line and press Enter:
 
 ```
-uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.10.0"
+uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.11.0"
 ```
 
 It downloads WoW Coach and the parts it needs (about 100 MB, once). This can take a few
@@ -151,7 +151,7 @@ uv --version
 ### 3. Install WoW Coach
 
 ```
-uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.10.0"
+uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.11.0"
 ```
 
 It downloads WoW Coach and the parts it needs (about 100 MB, once).
@@ -225,12 +225,16 @@ something to do, a button.
 
 1. **Game folder**: shows the folder in use. Click **Change…** to pick another one. After
    changing it, click **Restart WoW Coach**.
-2. **CoachLink addon**: if it is missing or old, click **Install CoachLink** (or **Update
-   CoachLink**). WoW Coach downloads the addon that matches the app and puts it in your game.
-   **You should see:** "CoachLink 0.10.0 is installed and up to date." (after the
+2. **HeroBridge addon**: if it is missing or old, click **Install HeroBridge** (or **Update
+   HeroBridge**). WoW Coach downloads the addon that matches the app and puts it in your game.
+   **You should see:** "HeroBridge 0.11.0 is installed and up to date." (after the
    work finishes, the card says to restart WoW).
+   If the old CoachLink addon is still there, the card says: "CoachLink is now called
+   HeroBridge. Close WoW, then click Update. Your saved character comes along." Update installs
+   HeroBridge, copies the saved characters, and removes the old folders. It refuses while WoW
+   is running.
 3. **Answers folder**: if it says the folder does not exist, click **Create it**. (Installing
-   CoachLink creates it too.) This is the folder where the coach puts its answers for the game.
+   HeroBridge creates it too.) This is the folder where the coach puts its answers for the game.
 4. **"Save for the coach" key**: this card only explains what to do in the game. See the next
    section.
 5. **Start menu** card on Windows, **App menu** card on Linux (not on macOS): click **Add to
@@ -253,14 +257,14 @@ A new addon (and a new key) is only noticed when the game starts fresh.
 
 1. If WoW is running, quit it completely from the game menu (Esc, then **Exit Game**).
 2. Start it again from the Battle.net app.
-3. On the character screen, click **AddOns** (bottom left) and check that **CoachLink** is
+3. On the character screen, click **AddOns** (bottom left) and check that **HeroBridge** is
    ticked.
 
 ### Give the coach a key to save your character
 
 The game only hands your character to other programs when it saves. A key does that for you.
 
-1. In WoW: **Options → Keybindings → CoachLink → Save for the coach (reloads the interface)**.
+1. In WoW: **Options → Keybindings → HeroBridge → Save for the coach (reloads the interface)**.
 2. Pick any free key.
 
 **You should see:** the key next to that line. If the line is missing, you have not restarted
@@ -420,23 +424,23 @@ Script" action running the command; we have not tested that.
 
 New versions are announced on the
 [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest). The install line has
-a version in it (the `@v0.10.0` at the end), and `uv tool upgrade` keeps to the constraints you
+a version in it (the `@v0.11.0` at the end), and `uv tool upgrade` keeps to the constraints you
 installed with (this is what [uv's documentation](https://docs.astral.sh/uv/concepts/tools/)
 says), so it does not move you to a newer tag. To update, install again with the new version:
 
 1. Quit WoW Coach: **Quit** in the tray icon's menu.
-2. Run the install line again, with the new version number in place of `v0.10.0`, and `--force`
+2. Run the install line again, with the new version number in place of `v0.11.0`, and `--force`
    after `install`:
 
    ```
-   uv tool install --force "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.10.0"
+   uv tool install --force "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.11.0"
    ```
 
-3. Start WoW Coach again. Click **Setup**. If the **CoachLink addon** card says an update is
-   ready, click **Update CoachLink**.
+3. Start WoW Coach again. Click **Setup**. If the **HeroBridge addon** card says an update is
+   ready, click **Update HeroBridge**.
 4. Restart WoW completely.
 
-**You should see:** the CoachLink card says "CoachLink (new version) is installed and up to
+**You should see:** the HeroBridge card says "HeroBridge (new version) is installed and up to
 date." Your shortcuts, settings, notes and sign-in stay as they were.
 
 We could not test an update from one tag to the next (the next tag does not exist yet).
@@ -466,11 +470,11 @@ Do the steps you need, in this order.
 | What | Windows | Linux | macOS |
 |---|---|---|---|
 | WoW Coach's own files (your notes, chat history, settings) | `%LOCALAPPDATA%\wow-coach` | `~/.local/share/wow-coach` (or under `$XDG_DATA_HOME` if you set it) | `~/Library/Application Support/wow-coach` |
-| The addon, in the game folder | `_forever_\Interface\AddOns\CoachLink` and `CoachLink_Advice` | the same, inside your Wine prefix | the same |
+| The addon, in the game folder | `_forever_\Interface\AddOns\HeroBridge` and `HeroBridge_Advice` | the same, inside your Wine prefix | the same |
 
-To remove the addon, close the game and delete the `CoachLink` and `CoachLink_Advice` folders
+To remove the addon, close the game and delete the `HeroBridge` and `HeroBridge_Advice` folders
 (see [Install the addon](install-the-addon.md#uninstalling)). The game also keeps a saved
-character file called `CoachLink.lua` in its `SavedVariables` folder; deleting it is optional.
+character file called `HeroBridge.lua` in its `SavedVariables` folder; deleting it is optional.
 
 ## If something doesn't work
 
@@ -479,7 +483,7 @@ See [Troubleshooting](troubleshooting.md#the-wow-coach-app). Common ones:
 - `wow-coach` is "not found" or "not recognized".
 - "The desktop app needs the desktop extra".
 - The app cannot find the game folder.
-- CoachLink is not loaded in the game, or the "Save for the coach" key is missing.
+- HeroBridge is not loaded in the game, or the "Save for the coach" key is missing.
 - There is no tray icon (some Linux desktops).
 - The overlay key does nothing, or the small card hides behind the game.
 

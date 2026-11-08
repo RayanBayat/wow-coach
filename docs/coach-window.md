@@ -15,7 +15,7 @@ It runs only on your computer. Only you can open it, and it never talks to other
 
 - A ChatGPT plan that allows it (Plus or Pro). Answers come out of your plan's usage, like
   using ChatGPT itself.
-- The CoachLink addon 0.8.0 or newer, and the [Coach panel](coach-panel.md) set up.
+- The HeroBridge addon 0.8.0 or newer, and the [Coach panel](coach-panel.md) set up.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/), the same one-line install as
   in the other guides.
 
@@ -25,7 +25,7 @@ It runs only on your computer. Only you can open it, and it never talks to other
    **wow-coach** there; wow-coach never sees your password.
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach signin
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach signin
    ```
 
    **You should see:** "Signed in as <your email>" and "You're using your ChatGPT plan."
@@ -34,7 +34,7 @@ It runs only on your computer. Only you can open it, and it never talks to other
 2. Open the coach window:
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach app
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach app
    ```
 
    Your browser opens the window. Keep the terminal open while you play; press Ctrl+C there

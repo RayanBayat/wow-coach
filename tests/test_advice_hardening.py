@@ -16,7 +16,7 @@ from wow_coach.advice.serialize import advice_to_lua
 from wow_coach.advice.tools import answer_questions_from_game, answer_send_advice_to_game
 from wow_coach.advice.writer import (
     AdviceBusy,
-    interface_from_coachlink,
+    interface_from_herobridge,
     update_advice,
     write_advice,
 )
@@ -33,13 +33,13 @@ def make_game(tmp_path: Path) -> Path:
 
 
 def advice_path(game: Path) -> Path:
-    return game / "Interface" / "AddOns" / "CoachLink_Advice" / "Advice.lua"
+    return game / "Interface" / "AddOns" / "HeroBridge_Advice" / "Advice.lua"
 
 
 def save_path(game: Path) -> Path:
     folder = game / "WTF" / "Account" / "ACC" / "SavedVariables"
     folder.mkdir(parents=True, exist_ok=True)
-    return folder / "CoachLink.lua"
+    return folder / "HeroBridge.lua"
 
 
 def send(game: Path, **changes: object) -> str:
@@ -106,19 +106,19 @@ def test_answered_ids_are_capped_newest_last() -> None:
 
 def test_save_cut_in_the_middle_of_a_letter(tmp_path: Path) -> None:
     game = make_game(tmp_path)
-    save_path(game).write_bytes(b'CoachLinkDB = { ["formatVersion"] = 1, ["x"] = "\xc3')
+    save_path(game).write_bytes(b'HeroBridgeDB = { ["formatVersion"] = 1, ["x"] = "\xc3')
     assert "Sent to the Coach panel" in send(game, question_id="1-1")
 
 
 def test_save_nested_too_deep(tmp_path: Path) -> None:
     game = make_game(tmp_path)
-    save_path(game).write_text("CoachLinkDB = " + "{" * 6000 + "}" * 6000, encoding="utf-8")
+    save_path(game).write_text("HeroBridgeDB = " + "{" * 6000 + "}" * 6000, encoding="utf-8")
     assert "Sent to the Coach panel" in send(game, question_id="1-1")
 
 
 def test_save_with_a_superscript_digit_escape(tmp_path: Path) -> None:
     game = make_game(tmp_path)
-    save_path(game).write_text('CoachLinkDB = { ["a"] = "\\²" }', encoding="utf-8")
+    save_path(game).write_text('HeroBridgeDB = { ["a"] = "\\²" }', encoding="utf-8")
     assert "Sent to the Coach panel" in send(game, question_id="1-1")
 
 
@@ -193,7 +193,7 @@ def test_replace_is_retried_on_permission_error(
     calls = flaky_replace(monkeypatch, failures=3)
     write_advice(addons, AdviceFile(2), interface="16001")
     assert calls[0] == 4
-    assert read_advice_file(addons / "CoachLink_Advice" / "Advice.lua") == AdviceFile(2)
+    assert read_advice_file(addons / "HeroBridge_Advice" / "Advice.lua") == AdviceFile(2)
 
 
 def test_replace_gives_up_after_five_tries(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -204,7 +204,7 @@ def test_replace_gives_up_after_five_tries(tmp_path: Path, monkeypatch: pytest.M
     with pytest.raises(PermissionError):
         write_advice(addons, AdviceFile(2), interface="16001")
     assert calls[0] == 5
-    assert read_advice_file(addons / "CoachLink_Advice" / "Advice.lua") == AdviceFile(1)
+    assert read_advice_file(addons / "HeroBridge_Advice" / "Advice.lua") == AdviceFile(1)
 
 
 # ---- 6: links and special files are not read ----
@@ -237,7 +237,7 @@ def test_reader_refuses_a_huge_file(tmp_path: Path) -> None:
 
 def test_lock_is_removed_after_success_and_after_failure(tmp_path: Path) -> None:
     addons = make_game(tmp_path) / "Interface" / "AddOns"
-    lock = addons / "CoachLink_Advice" / ".lock"
+    lock = addons / "HeroBridge_Advice" / ".lock"
     update_advice(addons, lambda a: a, interface="16001", now=1)
     assert not lock.exists()
 
@@ -255,7 +255,7 @@ def test_a_fresh_lock_makes_us_wait_then_give_up(
     monkeypatch.setattr(writer, "LOCK_WAIT_SECONDS", 0.2)
     addons = make_game(tmp_path) / "Interface" / "AddOns"
     update_advice(addons, lambda a: a, interface="16001", now=1)
-    lock = addons / "CoachLink_Advice" / ".lock"
+    lock = addons / "HeroBridge_Advice" / ".lock"
     lock.write_text("", encoding="utf-8")
     with pytest.raises(AdviceBusy):
         update_advice(addons, lambda a: a, interface="16001", now=1)
@@ -265,7 +265,7 @@ def test_a_fresh_lock_makes_us_wait_then_give_up(
 def test_a_stale_lock_is_taken_over(tmp_path: Path) -> None:
     addons = make_game(tmp_path) / "Interface" / "AddOns"
     update_advice(addons, lambda a: a, interface="16001", now=1)
-    lock = addons / "CoachLink_Advice" / ".lock"
+    lock = addons / "HeroBridge_Advice" / ".lock"
     lock.write_text("", encoding="utf-8")
     old = time.time() - 120
     os.utime(lock, (old, old))
@@ -340,7 +340,7 @@ def test_title_that_is_blank_after_cutting_is_refused(tmp_path: Path) -> None:
 def test_the_save_with_a_real_question_still_works(tmp_path: Path) -> None:
     game = make_game(tmp_path)
     save_path(game).write_text(
-        'CoachLinkDB = { ["formatVersion"] = 1, ["characters"] = { ["Testchar-Testrealm"] = '
+        'HeroBridgeDB = { ["formatVersion"] = 1, ["characters"] = { ["Testchar-Testrealm"] = '
         '{ ["snapshot"] = {}, ["questions"] = { { ["id"] = "7-1", ["text"] = "Hi?", '
         '["askedAt"] = 7 } } } } }',
         encoding="utf-8",
@@ -350,7 +350,7 @@ def test_the_save_with_a_real_question_still_works(tmp_path: Path) -> None:
     assert saved is not None and saved.characters[KEY].answered_ids == ("7-1",)
 
 
-# ---- 14: an odd CoachLink.toc ----
+# ---- 14: an odd HeroBridge.toc ----
 
 
 @pytest.mark.parametrize(
@@ -365,17 +365,17 @@ def test_the_save_with_a_real_question_still_works(tmp_path: Path) -> None:
     ],
 )
 def test_interface_number_is_validated(tmp_path: Path, line: str, expected: str) -> None:
-    (tmp_path / "CoachLink").mkdir()
-    (tmp_path / "CoachLink" / "CoachLink.toc").write_text(line + "\n", encoding="utf-8")
-    assert interface_from_coachlink(tmp_path) == expected
+    (tmp_path / "HeroBridge").mkdir()
+    (tmp_path / "HeroBridge" / "HeroBridge.toc").write_text(line + "\n", encoding="utf-8")
+    assert interface_from_herobridge(tmp_path) == expected
 
 
-def test_symlinked_coachlink_toc_is_not_read(tmp_path: Path) -> None:
-    (tmp_path / "CoachLink").mkdir()
+def test_symlinked_herobridge_toc_is_not_read(tmp_path: Path) -> None:
+    (tmp_path / "HeroBridge").mkdir()
     real = tmp_path / "other.toc"
     real.write_text("## Interface: 99999\n", encoding="utf-8")
-    (tmp_path / "CoachLink" / "CoachLink.toc").symlink_to(real)
-    assert interface_from_coachlink(tmp_path) == "16001"
+    (tmp_path / "HeroBridge" / "HeroBridge.toc").symlink_to(real)
+    assert interface_from_herobridge(tmp_path) == "16001"
 
 
 def test_empty_character_advice_survives() -> None:
