@@ -4,7 +4,10 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.8.0] - 2026-11-08
+
+The Coach panel: your coach's next steps and answers inside the game, and a box to ask a
+question. Restart the game once after updating.
 
 ### Added
 

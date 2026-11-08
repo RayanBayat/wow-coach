@@ -13,7 +13,7 @@ You need: WoW Forever, Claude Code, and [uv](https://docs.astral.sh/uv/getting-s
 In a terminal, run this one line:
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.7.0 wow-coach setup --claude-code
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach setup --claude-code
 ```
 
 It goes through five steps and prints `OK` or `PROBLEM` for each:

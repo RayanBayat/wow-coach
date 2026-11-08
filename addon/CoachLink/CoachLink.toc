@@ -2,7 +2,7 @@
 ## Title: CoachLink
 ## Notes: Saves your character so an AI coach can read it. Type /coach help.
 ## Author: Rayan Bayat
-## Version: 0.7.0
+## Version: 0.8.0
 ## X-Website: https://github.com/RayanBayat/wow-coach
 ## X-License: MIT
 ## SavedVariables: CoachLinkDB
