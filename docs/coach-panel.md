@@ -51,11 +51,18 @@ size. Esc closes it.
 2. Click **Ask (saves and reloads)**, or press Enter. The screen reloads for a few seconds:
    that is how the game saves your question.
 3. Your coach on the PC answers. In Claude Code with live mode on, the answer shows there
-   within a few seconds. Otherwise ask your coach: "answer my question from the game".
-4. To see the answer in the game, type `/reload`. The panel shows it, with who wrote it and
-   when.
+   within a few seconds, so you can read it right away. Otherwise ask your coach: "answer my
+   question from the game".
+4. To see the answer in the game, click **Show answer (reloads)** in the panel, or type
+   `/reload`. The panel shows it, with who wrote it and when.
 
-Until the answer arrives, the panel says "Waiting for your coach" with your question.
+Until the answer arrives, the panel says "Waiting for your coach" with your question and the
+Show answer button. If you click it too early, nothing is lost: the question keeps waiting.
+
+**Why the reloads?** A WoW addon can't use the internet or talk to other programs. The only
+moment it can hand anything to your PC is when the game saves, which happens at a `/reload`
+(and at logout). New answers from your PC are read the same way. That is how Blizzard keeps
+addons safe, so wow-coach works inside it instead of around it.
 
 Your coach can also send you next steps without a question, for example after it makes a
 plan with you. After a reload, one chat line tells you when there is new advice.

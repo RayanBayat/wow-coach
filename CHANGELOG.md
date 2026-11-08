@@ -13,6 +13,7 @@ All notable changes to this project are written here. The format follows
   - Open it with `/coach panel`, from the minimap's addon list, or with a key binding
     (Options, then Keybindings, then CoachLink).
   - `/coach ask <question>` asks without opening it.
+  - While a question waits, a **Show answer (reloads)** button loads the answer in one click.
   - It hides in combat.
   - Restart the game once after updating: the addon has new files.
 - Two new tools for your coach (MCP): `questions_from_game` reads the questions you asked in
