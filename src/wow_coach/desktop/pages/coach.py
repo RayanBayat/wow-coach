@@ -1,8 +1,8 @@
 """The Coach page: chat with your coach about your character.
 
-From top to bottom: the header (character, how fresh the game data is, refresh and "keep on
-top" buttons), helper banners, quick-action chips, the conversation (or a welcome while it is
-empty) and the box where the player types.
+From top to bottom: the header (character, how fresh the game data is and the "keep on top of
+the game" button), helper banners, quick-action chips, the conversation (or a welcome while it
+is empty) and the box where the player types.
 
 This file holds the *behavior* (what happens when a question is sent, when a save arrives,
 when the coach is busy...). The look of each part lives in ``desktop/widgets/``.
@@ -42,14 +42,13 @@ from wow_coach.desktop.widgets.composer import Composer
 from wow_coach.desktop.widgets.flow import FlowLayout
 from wow_coach.desktop.widgets.formatting import freshness
 from wow_coach.desktop.widgets.header import HeaderCard
-from wow_coach.desktop.widgets.refresh_banner import RefreshBanner
 from wow_coach.desktop.widgets.styles import chat_style
 from wow_coach.desktop.widgets.welcome import WelcomeView
 
 BUSY_TEXT: Final = "The coach is still answering. Your question goes next."
 MAX_TYPED_REMEMBERED: Final = 50  # typed questions kept to avoid showing them twice
-WAITING_FOR_SAVE_TEXT: Final = "Waiting for fresh game data…"
-CANCELLED_TEXT: Final = "Okay, asking with the game data I already have."
+SAVED_NOTICE_TEXT: Final = "Got your latest game data"
+SAVE_NOTICE_MS: Final = 3_000  # how long that calm note stays before it fades away
 LIMIT_QUEUE_TEXT: Final = "Your waiting questions were not sent. Try them again when you can."
 DEFAULT_ERROR: Final = "Something went wrong. Please try again in a moment."
 OPEN_BUSY_TEXT: Final = "The coach is still answering. Try again in a moment."
@@ -138,6 +137,7 @@ class CoachPage(Page):
         now: Callable[[], float] = time.time,
         card_settings: QSettings | None = None,
         queue_retry_ms: int = QUEUE_RETRY_MS,
+        save_notice_ms: int = SAVE_NOTICE_MS,
     ) -> None:
         """Build the page.
 
@@ -147,6 +147,7 @@ class CoachPage(Page):
             now: The clock in seconds since 1970. Tests pass one they control.
             card_settings: Where the small card remembers its place (tests pass a temp file).
             queue_retry_ms: How often a waiting question tries the busy coach again.
+            save_notice_ms: How long "Got your latest game data" stays in the chat.
         """
         super().__init__(bridge, parent)
         self._now = now
@@ -167,8 +168,11 @@ class CoachPage(Page):
         self._typed_questions: deque[str] = deque(maxlen=MAX_TYPED_REMEMBERED)
         self._queued: list[WaitingQuestion] = []  # waiting for the coach to be free, oldest first
         self._busy_notice_shown = False  # "goes next" is said once per waiting spell
-        self._fresh_questions: list[WaitingQuestion] = []  # waiting for the next save
-        self._fresh_notice: MessageRow | None = None
+        self._save_notice: MessageRow | None = None  # the calm "Got your latest game data"
+        self._save_notice_timer = QTimer(self)
+        self._save_notice_timer.setSingleShot(True)
+        self._save_notice_timer.setInterval(save_notice_ms)
+        self._save_notice_timer.timeout.connect(self._remove_save_notice)
         self._newest: AnswerView | None = None
 
         self._build()
@@ -193,7 +197,6 @@ class CoachPage(Page):
 
     def _build(self) -> None:
         self.header = HeaderCard()
-        self.refresh_banner = RefreshBanner(now=self._now)
         self.problem_banner = ProblemBanner()
         self.questions_bar = OpenQuestionsBar()
         self.sign_in_card = SignInCard()
@@ -210,7 +213,6 @@ class CoachPage(Page):
         column.setSpacing(SPACE)
         for widget in (
             self.header,
-            self.refresh_banner,
             self.problem_banner,
             self.questions_bar,
             self.sign_in_card,
@@ -236,10 +238,7 @@ class CoachPage(Page):
 
     def _wire(self) -> None:
         self.header.character_chosen.connect(self.bridge.select_character)
-        self.header.refresh_clicked.connect(self.start_refresh)
         self.header.keep_on_top_clicked.connect(self.toggle_card)
-        self.refresh_banner.cancelled.connect(self._refresh_cancelled)
-        self.refresh_banner.closed.connect(self._refresh_closed)
         self.questions_bar.answer_now.connect(self.answer_open_questions)
         self.bridge.open_questions_answered.connect(self._on_open_questions_answered)
         self.sign_in_card.sign_in.connect(lambda: self.navigate.emit("chatgpt"))
@@ -304,21 +303,14 @@ class CoachPage(Page):
             self.send_question(action.question)
 
     def send_question(self, text: str) -> None:
-        """Ask the coach. Waits for fresh data if a refresh is under way, and for the coach
-        if it is busy."""
+        """Ask the coach right away, or after the answer it is still busy with."""
         question = text.strip()[:MAX_QUESTION_CHARS]
         if not question or not self._state.signed_in:
             return
         self._typed_questions.append(question)
         self._shown_texts.append(question)
         self.chat.add_player(question)
-        waiting = WaitingQuestion(question, self._character)
-        if self.refresh_banner.state == "waiting":
-            self._fresh_questions.append(waiting)
-            if self._fresh_notice is None:
-                self._fresh_notice = self.chat.add_notice(WAITING_FOR_SAVE_TEXT)
-        else:
-            self._dispatch(waiting)
+        self._dispatch(WaitingQuestion(question, self._character))
         self._sync_stack()
 
     def _dispatch(self, waiting: WaitingQuestion) -> None:
@@ -359,7 +351,6 @@ class CoachPage(Page):
     def _drop_waiting_questions(self) -> None:
         """Forget every question that has not been sent (another character was chosen)."""
         self._queued.clear()
-        self._fresh_questions.clear()
         self._queue_timer.stop()
         self._busy_notice_shown = False
 
@@ -382,37 +373,27 @@ class CoachPage(Page):
             self.chat.add_notice(OPEN_NONE_TEXT)
         self._sync_stack()
 
-    # ---- refreshing the game data -------------------------------------------------------
+    # ---- the game saved -----------------------------------------------------------------
 
-    def start_refresh(self) -> None:
-        """Show how to refresh and wait for the game to save."""
-        self.header.refresh_button.setEnabled(False)
-        self.refresh_banner.start()
+    def _on_save(self, _data: Mapping[str, object]) -> None:
+        """The game saved (the watcher noticed): say so calmly. The pill updates by itself.
 
-    def _on_save(self, data: Mapping[str, object]) -> None:
-        saved_at = data.get("saved_at")
-        known = saved_at if isinstance(saved_at, int) and not isinstance(saved_at, bool) else None
-        self.refresh_banner.mark_saved(known)
-        self.header.refresh_button.setEnabled(True)
-        self._ask_fresh_questions()
+        Nothing waits for a save: a question is always asked right away. The note is not
+        shown in an empty chat, where it would only replace the welcome screen for a moment.
+        """
+        if self.chat.message_count() == 0:
+            return
+        self._remove_save_notice()
+        self._save_notice = self.chat.add_notice(SAVED_NOTICE_TEXT)
+        self._save_notice_timer.start()
 
-    def _refresh_cancelled(self) -> None:
-        self.header.refresh_button.setEnabled(True)
-        if self._fresh_questions:
-            self.chat.add_notice(CANCELLED_TEXT)
-            self._ask_fresh_questions()
-
-    def _refresh_closed(self) -> None:
-        self.header.refresh_button.setEnabled(True)
-
-    def _ask_fresh_questions(self) -> None:
-        """Ask the questions that waited for the save, oldest first."""
-        if self._fresh_notice is not None:
-            self.chat.remove(self._fresh_notice)
-            self._fresh_notice = None
-        waiting, self._fresh_questions = self._fresh_questions, []
-        for question in waiting:
-            self._dispatch(question)
+    def _remove_save_notice(self) -> None:
+        """Take the "Got your latest game data" note out again."""
+        self._save_notice_timer.stop()
+        if self._save_notice is not None:
+            self.chat.remove(self._save_notice)
+            self._save_notice = None
+            self._sync_stack()
 
     # ---- events -------------------------------------------------------------------------
 
@@ -524,14 +505,12 @@ class CoachPage(Page):
         self._game_questions_seen.clear()
         self._shown_texts.clear()
         self._newest_seconds = 0.0
-        self._fresh_notice = None
+        self._save_notice = None
         self.chat.clear()
         self._show(entries, live=False)
         for question in waiting:  # asked, but not answered (so not stored) yet
             self._shown_texts.append(question)
             self.chat.add_player(question, animate=False)
-        if self._fresh_questions:
-            self._fresh_notice = self.chat.add_notice(WAITING_FOR_SAVE_TEXT)
         self.chat.jump_to_newest()
 
     def _start_chat_for(self, character: str | None) -> None:
@@ -546,7 +525,7 @@ class CoachPage(Page):
         self._drop_waiting_questions()
         self.chat.set_typing(False)
         self._newest = None
-        self._fresh_notice = None
+        self._save_notice = None
         self.chat.clear()
         self._show_in_card(None)
 

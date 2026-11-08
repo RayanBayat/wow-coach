@@ -446,9 +446,11 @@ importer finished after the first draw), the chat is drawn again in time order.
 
 **Refreshing the game data.** Only the game can save the character, and only at a reload or a
 logout. An outside program pressing keys in the game would break Blizzard's rules, so the app
-never does. The addon has a "Save for the coach" key binding (the same as `/coach`); the
-Refresh button asks the player to press it and waits for the watcher's `save` event. A
-question typed while waiting is sent after the save.
+never does. The addon has a "Save for the coach" key binding (the same as `/coach`). The app
+has no refresh button: the watcher notices every save by itself and publishes a `save` event;
+the window then re-reads the state, updates the freshness pill and shows a calm "Got your
+latest game data" note for about 3 seconds. A question is never held back for a save: it is
+asked right away with the data from the last one.
 
 **What we tested and ruled out (2026-11-08):** the game's chat log (`/chatlog`,
 `Logs/WoWChatLog.txt`) is not written while playing: it stayed empty through 30 minutes of

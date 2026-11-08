@@ -54,13 +54,6 @@ QFrame#problemBanner, QFrame#questionsBar {{
     background: {with_alpha(c.info, 0.12)}; border: 1px solid {with_alpha(c.info, 0.45)};
     border-radius: {RADIUS}px;
 }}
-QFrame#refreshBanner {{
-    background: {with_alpha(c.accent, 0.12)}; border: 1px solid {with_alpha(c.accent, 0.5)};
-    border-radius: {RADIUS}px;
-}}
-QFrame#refreshBanner[state="done"] {{
-    background: {with_alpha(c.success, 0.14)}; border: 1px solid {with_alpha(c.success, 0.5)};
-}}
 QFrame#freshnessPill {{
     background: {c.surface_raised}; border: 1px solid {c.border}; border-radius: {RADIUS_PILL}px;
 }}

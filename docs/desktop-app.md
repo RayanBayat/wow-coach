@@ -65,13 +65,15 @@ itself, while you play. When you close the window, the coach keeps running next 
 - **Game data: 12 min old:** the top of the page shows how fresh the coach's view of your
   character is. The game only hands your character to other programs when it saves: when you
   log out, type `/reload`, or press your **Save for the coach** key.
-- **Refresh game data:** click it, then press your **Save for the coach** key in WoW. The game
-  reloads for a few seconds, and the app updates by itself. If you type a question while it
-  waits, the question is sent as soon as the fresh data arrives. (The key does nothing during a
-  fight, so a reload never catches you mid-combat. Press it again when the fight is over.)
+- **The app updates by itself.** There is no refresh button: WoW Coach notices every time the
+  game saves, shows a short "Got your latest game data" note in the chat and updates "Game data:
+  ... old". To make the game save, press your **Save for the coach** key in WoW, type `/coach`,
+  or type `/reload`. The game reloads for a few seconds. (The key does nothing during a fight,
+  so a reload never catches you mid-combat. Press it again when the fight is over.) A question
+  you type is always asked right away, with the data from the last save.
 
-  Why can't the app do this alone? Programs that press keys in your game break Blizzard's
-  rules, so WoW Coach never does it. One key press from you is all it needs.
+  Why can't the app make the game save alone? Programs that press keys in your game break
+  Blizzard's rules, so WoW Coach never does it. One key press from you is all it needs.
 - **Keep on top of the game:** opens a small card that stays above the game window and shows
   the newest answer. Drag it where you like; it remembers the spot. It never takes the
   keyboard away from the game.
