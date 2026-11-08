@@ -50,6 +50,7 @@ SIMPLE_KEYS: Final = (
     "notify",
     "share_other_player_names",
     "send_coach_notes",
+    "use_claude_chats",
 )
 
 # The events the player can give a rule to, in the order shown (same words as the browser window).
@@ -325,6 +326,13 @@ class SettingsPage(Page):
             "Off: they stay on this computer, and answers fit you a little less.",
             "Send your notes and the character journal with each question.",
         )
+        self.use_claude_chats = self._toggle(
+            card,
+            "Use my Claude coach chats",
+            "Show your chats with your Claude coach here and let the coach read them, so it "
+            "knows what you already talked about. Off: they are not imported or sent.",
+            "Import your Claude Code coach chats and use them as context.",
+        )
         return card
 
     # ---- showing the state ---------------------------------------------------------------
@@ -355,6 +363,7 @@ class SettingsPage(Page):
         self._set_check(self.notify, settings.get("notify"), True)
         self._set_check(self.share_names, settings.get("share_other_player_names"), False)
         self._set_check(self.send_notes, settings.get("send_coach_notes"), True)
+        self._set_check(self.use_claude_chats, settings.get("use_claude_chats"), True)
         self._fill_triggers(_as_mapping(settings.get("triggers")))
 
     def _fill_triggers(self, rules: Mapping[str, object]) -> None:
@@ -452,6 +461,7 @@ class SettingsPage(Page):
             "notify": self.notify.check.isChecked(),
             "share_other_player_names": self.share_names.check.isChecked(),
             "send_coach_notes": self.send_notes.check.isChecked(),
+            "use_claude_chats": self.use_claude_chats.check.isChecked(),
             "triggers": self._trigger_values(),
         }
 
@@ -467,6 +477,7 @@ class SettingsPage(Page):
             "notify": _as_bool(settings.get("notify"), True),
             "share_other_player_names": _as_bool(settings.get("share_other_player_names"), False),
             "send_coach_notes": _as_bool(settings.get("send_coach_notes"), True),
+            "use_claude_chats": _as_bool(settings.get("use_claude_chats"), True),
             "triggers": {
                 "modes": {kind: modes.get(kind, "off") for kind in self.mode_boxes},
                 "every_minutes": _as_int(rules.get("every_minutes"), 0),

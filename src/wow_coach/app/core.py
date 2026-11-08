@@ -43,6 +43,7 @@ from wow_coach.engine.conversation import (
     read_messages,
 )
 from wow_coach.errors import WowCoachError
+from wow_coach.importers.claude_code import import_claude_chats
 from wow_coach.triggers.state import STATE_FILE_NAME
 
 _log = logging.getLogger(__name__)
@@ -92,6 +93,7 @@ class AppCore:
         triage_provider: Provider | None = None,
         small_model: Callable[[], str | None] | None = None,
         trigger_state_file: Path | None = None,
+        claude_projects_dir: Path | None = None,
     ) -> None:
         """Create the core.
 
@@ -106,6 +108,8 @@ class AppCore:
             triage_provider: The AI used for the optional triage step (None = no triage).
             small_model: Gives the small model's name for triage (None = no triage).
             trigger_state_file: Where cooldowns are remembered (default: next to settings).
+            claude_projects_dir: Claude Code's ``projects`` folder, where the player's Claude
+                coach chats are read from (None = do not import them).
         """
         self.coach = coach
         self.signin = signin
@@ -117,6 +121,7 @@ class AppCore:
         self.ai_lock = threading.Lock()
         self._list_models = list_models
         self._settings_file = settings_file
+        self._claude_projects_dir = claude_projects_dir
         self._data_dir = settings_file.parent  # where conversations/ and the other files live
         self._settings = load_settings(settings_file)
         self._settings_lock = threading.Lock()
@@ -181,6 +186,23 @@ class AppCore:
         if self.settings.use_claude_chats:
             return found
         return [item for item in found if item.source != "claude-code"]
+
+    def import_claude_chats(self) -> int:
+        """Add new Claude coach chats to the chat history; returns how many messages were new.
+
+        Does nothing when the player turned "Use my Claude coach chats" off. It reads files,
+        so call it from a background thread, never from the window's thread.
+        """
+        if self._claude_projects_dir is None or not self.settings.use_claude_chats:
+            return 0
+        result = import_claude_chats(
+            projects_dir=self._claude_projects_dir,
+            data_dir=self._data_dir,
+            characters=self.game().characters,
+        )
+        if result.imported:
+            self.bus.publish("history", {"characters": list(result.character_keys)})
+        return result.imported
 
     def _read_signed_in(self) -> tuple[bool, str | None]:
         """(signed in?, a sentence when the keychain could not be read, e.g. it is locked)."""

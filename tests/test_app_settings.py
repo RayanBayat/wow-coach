@@ -101,3 +101,13 @@ def test_an_old_file_with_the_removed_usage_limits_still_loads(tmp_path: Path) -
     assert loaded.notify is False
     save_settings(path, loaded)
     assert "max_calls" not in path.read_text(encoding="utf-8")
+
+
+def test_claude_chats_are_used_by_default_and_can_be_turned_off(tmp_path: Path) -> None:
+    assert DEFAULTS.use_claude_chats is True
+    changed = update_settings(DEFAULTS, {"use_claude_chats": False})
+    assert changed.use_claude_chats is False
+    assert update_settings(changed, {"use_claude_chats": "no"}).use_claude_chats is False  # refused
+    path = tmp_path / "settings.json"
+    save_settings(path, changed)
+    assert load_settings(path).use_claude_chats is False
