@@ -74,6 +74,7 @@ def build_coach_tools(
     now: Callable[[], float] = time.time,
     clean: Callable[[str], str] | None = None,
     fetch: Fetch | None = None,
+    hide_private_notes: bool = False,
 ) -> tuple[CoachTool, ...]:
     """The coach tools for one character.
 
@@ -85,6 +86,9 @@ def build_coach_tools(
         clean: Applied to every output; the engine passes its hiding of other players' names.
         fetch: How web pages are downloaded (default: a polite fetcher with a cache). Tests
             pass a fake one so they never use the network.
+        hide_private_notes: Leave the notes' sections about the player's computer out of what
+            the AI reads, and keep them when it saves. The built-in coach sets this, because
+            everything it reads is sent to the AI.
     """
     env = os.environ if environ is None else environ
     download = PoliteFetcher(build_user_agent()) if fetch is None else fetch
@@ -188,7 +192,9 @@ def build_coach_tools(
             "what to do next. If there is no journal yet, ask for the goal and create it "
             "with save_coach_notes.",
             _schema(),
-            lambda _args: answer_read_notes(player_notes, journal, character_key),
+            lambda _args: answer_read_notes(
+                player_notes, journal, character_key, hide_private=hide_private_notes
+            ),
             lambda _args: "Read your character journal",
         ),
         tool(
@@ -203,7 +209,9 @@ def build_coach_tools(
                 {"text": {"type": "string", "description": "The complete new journal."}},
                 ("text",),
             ),
-            lambda args: answer_save_notes(journal, text(args, "text"), "journal"),
+            lambda args: answer_save_notes(
+                journal, text(args, "text"), "journal", keep_private=hide_private_notes
+            ),
             lambda _args: "Saved your character journal",
         ),
         tool(
@@ -218,7 +226,9 @@ def build_coach_tools(
                 {"text": {"type": "string", "description": "The complete new player notes."}},
                 ("text",),
             ),
-            lambda args: answer_save_notes(player_notes, text(args, "text"), "player notes"),
+            lambda args: answer_save_notes(
+                player_notes, text(args, "text"), "player notes", keep_private=hide_private_notes
+            ),
             lambda _args: "Saved your player notes",
         ),
         tool(

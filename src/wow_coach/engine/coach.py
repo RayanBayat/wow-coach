@@ -251,6 +251,7 @@ class ChatCoach:
             now=self._now,
             clean=lambda text: redact_names(text, hidden),
             fetch=self._fetch,
+            hide_private_notes=True,
         )
         allowed = [
             tool
