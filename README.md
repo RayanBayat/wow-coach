@@ -2,10 +2,44 @@
 
 wow-coach is a coach for World of Warcraft: Forever. It reads your real character (level,
 quests, talents, gear, every item in your bags, bank and mail, spells, stats and more) and
-helps you decide what to do next. A small addon called CoachLink saves your character as text,
-and a program on your computer reads it.
+helps you decide what to do next.
 
-You do not need to know how to code.
+## How it works: one addon, many ways in
+
+The heart of wow-coach is a small in-game addon, **CoachLink**. It is the gateway between the
+game and any AI:
+
+- **Out of the game:** CoachLink saves your character, and the questions you type in its
+  Coach panel, to a file on your computer each time the game saves (a `/reload`, `/coach`,
+  your "Save for the coach" key, or logging out).
+- **Into the game:** answers written for you show up in the in-game Coach panel after your next
+  `/reload` (the game only reads new files when it loads the interface).
+
+Everything else plugs into that gateway. Pick the way that fits you:
+
+```
+World of Warcraft
+  └─ CoachLink addon (the gateway: saves your character, shows answers in the Coach panel)
+       ├─ WoW Coach app ......... everyone with a ChatGPT plan
+       ├─ MCP server ............ your own AI agent (Claude Code, Codex, Cursor...)
+       ├─ wow-coach command ..... the terminal and scripts
+       └─ /coach copy ........... paste into any AI chat, nothing to install
+```
+
+- **Players (no technical knowledge needed):** use the **WoW Coach app**. It is a normal
+  window with a chat, quick buttons and a card on top of your game, and it answers with your
+  own ChatGPT plan (Plus or Pro). It installs the addon for you. [Start here](#start-here-the-wow-coach-app-windows-and-linux-macos-works-with-fewer-extras).
+- **Technical people (bring your own AI):** connect the AI agent you already use to the
+  gateway. The **MCP server** gives any MCP-capable agent (Claude Code, Claude Desktop, Codex,
+  Cursor and others) tools to read your character, its history and notes, look things up on
+  the Warcraft Wiki, and answer the questions you type in the game's Coach panel. The
+  **`wow-coach` command** does the same from a terminal (`status`, `watch`, `ask`...).
+  [Bring your own AI](#bring-your-own-ai-agent).
+- **Anyone, with any AI chat:** type `/coach copy` in the game and paste the text into the
+  chat. [Quick start](#quick-start-way-2-paste-into-any-ai-chat).
+
+All of them read the same saved files, so you can mix them: for example the app on your
+desktop and your own agent in a terminal, sharing the same notes about you and your character.
 
 ## Start here: the WoW Coach app (Windows and Linux; macOS works with fewer extras)
 
@@ -28,10 +62,29 @@ Then follow the step-by-step guide for your system. Every step says what you sho
 The guide starts from zero: it even shows how to open the window where you type the install
 line (a "terminal") and how to install the one free helper tool (uv) the app needs.
 
-## Other ways to use wow-coach
+## Bring your own AI agent
 
-The app is the recommended path. These are alternatives, for people who already use another AI
-app. Start with any one of them and add the others later.
+For people who already use an AI agent or an MCP-capable app. You need the CoachLink addon
+([install it](docs/install-the-addon.md), or let `wow-coach setup` do it) and
+[uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+- **MCP server** (any MCP client): [Connect an AI app](docs/connect-an-ai-app.md). Your agent
+  gets the same tools wow-coach's own coach uses: your character's status, recent history and
+  progress, the coach's notes (read and save), Warcraft Wiki lookups, quest lookups, and the
+  in-game Coach panel (read the questions you typed in the game, send answers back).
+- **Claude Code agent:** [a ready-made coach](docs/claude-code-agent.md) (`claude --agent
+  wow-coach`) that sets everything up, takes your goal and plans how to reach it.
+- **Skill and live mode:** [the coaching skill](docs/coach-skill-and-live-mode.md) for agents
+  that use Agent Skills, and `wow-coach watch` to react the moment the game saves.
+- **The terminal:** `wow-coach status`, `wow-coach watch`, `wow-coach ask "what next?"` (with
+  your ChatGPT sign-in), and `wow-coach --help` for the rest.
+- **Build your own:** the files CoachLink writes, the answer file it reads, and everything
+  wow-coach keeps in its data folder are documented in [How it works](docs/design.md), so any
+  tool or AI can read and write them.
+
+## All the ways, side by side
+
+Start with any one of them and add the others later. They all share the same addon and notes.
 
 | | Way 1: the WoW Coach app (recommended) | Way 2: paste | Way 3: connect an AI app | Way 4: skill and live mode | Way 5: the Claude Code agent |
 |---|---|---|---|---|---|
