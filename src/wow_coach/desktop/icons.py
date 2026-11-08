@@ -131,4 +131,4 @@ def save_app_ico(target: Path) -> bool:
     Returns True when the file was written. It only uses a ``QImage``, because the Setup page
     calls this from a background thread.
     """
-    return _render_image(APP_ICON_SVG, 256).save(str(target), "ICO")
+    return _render_image(APP_ICON_SVG, 256).save(str(target))
