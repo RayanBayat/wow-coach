@@ -39,6 +39,7 @@ USAGE_URL = "https://chatgpt.com/settings/usage"  # where the player manages the
 BUBBLE_WIDTH_SHARE = 0.7  # a bubble is at most 70% as wide as the chat
 MIN_BUBBLE_WIDTH = 120
 BUBBLE_TEXT_SLACK = 80  # room for the bubble's padding and the step numbers
+COLLAPSE_AFTER_CHARS = 700  # a longer reply starts folded, with a "Show more" button
 SAVED_IN_GAME_NOTE = "Also in your in-game panel after your next reload"
 
 
@@ -107,6 +108,70 @@ class CoachBubble(QFrame):
     def meta_text(self) -> str:
         """The text of the small line under the answer (for tests)."""
         return self._meta.text()
+
+
+class ReplyBubble(QFrame):
+    """A coach reply that is just text (for example a chat with the Claude coach).
+
+    It looks like an answer on parchment. Long replies start folded; "Show more" opens them.
+    The text is shown as plain text, never as markup.
+    """
+
+    def __init__(self, text: str, *, tag: str | None, seconds: float | None, now: float) -> None:
+        super().__init__()
+        self.setObjectName("coachBubble")
+        self._seconds = seconds
+        self._full_text = text
+        self._folded = len(text) > COLLAPSE_AFTER_CHARS
+        column = QVBoxLayout(self)
+        column.setContentsMargins(SPACE, SPACE - 2, SPACE, SPACE - 2)
+        column.setSpacing(SPACE_SMALL)
+        if tag:
+            column.addWidget(plain_label(tag, "small"))
+        self._body = plain_label("", selectable=True)
+        column.addWidget(self._body)
+        self._toggle = QPushButton()
+        self._toggle.setProperty("kind", "ghost")
+        self._toggle.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._toggle.clicked.connect(self._flip)
+        self._toggle.setVisible(self._folded)
+        column.addWidget(self._toggle, 0, Qt.AlignmentFlag.AlignLeft)
+        self._meta = plain_label("", "small")
+        column.addWidget(self._meta)
+        self._show_text()
+        self.update_time(now)
+
+    def _flip(self) -> None:
+        self._folded = not self._folded
+        self._show_text()
+
+    def _show_text(self) -> None:
+        shown = self._full_text
+        if self._folded:
+            shown = self._full_text[:COLLAPSE_AFTER_CHARS].rstrip() + "\u2026"
+        self._body.setText(shown)
+        self._toggle.setText("Show more" if self._folded else "Show less")
+
+    def update_time(self, now: float) -> None:
+        """Redraw the small time line, so "just now" slowly becomes "5 min ago"."""
+        known = self._seconds is not None and self._seconds > 0
+        self._meta.setText(relative_time(now - (self._seconds or 0)) if known else "")
+        self._meta.setVisible(known)
+
+    @property
+    def meta_text(self) -> str:
+        """The text of the small line under the reply (for tests)."""
+        return self._meta.text()
+
+    @property
+    def folded(self) -> bool:
+        """True while the long text is folded."""
+        return self._folded
+
+    @property
+    def toggle_button(self) -> QPushButton:
+        """The "Show more" button (for tests)."""
+        return self._toggle
 
 
 def _meta_tail(note: str, written_to_game: bool) -> list[str]:

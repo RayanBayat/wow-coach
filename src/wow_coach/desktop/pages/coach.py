@@ -15,6 +15,7 @@ background thread and sends the result back as a signal.
 import time
 from collections import deque
 from collections.abc import Callable, Mapping
+from dataclasses import replace
 from typing import Final, NamedTuple
 
 from PySide6.QtCore import QSettings, QTimer
@@ -25,7 +26,7 @@ from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.compact import CompactCard
 from wow_coach.desktop.pages.base import Page
 from wow_coach.desktop.quick_actions import QUICK_ACTIONS, QuickAction
-from wow_coach.desktop.state import AnswerView, StateView, read_answer
+from wow_coach.desktop.state import AnswerView, MessageView, StateView, read_answer
 from wow_coach.desktop.theme import SPACE, SPACE_LARGE, Colors, current_colors
 from wow_coach.desktop.widgets.bars import OpenQuestionsBar, ProblemBanner, SignInCard
 from wow_coach.desktop.widgets.bubbles import MessageRow
@@ -49,7 +50,15 @@ OPEN_NONE_TEXT: Final = "There are no questions from the game waiting right now.
 TICK_MS: Final = 30_000  # how often "12 min old" is recomputed (no disk reads)
 QUEUE_RETRY_MS: Final = 1_500  # how often a waiting question tries the busy coach again
 
-type AnswerKey = tuple[int, str, str | None]
+type AnswerKey = tuple[int, str]  # (when it was answered, its title)
+
+# Where a message came from, in words for the player.
+SOURCE_TAGS: Final = {
+    "game": "from the game",
+    "claude-code": "from your Claude coach",
+    "outside": "from another app",
+}
+OUT_OF_ORDER_SECONDS: Final = 2.0  # a new message this much older than the newest redraws all
 
 _CHAT_PAGE: Final = 0
 _WELCOME_PAGE: Final = 1
@@ -62,9 +71,45 @@ class WaitingQuestion(NamedTuple):
     character: str | None
 
 
+class Entry(NamedTuple):
+    """One thing to show in the chat: a stored message, or an answer only the game's file has."""
+
+    seconds: float  # when it happened (Unix time); 0 when unknown
+    message: MessageView | None
+    answer: AnswerView | None
+
+
 def answer_key(answer: AnswerView) -> AnswerKey:
-    """What makes an answer "the same one" when the state is read again."""
-    return (answer.answered_at, answer.title, answer.question_id)
+    """What makes an answer "the same one" when the state is read again.
+
+    The stored chat message of an answer and the live answer event share this key, so the
+    same answer is never drawn twice.
+    """
+    return (answer.answered_at, answer.title)
+
+
+def timeline(state: StateView) -> list[Entry]:
+    """The chat history oldest first, plus answers that only the game's answer file has.
+
+    Answers from before the chat history existed (or that could not be stored) are still
+    shown: they are placed among the stored messages by their time.
+    """
+    entries: list[Entry] = []
+    last = 0.0
+    for message in state.conversation:
+        last = message.seconds if message.seconds is not None else last
+        entries.append(Entry(last, message, None))
+    stored = {
+        answer_key(message.answer) for message in state.conversation if message.answer is not None
+    }
+    for answer in reversed(state.answers):  # the state lists the newest first
+        if answer_key(answer) in stored:
+            continue
+        position = len(entries)
+        while position > 0 and entries[position - 1].seconds > answer.answered_at:
+            position -= 1
+        entries.insert(position, Entry(float(answer.answered_at), None, answer))
+    return entries
 
 
 def _style(c: Colors) -> str:
@@ -104,6 +149,11 @@ class CoachPage(Page):
         self._loaded = False  # has the chat been filled from a state yet?
         self._character: str | None = None
         self._seen: set[AnswerKey] = set()  # answers already in the chat
+        self._seen_ids: set[str] = set()  # ids of chat history messages already in the chat
+        self._newest_seconds = 0.0  # the time of the newest thing in the chat
+        # Questions shown the moment they were typed (or came with a live answer): their stored
+        # copy in the chat history must not draw a second bubble.
+        self._shown_texts: deque[str] = deque(maxlen=MAX_TYPED_REMEMBERED * 2)
         self._game_questions_seen: set[str] = set()  # ids of questions from the game shown
         # Questions typed here, remembered so their answer does not show them a second time.
         # The newest MAX_TYPED_REMEMBERED are kept, so this can never grow without end.
@@ -251,6 +301,7 @@ class CoachPage(Page):
         if not question or not self._state.signed_in:
             return
         self._typed_questions.append(question)
+        self._shown_texts.append(question)
         self.chat.add_player(question)
         waiting = WaitingQuestion(question, self._character)
         if self.refresh_banner.state == "waiting":
@@ -403,21 +454,75 @@ class CoachPage(Page):
         """Fill the chat from the state: everything at first, later only what is new."""
         if self._loaded and state.selected is None:
             return  # a failed read gives an empty state; keep what the player is reading
+        entries = timeline(state)
         if not self._loaded or state.selected != self._character:
             self._start_chat_for(state.selected)
-            for answer in reversed(state.answers):  # the state lists the newest first
-                self._add_answer(answer, live=False)
+            self._show(entries, live=False)
             self.chat.jump_to_newest()
             self._loaded = True
         else:
-            for answer in reversed(state.answers):
-                self._add_answer(answer, live=True)
+            fresh = [entry for entry in entries if not self._already_shown(entry)]
+            if any(entry.seconds < self._newest_seconds - OUT_OF_ORDER_SECONDS for entry in fresh):
+                self._rebuild(entries)  # older chats arrived (an import): keep time order
+            else:
+                self._show(fresh, live=True)
         self.chat.refresh_times(self._now())
+
+    def _already_shown(self, entry: Entry) -> bool:
+        """True when this entry is in the chat already (and remember its id if it is)."""
+        message, answer = entry.message, entry.answer
+        if message is None:
+            return answer is not None and answer_key(answer) in self._seen
+        if message.id in self._seen_ids:
+            return True
+        if message.answer is not None:
+            shown = answer_key(message.answer) in self._seen
+        elif message.role == "user":
+            game_id = message.id.removeprefix("game:") if message.id.startswith("game:") else None
+            shown = (game_id in self._game_questions_seen) or message.content.strip() in (
+                self._shown_texts
+            )
+        else:
+            shown = False
+        if shown:
+            self._seen_ids.add(message.id)
+        return shown
+
+    def _show(self, entries: list[Entry], *, live: bool) -> None:
+        for entry in entries:
+            if live and self._already_shown(entry):
+                continue
+            self._newest_seconds = max(self._newest_seconds, entry.seconds)
+            if entry.message is not None:
+                self._add_message(entry.message, live=live)
+            elif entry.answer is not None:
+                self._add_answer(entry.answer, live=live)
+
+    def _rebuild(self, entries: list[Entry]) -> None:
+        """Draw the whole chat again, in time order, keeping the questions still waiting."""
+        waiting = list(self._typed_questions)
+        self._seen.clear()
+        self._seen_ids.clear()
+        self._game_questions_seen.clear()
+        self._shown_texts.clear()
+        self._newest_seconds = 0.0
+        self._fresh_notice = None
+        self.chat.clear()
+        self._show(entries, live=False)
+        for question in waiting:  # asked, but not answered (so not stored) yet
+            self._shown_texts.append(question)
+            self.chat.add_player(question, animate=False)
+        if self._fresh_questions:
+            self._fresh_notice = self.chat.add_notice(WAITING_FOR_SAVE_TEXT)
+        self.chat.jump_to_newest()
 
     def _start_chat_for(self, character: str | None) -> None:
         """Empty the chat: another character was chosen (or this is the first state)."""
         self._character = character
         self._seen.clear()
+        self._seen_ids.clear()
+        self._newest_seconds = 0.0
+        self._shown_texts.clear()
         self._game_questions_seen.clear()
         self._typed_questions.clear()
         self._drop_waiting_questions()
@@ -427,15 +532,39 @@ class CoachPage(Page):
         self.chat.clear()
         self._show_in_card(None)
 
+    def _add_message(self, message: MessageView, *, live: bool) -> None:
+        """Draw one stored chat message: the player's words, a structured answer or a reply."""
+        self._seen_ids.add(message.id)
+        tag = SOURCE_TAGS.get(message.source)
+        if message.role == "user":
+            if message.id.startswith("game:"):
+                self._game_questions_seen.add(message.id.removeprefix("game:"))
+            self.chat.add_player(message.content, tag=tag, animate=live)
+        elif message.answer is not None:
+            answer = message.answer
+            if message.source == "outside":
+                answer = replace(answer, source="another app")
+            self._add_answer_bubble(answer, live=live)
+        else:
+            self.chat.add_reply(
+                message.content, tag=tag, seconds=message.seconds, now=self._now(), animate=live
+            )
+
     def _add_answer(
         self, answer: AnswerView, *, live: bool, note: str = "", written_to_game: bool = False
     ) -> None:
         """Add one answer (and the question it belongs to), unless it is already there."""
-        key = answer_key(answer)
-        if key in self._seen:
+        if answer_key(answer) in self._seen:
             return
-        self._seen.add(key)
         self._add_question_of(answer, animate=live)
+        self._add_answer_bubble(answer, live=live, note=note, written_to_game=written_to_game)
+
+    def _add_answer_bubble(
+        self, answer: AnswerView, *, live: bool, note: str = "", written_to_game: bool = False
+    ) -> None:
+        """Draw an answer's parchment bubble and remember it, for the card too."""
+        self._seen.add(answer_key(answer))
+        self._newest_seconds = max(self._newest_seconds, float(answer.answered_at))
         self.chat.add_answer(
             answer, now=self._now(), note=note, written_to_game=written_to_game, animate=live
         )
@@ -451,6 +580,7 @@ class CoachPage(Page):
             self._show_game_question(answer.question_id, answer.question, animate=animate)
             return
         question = answer.question.strip()
+        self._shown_texts.append(question)
         if question in self._typed_questions:
             self._typed_questions.remove(question)  # already shown when the player sent it
             return
