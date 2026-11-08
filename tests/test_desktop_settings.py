@@ -28,7 +28,6 @@ def settings_state(settings: AppSettings) -> dict[str, object]:
 
 def test_the_fields_show_the_saved_settings(qtbot: QtBot) -> None:
     saved = AppSettings(
-        speak=True,
         max_calls_per_hour=33,
         max_calls_per_day=150,
         share_other_player_names=True,
@@ -44,7 +43,6 @@ def test_the_fields_show_the_saved_settings(qtbot: QtBot) -> None:
         ),
     )
     page, _bridge, _core = make_page(qtbot, **settings_state(saved))
-    assert page.speak.check.isChecked()
     assert page.max_hour.value() == 33
     assert page.max_day.value() == 150
     assert page.share_names.check.isChecked()
@@ -72,12 +70,10 @@ def test_usage_is_shown_next_to_the_limits(qtbot: QtBot) -> None:
     assert page.day_used.text() == "Used in the last day: 9"
 
 
-def test_notify_and_speak_are_disabled_when_the_computer_cannot(qtbot: QtBot) -> None:
-    page, _bridge, _core = make_page(qtbot, alerts={"notify": False, "speak": False})
+def test_notify_is_disabled_when_the_computer_cannot(qtbot: QtBot) -> None:
+    page, _bridge, _core = make_page(qtbot, alerts={"notify": False})
     assert not page.notify.check.isEnabled()
-    assert not page.speak.check.isEnabled()
     assert "can't" in page.notify.description.text()
-    assert "can't" in page.speak.description.text()
     page.show_state(read_state(sample_state()))
     assert page.notify.check.isEnabled()
 
@@ -97,9 +93,9 @@ def test_a_change_saves_after_the_wait_not_at_once(qtbot: QtBot) -> None:
 
 def test_the_real_timer_saves_by_itself(qtbot: QtBot) -> None:
     page, _bridge, core = make_page(qtbot)
-    page.speak.check.setChecked(True)
+    page.share_names.check.setChecked(True)
     qtbot.waitUntil(lambda: bool(core.changes), timeout=3000)
-    assert core.settings.speak is True
+    assert core.settings.share_other_player_names is True
 
 
 def test_many_quick_changes_save_once(qtbot: QtBot) -> None:
@@ -236,9 +232,9 @@ def test_saving_before_the_settings_arrive_sends_nothing(qtbot: QtBot) -> None:
 def test_one_edit_saves_only_that_field(qtbot: QtBot) -> None:
     saved = AppSettings(max_calls_per_hour=33, max_calls_per_day=150, send_coach_notes=False)
     page, _bridge, core = make_page(qtbot, **settings_state(saved))
-    page.speak.check.setChecked(True)
+    page.share_names.check.setChecked(True)
     page.save_now()
-    assert core.changes == [{"speak": True}]
+    assert core.changes == [{"share_other_player_names": True}]
 
 
 def test_a_trigger_edit_sends_only_the_changed_rule_fields(qtbot: QtBot) -> None:

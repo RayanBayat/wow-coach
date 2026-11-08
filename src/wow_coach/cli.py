@@ -125,7 +125,7 @@ def _build_parser() -> argparse.ArgumentParser:
     app = commands.add_parser(
         "app",
         parents=[shared],
-        help="open the coach window: answers, notifications and read-aloud while you play",
+        help="open the coach window: answers and notifications while you play",
     )
     app.add_argument(
         "--browser",

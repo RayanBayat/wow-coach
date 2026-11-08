@@ -36,8 +36,6 @@ class AppSettings:
     answer_questions_from_game: bool = True
     # Show a desktop notification when an answer is ready.
     notify: bool = True
-    # Read answers aloud (off by default: not everyone wants a talking PC).
-    speak: bool = False
     # Never use more of the plan than this.
     max_calls_per_hour: int = 20
     max_calls_per_day: int = 100
@@ -85,7 +83,6 @@ def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
             data.get("answer_questions_from_game"), DEFAULTS.answer_questions_from_game
         ),
         notify=_clean_flag(data.get("notify"), DEFAULTS.notify),
-        speak=_clean_flag(data.get("speak"), DEFAULTS.speak),
         max_calls_per_hour=_clean_count(
             data.get("max_calls_per_hour"), DEFAULTS.max_calls_per_hour, MAX_CALLS_PER_HOUR_LIMIT
         ),

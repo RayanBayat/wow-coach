@@ -52,13 +52,11 @@ def test_notify_decisions_respect_the_notifications_setting(tmp_path: Path) -> N
 
 def test_a_death_on_coach_asks_once_and_starts_the_cooldown(tmp_path: Path) -> None:
     rig, watcher, mailbox = setup(tmp_path, {"modes": {"died": "coach"}})
-    rig.core.change_settings({"speak": True})
     write_save(rig.wow_dir, mtime=2_000, deaths_at=(1_500,))
     watcher.check_once()
     assert len(rig.coach.asked) == 1 and "Died in Brill" in rig.coach.asked[0]
     assert len(events_of(mailbox, "answer")) == 1
     assert rig.alerts.notified[-1][0] == "Your coach answered"
-    assert rig.alerts.spoken  # speak is on
     state = json.loads(rig.core.trigger_state_file.read_text("utf-8"))
     assert state["last_coach_at"] == {"Testchar-Testrealm": NOW}
     # A second death inside the cooldown does not ask again.

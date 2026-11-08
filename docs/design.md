@@ -377,7 +377,7 @@ ChatGPT plan. The pieces (the plan, the rules and the reasons: `docs/plans/coach
 | Settings | `app_settings.py` | `settings.json` in the data folder, no secrets. Every value is checked; a damaged file gives the defaults |
 | When to speak | `triggers/` | Two saves give events (death, level-up, quest ready, bags...). The player's rules per event (off, notify, coach), quiet hours, quiet in instances, a cooldown, a timer, and an optional triage step with the smallest plan model. One save never costs more than one unasked AI call |
 | The window | `app/` | A page on 127.0.0.1 (see below), and a watcher that answers the Coach panel's questions and runs the triggers |
-| Alerts | `alerts.py` | Desktop notifications and read-aloud through the system's own programs (`notify-send`, `spd-say` or `espeak-ng`, `osascript` and `say`, PowerShell) |
+| Alerts | `alerts.py` | Desktop notifications through the system's own programs (`notify-send`, `osascript`, PowerShell) |
 
 **The window's safety rules** (`app/server.py`):
 - **Where it listens:** 127.0.0.1 only, on a random port. The Host header must be exactly

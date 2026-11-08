@@ -41,14 +41,14 @@ def sample_state(**changes: object) -> dict[str, object]:
     state: dict[str, object] = {
         "signed_in": True,
         "welcome_pending": False,
-        "settings": {"notify": True, "speak": False},
+        "settings": {"notify": True},
         "characters": [KEY],
         "selected": KEY,
         "answers": [sample_answer()],
         "open_questions": [],
         "usage": {"last_hour": 1, "last_day": 3, "hour_cap": 30, "day_cap": 200},
         "last_save": 1_000,
-        "alerts": {"notify": True, "speak": True},
+        "alerts": {"notify": True},
         "problem": None,
     }
     state.update(changes)

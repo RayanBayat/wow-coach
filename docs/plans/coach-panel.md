@@ -348,7 +348,7 @@ class Answer:
   - When to speak: triggers, the triage model, quiet hours.
   - Usage: the log and the caps.
   - Privacy: what is sent where.
-- **Later options:** desktop notifications ("Your coach answered") and text-to-speech.
+- **Later options:** desktop notifications ("Your coach answered").
 
 ## 8. Milestones (each one is a release that works by itself)
 

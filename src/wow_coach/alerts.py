@@ -1,7 +1,6 @@
 """Telling the player outside the game that an answer is ready.
 
-Two things: a desktop notification, and reading the answer aloud. Both use programs that
-already come with the computer.
+A desktop notification, shown with a program that already comes with the computer.
 
 The text comes from an AI that may have read text other players wrote, so it is treated as
 untrusted. It must never become part of a command or a script. It only travels as:
@@ -19,11 +18,9 @@ import os
 import shutil
 import subprocess
 import sys
-import threading
 import unicodedata
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Protocol
 
 log = logging.getLogger(__name__)
 
@@ -31,7 +28,6 @@ APP_NAME = "wow-coach"
 NOTIFY_TIMEOUT_SECONDS = 5
 MAX_TITLE = 60
 MAX_BODY = 240
-MAX_SPEECH = 600
 
 TEXT_VARIABLE = "WOW_COACH_TEXT"
 TITLE_VARIABLE = "WOW_COACH_TITLE"
@@ -43,13 +39,7 @@ MAC_SCRIPT = (
     "end run",
 )
 
-# Windows: fixed scripts. They read the text from environment variables.
-WINDOWS_SPEAK_SCRIPT = (
-    "Add-Type -AssemblyName System.Speech; "
-    "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-    f"$s.Speak($env:{TEXT_VARIABLE})"
-)
-
+# Windows: a fixed script. It reads the text from environment variables.
 # The text is escaped for XML first, so it can only ever be plain text inside the toast.
 # The id below is Windows PowerShell's own app id: toasts need some registered app id.
 WINDOWS_NOTIFY_SCRIPT = (
@@ -70,18 +60,8 @@ WINDOWS_NOTIFY_SCRIPT = (
 )
 
 
-class SpeechProcess(Protocol):
-    """The part of a running program that we need: is it still going, and stop it."""
-
-    def poll(self) -> int | None: ...
-
-    def terminate(self) -> None: ...
-
-
 # runner(argv, env_extra, timeout) -> exit code. May raise OSError or TimeoutExpired.
 Runner = Callable[[list[str], Mapping[str, str], float], int]
-# popen(argv, env_extra, stdin_text) -> the started program. Returns at once.
-Popen = Callable[[list[str], Mapping[str, str], str | None], SpeechProcess]
 
 
 def clean_text(text: str, limit: int) -> str:
@@ -126,25 +106,6 @@ def default_runner(argv: list[str], env_extra: Mapping[str, str], timeout: float
     return done.returncode
 
 
-def default_popen(
-    argv: list[str], env_extra: Mapping[str, str], stdin_text: str | None
-) -> SpeechProcess:
-    """Start a program in the background. If given, `stdin_text` is sent to its input."""
-    process = subprocess.Popen(  # noqa: S603 - argument list, no shell
-        argv,
-        env={**os.environ, **env_extra},
-        stdin=subprocess.PIPE if stdin_text is not None else subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        encoding="utf-8",
-    )
-    if stdin_text is not None and process.stdin is not None:
-        process.stdin.write(stdin_text)  # at most ~600 characters: fits the pipe
-        process.stdin.close()
-    return process
-
-
 def _not_an_option(text: str) -> str:
     """For programs that may still read a leading '-' as an option: add a space first."""
     return " " + text if text.startswith("-") else text
@@ -155,7 +116,7 @@ def _powershell(program: str, script: str) -> list[str]:
 
 
 class SystemAlerts:
-    """Notifications and read-aloud through the programs this computer has."""
+    """Notifications through the programs this computer has."""
 
     def __init__(
         self,
@@ -163,7 +124,6 @@ class SystemAlerts:
         platform: str = sys.platform,
         which: Callable[[str], str | None] = shutil.which,
         runner: Runner = default_runner,
-        popen: Popen = default_popen,
         environ: Mapping[str, str] | None = None,
     ) -> None:
         self._platform = platform
@@ -171,18 +131,12 @@ class SystemAlerts:
         self._environ = os.environ if environ is None else environ
         self._which = which
         self._runner = runner
-        self._popen = popen
-        self._speaking: SpeechProcess | None = None
-        self._lock = threading.Lock()
 
     # --- public API ---
 
     def available(self) -> dict[str, bool]:
-        """Whether this computer can show notifications and read aloud."""
-        return {
-            "notify": self._notify_command("t", "b") is not None,
-            "speak": self._speak_command("t") is not None,
-        }
+        """Whether this computer can show notifications."""
+        return {"notify": self._notify_command("t", "b") is not None}
 
     def notify(self, title: str, body: str) -> bool:
         """Show a desktop notification and wait briefly. Never raises."""
@@ -204,22 +158,6 @@ class SystemAlerts:
         if code != 0:
             log.warning("notify failed: nonzero exit")
         return code == 0
-
-    def speak(self, text: str) -> bool:
-        """Read the text aloud in the background, replacing any earlier speech. Never raises."""
-        try:
-            text = clean_text(text, MAX_SPEECH)
-            command = self._speak_command(text)
-            if command is None or not text:
-                return False
-            argv, env, stdin_text = command
-            with self._lock:
-                self._stop_current()
-                self._speaking = self._popen(argv, env, stdin_text)
-        except Exception as error:
-            log.warning("speak failed: %s", type(error).__name__)
-            return False
-        return True
 
     # --- building the commands (one place per platform) ---
 
@@ -244,27 +182,6 @@ class SystemAlerts:
             return _powershell(program, WINDOWS_NOTIFY_SCRIPT), env
         return None
 
-    def _speak_command(self, text: str) -> tuple[list[str], dict[str, str], str | None] | None:
-        if self._platform.startswith("linux"):
-            spd_say = self._find("spd-say")
-            if spd_say:
-                return [spd_say, "--", text], {}, None
-            espeak = self._find("espeak-ng")
-            if espeak:
-                return [espeak, "--stdin"], {}, text
-            return None
-        if self._platform == "darwin":
-            program = self._find("say")
-            if program is None:
-                return None
-            return [program, "-f", "-"], {}, text
-        if self._platform == "win32":
-            program = self._find_powershell()
-            if program is None:
-                return None
-            return _powershell(program, WINDOWS_SPEAK_SCRIPT), {TEXT_VARIABLE: text}, None
-        return None
-
     def _find(self, name: str) -> str | None:
         """The full path of a program. Running the full path (not the bare name) stops a
         look-alike program in the current folder from being picked instead."""
@@ -278,10 +195,3 @@ class SystemAlerts:
             if system_copy.exists():
                 return str(system_copy)
         return self._find("powershell")
-
-    def _stop_current(self) -> None:
-        """Stop the previous speech if it is still talking (one voice at a time)."""
-        previous = self._speaking
-        self._speaking = None
-        if previous is not None and previous.poll() is None:
-            previous.terminate()

@@ -39,6 +39,10 @@ All notable changes to this project are written here. The format follows
 - `/coach` and the new key no longer reload the interface during a fight. They say "Can't save
   during a fight" instead.
 
+### Removed
+
+- Reading answers aloud. Notifications still tell you when an answer is ready.
+
 ### Changed
 
 - `wow-coach app` opens the new app when it is installed, and the browser window otherwise.

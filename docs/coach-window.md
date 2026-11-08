@@ -7,7 +7,7 @@
 The coach window is a small page that wow-coach opens in your web browser. It is your own
 coach, answering with your ChatGPT plan. It shows the coach's answers the moment they are
 ready, so you don't need to `/reload` the game to read them. It can also pop up a
-notification or read the answer aloud.
+notification.
 
 It runs only on your computer. Only you can open it, and it never talks to other players.
 
@@ -48,10 +48,10 @@ It runs only on your computer. Only you can open it, and it never talks to other
   answer shows at once, with numbered steps. It is also put in the game's Coach panel for your
   next `/reload`.
 - **Ask in the game:** type your question in the Coach panel and click **Ask**. The window
-  answers it by itself within a few seconds, and shows it, notifies you or reads it aloud.
+  answers it by itself within a few seconds, and shows it or notifies you.
   You can keep playing.
-- **Notifications and read-aloud:** turn them on in **Settings**. Read-aloud is off at first.
-  If your computer can't do one of them, the window says so.
+- **Notifications:** turn them on or off in **Settings**. If your computer can't show
+  them, the window says so.
 - **ChatGPT:** shows that you are signed in, how many questions you asked in the last hour and
   day, a **Manage usage** link to your ChatGPT settings, and **Sign out**.
 
@@ -111,7 +111,7 @@ coach** (the coach looks at it and gives advice, using your plan).
 | "Your password keychain could not be used. It may be locked" | Unlock your password store (for example KDE Wallet) and try again |
 | "You signed in, but did not allow wow-coach to use your ChatGPT plan" | Sign in again and accept the plan permission |
 | A limit message | Wait until the time it says, or raise the limits in Settings |
-| No notifications on Linux | Install `libnotify` (the `notify-send` program); for read-aloud, `speech-dispatcher` (`spd-say`) or `espeak-ng` |
+| No notifications on Linux | Install `libnotify` (the `notify-send` program) |
 | The window says no saved game data | In the game, type `/coach` once |
 | "Press Enter in the wow-coach terminal for a new link" | The window's session ended (for example a new tab). Press Enter in the terminal and open the new link |
 | "wow-coach was closed" | Start `wow-coach app` again |

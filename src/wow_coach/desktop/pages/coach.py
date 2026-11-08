@@ -121,7 +121,7 @@ class CoachPage(Page):
         self._timer.setInterval(TICK_MS)
         self._timer.timeout.connect(self._tick)
         self._timer.start()
-        # The coach can stay busy for a while after it published an answer (alerts, speech),
+        # The coach can stay busy for a while after it published an answer (alerts),
         # and no event says when it is free again. So a waiting question asks again by itself.
         self._queue_timer = QTimer(self)
         self._queue_timer.setInterval(queue_retry_ms)

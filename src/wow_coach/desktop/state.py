@@ -72,7 +72,6 @@ class StateView:
     usage: UsageView = UsageView()
     last_save: int | None = None  # when the game last saved this character (Unix time)
     notify_available: bool = True
-    speak_available: bool = True
     problem: str | None = None  # a plain sentence to show, or None
     character: CharacterView | None = None  # None when no character was saved yet
 
@@ -94,7 +93,6 @@ def read_state(raw: Mapping[str, object]) -> StateView:
         usage=_usage(raw.get("usage")),
         last_save=_int_or_none(raw.get("last_save")),
         notify_available=alerts.get("notify") is not False,
-        speak_available=alerts.get("speak") is not False,
         problem=problem if isinstance(problem, str) and problem else None,
         character=_character(raw.get("character")),
     )

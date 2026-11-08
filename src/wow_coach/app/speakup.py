@@ -139,4 +139,4 @@ class SpeakUp:
         core = self._core
         reply = core.coach.ask(request, character=character_key)
         core.publish_reply(reply)
-        core.alert(reply.answer, allow_speak=True)
+        core.alert(reply.answer)

@@ -268,7 +268,6 @@ function renderSettings() {
     }
   }
   $("notify-warning").hidden = state.alerts.notify;
-  $("speak-warning").hidden = state.alerts.speak;
 }
 
 function buildTriggerRules() {

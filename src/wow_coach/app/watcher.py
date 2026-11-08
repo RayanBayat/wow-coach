@@ -7,7 +7,7 @@ after its change time moved.
 * A **new save** (the player typed /coach, /reload or logged out): tell the window, show the
   open questions, and, if the player allowed it and is signed in, answer them.
 * **``Advice.lua`` changed from outside** (for example the Claude Code coach wrote it):
-  tell the window and notify. It never speaks and never calls the AI for this.
+  tell the window and notify. It never calls the AI for this.
 """
 
 import threading
@@ -127,4 +127,4 @@ class Watcher:
             core.ai_lock.release()
         for key, answer in changes:
             core.publish_outside_answer(key, answer)
-            core.alert(answer, allow_speak=False)
+            core.alert(answer)

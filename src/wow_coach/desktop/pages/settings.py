@@ -49,7 +49,6 @@ LOADING_TEXT: Final = "Loading your settings\u2026"
 SIMPLE_KEYS: Final = (
     "answer_questions_from_game",
     "notify",
-    "speak",
     "max_calls_per_hour",
     "max_calls_per_day",
     "share_other_player_names",
@@ -201,12 +200,6 @@ class SettingsPage(Page):
             "Show a notification when an answer is ready",
             "A small message on your desktop, so you can stay in the game.",
             "Show a desktop notification for each answer.",
-        )
-        self.speak = self._toggle(
-            card,
-            "Read answers aloud",
-            "The coach speaks each answer. Off by default.",
-            "Read each answer aloud.",
         )
         return card
 
@@ -370,7 +363,6 @@ class SettingsPage(Page):
         self.notify.set_available(
             state.notify_available, "This computer can't show desktop notifications."
         )
-        self.speak.set_available(state.speak_available, "This computer can't read aloud.")
         if not state.settings:
             return  # nothing read yet, or a failed read: keep what the fields already show
         if self._save_timer.isActive():
@@ -394,7 +386,6 @@ class SettingsPage(Page):
         """Copy saved values into the fields the player is not using right now."""
         self._set_check(self.answer_games, settings.get("answer_questions_from_game"), True)
         self._set_check(self.notify, settings.get("notify"), True)
-        self._set_check(self.speak, settings.get("speak"), False)
         self._set_check(self.share_names, settings.get("share_other_player_names"), False)
         self._set_check(self.send_notes, settings.get("send_coach_notes"), True)
         self._set_spin(self.max_hour, _as_int(settings.get("max_calls_per_hour"), 20))
@@ -494,7 +485,6 @@ class SettingsPage(Page):
         return {
             "answer_questions_from_game": self.answer_games.check.isChecked(),
             "notify": self.notify.check.isChecked(),
-            "speak": self.speak.check.isChecked(),
             "max_calls_per_hour": self.max_hour.value(),
             "max_calls_per_day": self.max_day.value(),
             "share_other_player_names": self.share_names.check.isChecked(),
@@ -512,7 +502,6 @@ class SettingsPage(Page):
                 settings.get("answer_questions_from_game"), True
             ),
             "notify": _as_bool(settings.get("notify"), True),
-            "speak": _as_bool(settings.get("speak"), False),
             "max_calls_per_hour": _as_int(settings.get("max_calls_per_hour"), 20),
             "max_calls_per_day": _as_int(settings.get("max_calls_per_day"), 100),
             "share_other_player_names": _as_bool(settings.get("share_other_player_names"), False),
