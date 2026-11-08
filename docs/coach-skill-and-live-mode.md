@@ -1,4 +1,4 @@
-# Way 3: the coach skill and live mode
+# Way 4: the coach skill and live mode
 
 An **AI agent** is an AI app that can run commands and read files on your computer, such as
 Claude Code, OpenAI Codex, Gemini CLI, GitHub Copilot or Cursor. Many of them support **Agent
@@ -6,7 +6,7 @@ Skills**: a folder with a `SKILL.md` file of instructions that the agent loads w
 relevant. The format is an open standard: https://agentskills.io/specification
 
 The wow-coach skill is the same instructions file used in the other ways, in the skill format.
-Combine it with [Way 2](connect-an-ai-app.md) so the agent can read your character.
+Combine it with [Way 3](connect-an-ai-app.md) so the agent can read your character.
 
 ## Shortcut for Claude Code
 

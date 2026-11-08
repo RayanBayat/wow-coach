@@ -1,4 +1,4 @@
-# Way 4: the Claude Code agent
+# Way 5: the Claude Code agent
 
 This is the easiest way if you use **Claude Code** (Anthropic's AI app for your terminal). An
 **agent** is a ready-made helper with its own instructions. The wow-coach agent runs your whole

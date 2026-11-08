@@ -1,4 +1,4 @@
-# Way 1: use it with any AI chat
+# Way 2: use it with any AI chat
 
 This works with every AI chat website or app: ChatGPT, Claude, Gemini, Microsoft Copilot and
 others. You copy your character as text and paste it into the chat. Nothing to install besides
@@ -103,7 +103,7 @@ is none, paste the instructions as the first message of every new chat.
 
 A plain chat has no memory between conversations. At the end of a session the coach may
 give you a "Notes to paste next time" block. Save it in a text file and paste it at the start
-of your next chat. To avoid this, use [Way 2](connect-an-ai-app.md).
+of your next chat. To avoid this, use [Way 3](connect-an-ai-app.md).
 
 ## If it doesn't work
 

@@ -1,4 +1,4 @@
-# Way 2: connect an AI app (MCP)
+# Way 3: connect an AI app (MCP)
 
 With this way, your AI app reads your character itself. You type `/coach` in the game, then ask
 the AI. No copying and pasting. It also gets a memory for each of your characters, so it remembers your choices and goals.
@@ -269,7 +269,7 @@ environment variable. Look for "add MCP server" in its settings.
 
 **You should see:** the AI calls the wow-coach tool (the app may ask permission first) and
 describes your character. For best results add the coach instructions too; see
-[the skill guide](coach-skill-and-live-mode.md) or [Way 1, step 3](use-with-any-ai-chat.md).
+[the skill guide](coach-skill-and-live-mode.md) or [Way 2, step 3](use-with-any-ai-chat.md).
 
 If it fails, run this in a terminal and read what it says:
 
