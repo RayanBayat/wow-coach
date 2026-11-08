@@ -27,6 +27,7 @@ from wow_coach.desktop.hotkey import GlobalHotkey
 from wow_coach.desktop.icons import ICON_NAMES, app_icon, icon
 from wow_coach.desktop.pages import build_pages
 from wow_coach.desktop.pages.base import Page
+from wow_coach.desktop.pages.settings import SettingsPage
 from wow_coach.desktop.pages.setup import SetupPage
 from wow_coach.desktop.state import StateView
 from wow_coach.desktop.theme import SIDEBAR_WIDTH, SPACE, SPACE_LARGE, SPACE_SMALL, current_colors
@@ -96,7 +97,7 @@ class MainWindow(QMainWindow):
             if isinstance(page, SetupPage) and game_dir is not None:
                 page.set_game_dir(game_dir)
         for page in self.pages:
-            if isinstance(page, SetupPage):
+            if isinstance(page, (SetupPage, SettingsPage)):
                 page.restart_requested.connect(self.restart_requested)
         if self.pages:
             self.show_page(self.pages[0].name)

@@ -14,13 +14,15 @@ changed are ever saved.
 from collections.abc import Mapping
 from typing import Final
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
+    QHBoxLayout,
     QKeySequenceEdit,
     QLabel,
+    QPushButton,
     QSlider,
     QVBoxLayout,
     QWidget,
@@ -29,8 +31,10 @@ from PySide6.QtWidgets import (
 from wow_coach.app_settings import (
     DEFAULT_OVERLAY_HOTKEY,
     DEFAULT_OVERLAY_OPACITY,
+    DEFAULT_UI_SCALE,
     MAX_OVERLAY_OPACITY,
     MIN_OVERLAY_OPACITY,
+    UI_SCALE_CHOICES,
 )
 from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.forms import Card, ToggleRow, make_label, page_header, scrollable
@@ -56,6 +60,7 @@ SIMPLE_KEYS: Final = (
     "show_lookups",
     "overlay_opacity",
     "overlay_hotkey",
+    "ui_scale",
 )
 # The coach-tools switches are all on until the player turns one off.
 TOOL_KEYS: Final = ("use_tools", "web_search", "save_notes", "show_lookups")
@@ -100,6 +105,9 @@ class SettingsPage(Page):
     name = "settings"
     title = "Settings"
 
+    # Asks the app to start again (a new size only takes effect when the app starts).
+    restart_requested = Signal()
+
     def __init__(self, bridge: CoreBridge, parent: QWidget | None = None) -> None:
         super().__init__(bridge, parent)
         self._loading = False  # True while the page fills its own fields (no saving then)
@@ -139,6 +147,7 @@ class SettingsPage(Page):
         form_column.addWidget(self._build_tools_card())
         form_column.addWidget(self._build_triggers_card())
         form_column.addWidget(self._build_overlay_card())
+        form_column.addWidget(self._build_size_card())
         form_column.addWidget(self._build_privacy_card())
         self.form.setEnabled(False)
         column.addWidget(self.form)
@@ -284,6 +293,44 @@ class SettingsPage(Page):
         )
         return card
 
+    def _build_size_card(self) -> Card:
+        card = Card(
+            "App size",
+            "Make WoW Coach smaller to take less room next to the game, or bigger to read more "
+            "easily. The new size shows after WoW Coach starts again.",
+        )
+        self.scale_box = QComboBox()
+        for percent in UI_SCALE_CHOICES:
+            self.scale_box.addItem(f"{percent} %", percent)
+        self.scale_box.setCurrentIndex(UI_SCALE_CHOICES.index(DEFAULT_UI_SCALE))
+        self.scale_box.setToolTip("How big WoW Coach is drawn. 100 % is the normal size.")
+        self.scale_box.setAccessibleName("App size")
+        self.scale_box.currentIndexChanged.connect(self._scale_changed)
+        row = QHBoxLayout()
+        row.addWidget(self._buddy_label("Size", self.scale_box))
+        row.addWidget(self.scale_box)
+        row.addStretch(1)
+        card.body.addLayout(row)
+        self.restart_note = make_label("Saved. Restart WoW Coach to see the new size.", "muted")
+        self.restart_button = QPushButton("Restart now")
+        self.restart_button.setProperty("kind", "secondary")
+        self.restart_button.setToolTip("Close WoW Coach and open it again at the new size.")
+        self.restart_button.clicked.connect(self.restart_requested)
+        restart_row = QHBoxLayout()
+        restart_row.addWidget(self.restart_note)
+        restart_row.addWidget(self.restart_button)
+        restart_row.addStretch(1)
+        card.body.addLayout(restart_row)
+        self.restart_note.hide()
+        self.restart_button.hide()
+        return card
+
+    def _scale_changed(self, _index: int) -> None:
+        if not self._loading:
+            self.restart_note.show()
+            self.restart_button.show()
+        self._edited()
+
     def _opacity_moved(self, percent: int) -> None:
         self.opacity_value.setText(f"{percent} %")
         self._edited()
@@ -362,6 +409,9 @@ class SettingsPage(Page):
         opacity = _as_int(settings.get("overlay_opacity"), DEFAULT_OVERLAY_OPACITY)
         if not self.opacity_slider.hasFocus():
             self.opacity_slider.setValue(opacity)
+        scale = _as_int(settings.get("ui_scale"), DEFAULT_UI_SCALE)
+        if not self.scale_box.hasFocus() and scale in UI_SCALE_CHOICES:
+            self.scale_box.setCurrentIndex(UI_SCALE_CHOICES.index(scale))
 
     def _fill_triggers(self, rules: Mapping[str, object]) -> None:
         index = self.on_save_box.findData(rules.get("on_save", "notify"))
@@ -432,6 +482,7 @@ class SettingsPage(Page):
             **{key: getattr(self, key).check.isChecked() for key in TOOL_KEYS},
             "overlay_opacity": self.opacity_slider.value(),
             "overlay_hotkey": self._hotkey_value(),
+            "ui_scale": self.scale_box.currentData(),
             "triggers": self._trigger_values(),
         }
 
@@ -449,6 +500,7 @@ class SettingsPage(Page):
             **{key: _as_bool(settings.get(key), True) for key in TOOL_KEYS},
             "overlay_opacity": _as_int(settings.get("overlay_opacity"), DEFAULT_OVERLAY_OPACITY),
             "overlay_hotkey": self._saved_hotkey(settings),
+            "ui_scale": _as_int(settings.get("ui_scale"), DEFAULT_UI_SCALE),
             "triggers": {
                 "on_save": rules.get("on_save", "notify"),
                 "quiet_in_instances": _as_bool(rules.get("quiet_in_instances"), True),

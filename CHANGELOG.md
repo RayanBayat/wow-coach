@@ -8,6 +8,9 @@ All notable changes to this project are written here. The format follows
 
 ### Added
 
+- **App size** in Settings: make WoW Coach 70 % to 130 % of its normal size, to take less
+  room next to the game. It applies when WoW Coach starts again (a **Restart now** button is
+  right there).
 - **Overlay mode: the coach on top of your game.** A key (**Ctrl+Shift+Space** at first)
   shows or hides the coach as a see-through panel over the game, with the cursor in the
   question box, so you can ask without leaving the game. Esc or the same key hides it and the

@@ -28,6 +28,9 @@ DEFAULT_OVERLAY_OPACITY: Final = 92
 # Ctrl+Shift+Space: WoW's default keys are mostly single keys, Shift+key and Ctrl+key, so
 # this three-key chord does not clash (Space alone is "jump").
 DEFAULT_OVERLAY_HOTKEY: Final = "Ctrl+Shift+Space"
+# How big the desktop app is drawn, in percent of normal (Qt applies it when the app starts).
+UI_SCALE_CHOICES: Final = (70, 80, 90, 100, 110, 120, 130)
+DEFAULT_UI_SCALE: Final = 100
 MAX_HOTKEY_CHARS: Final = 40
 
 
@@ -66,6 +69,8 @@ class AppSettings:
     overlay_opacity: int = DEFAULT_OVERLAY_OPACITY
     # The key that shows or hides the overlay, in Qt's portable text ("Ctrl+Shift+Space").
     overlay_hotkey: str = DEFAULT_OVERLAY_HOTKEY
+    # The desktop app's size, in percent: one of ``UI_SCALE_CHOICES``.
+    ui_scale: int = DEFAULT_UI_SCALE
 
 
 DEFAULTS: Final = AppSettings()
@@ -94,6 +99,13 @@ def _clean_opacity(value: object) -> int:
         return DEFAULT_OVERLAY_OPACITY
     in_range = MIN_OVERLAY_OPACITY <= value <= MAX_OVERLAY_OPACITY
     return value if in_range else DEFAULT_OVERLAY_OPACITY
+
+
+def _clean_scale(value: object) -> int:
+    """One of the offered sizes (70 to 130 percent), else the normal size."""
+    if isinstance(value, bool) or value not in UI_SCALE_CHOICES:
+        return DEFAULT_UI_SCALE
+    return int(value)  # checked against the whole-number choices above
 
 
 def _clean_hotkey(value: object) -> str:
@@ -125,6 +137,7 @@ def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
         triggers=trigger_settings_from_dict(data.get("triggers")),
         overlay_opacity=_clean_opacity(data.get("overlay_opacity")),
         overlay_hotkey=_clean_hotkey(data.get("overlay_hotkey")),
+        ui_scale=_clean_scale(data.get("ui_scale")),
     )
 
 

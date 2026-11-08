@@ -145,6 +145,8 @@ shortcut's Properties.
   notification, or a notification plus advice), the **Overlay** key and how see-through it is,
   and what is shared with the AI. Changes save
   by themselves. More: [the coach window guide](coach-window.md#when-the-game-saves).
+- **App size** (in Settings): make the whole app smaller or bigger (70 % to 130 %), for
+  example to fit next to the game. Click **Restart now** to see the new size.
 - **ChatGPT:** your sign-in, how many questions you asked in the last hour and day,
   **Manage usage** (your ChatGPT settings), the model, and **Sign out**.
 - **Setup:** the checks above, any time, and the **Overlay hotkey** card. After changing the

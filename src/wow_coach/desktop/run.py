@@ -7,7 +7,7 @@ never load Qt.
 
 import os
 import sys
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, MutableMapping, Sequence
 from pathlib import Path
 
 from PySide6.QtCore import QProcess, QTimer
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QApplication
 
 from wow_coach.app.run import build_core
 from wow_coach.app.watcher import Watcher
+from wow_coach.app_settings import DEFAULT_UI_SCALE, load_settings, settings_path
 from wow_coach.config import config_path
 from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.first_run import ask_with_dialog, find_game_folder_or_ask
@@ -76,6 +77,23 @@ def relaunch_command(
     return program, arguments
 
 
+def apply_saved_size(qt_environ: MutableMapping[str, str], environ: Mapping[str, str]) -> None:
+    """Draw the app at the player's chosen size ("App size" in Settings).
+
+    Qt reads ``QT_SCALE_FACTOR`` once, when the app starts, so this runs before the
+    ``QApplication`` is made. A ``QT_SCALE_FACTOR`` the player set themselves always wins.
+
+    Args:
+        qt_environ: The environment Qt reads (the real ``os.environ``).
+        environ: Where the settings file is found (tests pass their own).
+    """
+    if qt_environ.get("QT_SCALE_FACTOR"):
+        return
+    scale = load_settings(settings_path(environ=environ)).ui_scale
+    if scale != DEFAULT_UI_SCALE:
+        qt_environ["QT_SCALE_FACTOR"] = f"{scale / 100:g}"
+
+
 def run_desktop(
     *,
     wow_dir_flag: Path | None = None,
@@ -99,6 +117,7 @@ def run_desktop(
     """
     environ = os.environ if environ is None else environ
     arguments = list(argv) if argv is not None else sys.argv[:1]
+    apply_saved_size(os.environ, environ)  # Qt reads the size only when the app starts
     app = QApplication([*arguments, *platform_arguments(environ)])
     app.setApplicationName(APP_TITLE)
     app.setDesktopFileName("wow-coach")
