@@ -392,6 +392,8 @@ local function installFakeGame()
     -- few below that we want to watch. Frames made with CreateFrame are kept in
     -- createdFrames so the tests can look at them.
     strtrim = function(text) return (text:gsub("^%s+", ""):gsub("%s+$", "")) end
+    InCombatLockdown = function() return false end
+    CoachLinkAdvice = nil   -- the CoachLink_Advice addon (written by wow-coach) is not installed
     UIParent = {}
     UISpecialFrames = {}
     ChatFontNormal = {}
@@ -1158,6 +1160,71 @@ loadAddon()
 unloadCharacter()
 fire("PLAYER_LOGOUT")
 check(savedCharacter().snapshot.reason == "logout", "with nothing better, an unloaded snapshot is still saved")
+
+
+-------------------------------------------------------------------------------
+-- Test 9: asking the coach from the game
+-------------------------------------------------------------------------------
+
+installFakeGameWithClock()
+local coach = loadAddon()
+local reloads = 0
+ReloadUI = function() reloads = reloads + 1; eventHandler(nil, "PLAYER_LOGOUT") end
+check(coach.askCoach("  What should I do next?  ") == true, "a question is accepted")
+local asked = savedCharacter()
+check(#asked.questions == 1 and asked.questions[1].text == "What should I do next?"
+    and asked.questions[1].askedAt == FAKE_NOW and asked.questions[1].id == FAKE_NOW .. "-1",
+    "the question is saved with its time and id")
+check(reloads == 1 and asked.snapshot.reason == "ask", "asking saves a snapshot (reason: ask) by reloading")
+
+local ok, why = coach.askCoach("   ")
+check(ok == false and why:find("type a question") and reloads == 1, "an empty question is refused, no reload")
+InCombatLockdown = function() return true end
+ok, why = coach.askCoach("Help!")
+check(ok == false and why:find("after the fight") and reloads == 1, "no asking (and no reload) in combat")
+InCombatLockdown = function() return false end
+
+coach.askCoach(string.rep("a", 498) .. "\195\169\195\169")   -- 502 bytes, ending in "éé"
+local long = savedCharacter().questions[2].text
+check(#long == 500 and long:sub(-2) == "\195\169", "a long question is cut to 500 bytes, not inside a letter")
+coach.askCoach(string.rep("b", 499) .. "\195\169")             -- 501 bytes: the é doesn't fit
+check(#savedCharacter().questions[3].text == 499, "a letter that doesn't fit is dropped whole")
+
+for number = 1, 25 do
+    now = FAKE_NOW + number
+    coach.askCoach("Question " .. number)
+end
+local questions = savedCharacter().questions
+check(#questions == 20 and questions[20].text == "Question 25", "only the newest 20 questions are kept")
+
+-- wow-coach answered the newest question: it is no longer open, and is dropped on the next ask.
+CoachLinkAdvice = { formatVersion = 1, characters = { ["Testchar-Testrealm"] = {
+    answers = { { questionId = questions[20].id, title = "Next steps", steps = { "Go to Brill" } } },
+} } }
+local open = coach.openQuestions()
+check(#open == 19 and open[19].text == "Question 24", "answered questions are not open any more")
+check(coach.myAdvice().answers[1].steps[1] == "Go to Brill", "the panel can read this character's advice")
+coach.askCoach("One more")
+check(#savedCharacter().questions == 20 and savedCharacter().questions[20].text == "One more",
+    "asking again drops the answered question")
+CoachLinkAdvice = { characters = { ["Someone-Else"] = { answers = {} } } }
+check(coach.myAdvice() == nil, "advice for other characters is not shown")
+CoachLinkAdvice = "broken"
+check(coach.myAdvice() == nil and #coach.openQuestions() == 20, "a broken advice file is ignored")
+
+-- The slash commands.
+chat = {}
+print = function(message) table.insert(chat, message) end
+SlashCmdList.COACHLINK("ask Where is Brill?")
+check(savedCharacter().questions[20].text == "Where is Brill?", "/coach ask keeps the question's capitals")
+SlashCmdList.COACHLINK("ask")
+check(chat[#chat]:find("type a question", 1, true) ~= nil, "/coach ask with no text says what to do")
+SlashCmdList.COACHLINK("panel")
+check(chat[#chat]:find("restart the game", 1, true) ~= nil, "/coach panel without the panel file asks for a restart")
+coach.togglePanel = function() chat[#chat + 1] = "panel toggled" end
+SlashCmdList.COACHLINK("PANEL")
+check(chat[#chat] == "panel toggled", "/coach panel opens the panel when it is loaded")
+print = function() end
 
 
 -------------------------------------------------------------------------------

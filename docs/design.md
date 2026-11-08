@@ -81,7 +81,7 @@ CoachLinkDB = {
 | Field | Type | Meaning |
 |---|---|---|
 | `savedAt` | number | Unix time (seconds) when the snapshot was taken |
-| `reason` | string | Why it was taken: `"logout"` (logout, exit or a plain `/reload`) or `"coach"` (the `/coach` command) |
+| `reason` | string | Why it was taken: `"logout"` (logout, exit or a plain `/reload`), `"coach"` (the `/coach` command) or `"ask"` (the player asked the coach a question, 0.8.0+) |
 | `name`, `realm`, `race`, `class` | string | Character identity, in the game's language (for example `"Undead"`, `"Mage"`) |
 | `classFile` | string | The class in English capitals, the same in every game language (`"MAGE"`) |
 | `faction` | string | `"Horde"` or `"Alliance"` |
@@ -253,6 +253,72 @@ Checked against the game's own `Blizzard_CombatLog.lua` SavedVariables file:
 - `/coach` saves by reloading the UI, so the file is written without logging out.
 - The first `/coach` after you update the addon still saves with the old code, because the
   save runs before the reload.
+
+## Coach panel: questions and advice (0.8.0)
+
+The Coach panel (`CoachLinkPanel.lua`) shows advice inside the game and lets the player ask a
+question. An addon can't use the network or read files while it runs, so questions and
+answers travel through files (the plan: `docs/plans/coach-panel.md`).
+
+**Questions (game to wow-coach).** `ns.askCoach(text)` (the panel's Ask button and
+`/coach ask <text>`) adds the question to the character's saved table and reloads the UI,
+so WoW writes it to disk with a snapshot whose `reason` is `"ask"`. It refuses an empty
+question and does nothing in combat (`InCombatLockdown()`).
+
+```lua
+["questions"] = {                 -- in CoachLinkDB.characters["Name-Realm"], oldest first
+  { ["id"] = "1794100000-1", ["text"] = "What should I do next?", ["askedAt"] = 1794100000 },
+},
+```
+
+- At most 20 are kept, the newest. The text is at most 500 bytes, cut on a whole letter.
+- `id` is "time-counter", unique per character.
+- A question whose `id` appears as a `questionId` in the advice file counts as answered and
+  is dropped the next time the player asks.
+- Python: `Character.questions`.
+
+**Advice (wow-coach to game).** wow-coach writes a small data-only addon of its own into the
+game folder: `Interface/AddOns/CoachLink_Advice/` with `CoachLink_Advice.toc` and
+`Advice.lua`.
+- It is not part of the CoachLink zip, so addon managers (the CurseForge app) never overwrite
+  it.
+- `CoachLink.toc` lists it under `## OptionalDeps`, so it loads first when it is there.
+- A new addon folder is only noticed after a full game restart.
+
+```lua
+CoachLinkAdvice = {
+  ["formatVersion"] = 1,
+  ["writtenAt"] = 1794100100,
+  ["characters"] = {
+    ["Name-Realm"] = {
+      ["basedOnSave"] = 1794100050,     -- savedAt of the snapshot the coach read
+      ["answers"] = {                   -- oldest first, at most 10
+        { ["answeredAt"] = 1794100090, ["source"] = "Claude Code coach", ["title"] = "Next steps",
+          ["steps"] = { "...", "..." }, ["text"] = "...", ["warnings"] = { "..." },
+          ["questionId"] = "1794100000-1", ["question"] = "What should I do next?",
+          ["askedAt"] = 1794100000 },
+      },
+      ["plan"] = { ["goal"] = "Level 20 by Sunday", ["steps"] = { "..." }, ["updatedAt"] = 1794100090 },
+    },
+  },
+}
+```
+
+- Every field except `answeredAt` and `title` is optional.
+- The limits (steps, lengths, file size) and the Python types are in
+  `src/wow_coach/advice/contract.py`.
+- The file is Lua that the game runs, so wow-coach writes it with a serializer that only
+  produces tables, strings, numbers and booleans:
+  - It escapes `\`, `"`, line breaks and control characters.
+  - It doubles `|`, so text can't make WoW color codes or links.
+  - It reads the result back before using it, and replaces the file in one step (atomically).
+- The addon checks every level of the table before using it (`ns.myAdvice()`).
+
+**The panel's view of CoachLink.lua.** `CoachLinkPanel.lua` gets `ns.askCoach`,
+`ns.openQuestions` (questions without an answer yet), `ns.myAdvice` (this character's
+`CoachLinkAdvice` entry, or nil), `ns.characterKey` and `ns.say`, and sets
+`ns.togglePanel`, which `/coach panel` calls. The `.toc` names
+`CoachLink_OnAddonCompartmentClick` for the minimap's addon list.
 
 ## Logging out
 

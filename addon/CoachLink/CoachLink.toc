@@ -6,6 +6,10 @@
 ## X-Website: https://github.com/RayanBayat/wow-coach
 ## X-License: MIT
 ## SavedVariables: CoachLinkDB
+## OptionalDeps: CoachLink_Advice
+## IconTexture: Interface\Icons\INV_Misc_Book_09
+## AddonCompartmentFunc: CoachLink_OnAddonCompartmentClick
 
 CoachLinkText.lua
 CoachLink.lua
+CoachLinkPanel.lua

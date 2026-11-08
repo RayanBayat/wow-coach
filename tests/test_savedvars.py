@@ -28,6 +28,13 @@ CoachLinkDB = {
 ["level"] = 2,
 },
 },
+["questions"] = {
+{
+["id"] = "100-1",
+["text"] = "What next?",
+["askedAt"] = 100,
+},
+},
 },
 ["Bare-Realm"] = {
 },
@@ -82,11 +89,17 @@ def test_progress_points_are_read(tmp_path: Path) -> None:
     assert testchar.progress == [{"time": 100, "level": 2}]
 
 
+def test_questions_from_the_coach_panel_are_read(tmp_path: Path) -> None:
+    testchar = load_characters(make_saved_vars(tmp_path, "A"))["Testchar-Testrealm"]
+    assert testchar.questions == [{"id": "100-1", "text": "What next?", "askedAt": 100}]
+
+
 def test_character_without_pieces_gets_empty_defaults(tmp_path: Path) -> None:
     bare = load_characters(make_saved_vars(tmp_path, "A"))["Bare-Realm"]
     assert bare.snapshot == {}
     assert bare.history == []
     assert bare.progress == []
+    assert bare.questions == []
 
 
 def test_no_characters_table_gives_empty_dict(tmp_path: Path) -> None:

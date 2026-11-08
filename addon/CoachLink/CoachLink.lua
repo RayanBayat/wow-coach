@@ -1758,21 +1758,156 @@ end
 
 
 -------------------------------------------------------------------------------
+-- Asking the coach from the game (the Coach panel and /coach ask)
+-------------------------------------------------------------------------------
+
+-- A question waits in the character's saved table (`questions`) until wow-coach
+-- answers it. WoW only writes that table to disk at /reload, so asking reloads the
+-- UI, like /coach. The answers come back in a small addon wow-coach writes itself,
+-- CoachLink_Advice, which sets the global CoachLinkAdvice; the game reads it at the
+-- next /reload. The formats are in docs/design.md ("Coach panel").
+
+local MAX_QUESTIONS_KEPT = 20
+local MAX_QUESTION_BYTES = 500
+local questionCounter = 0  -- makes ids unique within one UI session
+
+-- The first `limit` bytes of `text`, without cutting a letter such as "é" in half.
+-- In UTF-8 a letter is one lead byte plus 0-3 continuation bytes (128-191); half a
+-- letter would make the saved file unreadable for wow-coach.
+local function cutText(text, limit)
+    if #text <= limit then
+        return text
+    end
+    local cut = string.sub(text, 1, limit)
+    local last = #cut
+    while last > 0 and string.byte(cut, last) >= 128 and string.byte(cut, last) < 192 do
+        last = last - 1  -- step back over continuation bytes to the letter's lead byte
+    end
+    if last > 0 then
+        local lead = string.byte(cut, last)
+        local size = (lead >= 240 and 4) or (lead >= 224 and 3) or (lead >= 192 and 2) or 1
+        if last + size - 1 > #cut then
+            cut = string.sub(cut, 1, last - 1)  -- the last letter doesn't fit: drop it whole
+        end
+    end
+    return cut
+end
+
+-- What wow-coach wrote for this character (CoachLinkAdvice.characters["Name-Realm"]),
+-- or nil. The file comes from outside the game, so every level is checked.
+local function myAdvice()
+    local advice = CoachLinkAdvice
+    if type(advice) ~= "table" or type(advice.characters) ~= "table" then
+        return nil
+    end
+    local mine = advice.characters[characterKey()]
+    return type(mine) == "table" and mine or nil
+end
+
+-- The ids of this character's questions that wow-coach has answered.
+local function answeredQuestionIds()
+    local ids = {}
+    local mine = myAdvice()
+    local answers = mine and type(mine.answers) == "table" and mine.answers or {}
+    for _, answer in ipairs(answers) do
+        if type(answer) == "table" and answer.questionId then
+            ids[answer.questionId] = true
+        end
+    end
+    return ids
+end
+
+-- `questions` without the answered ones, and at most the newest MAX_QUESTIONS_KEPT.
+local function stillOpen(questions)
+    local answered = answeredQuestionIds()
+    local open = {}
+    for _, question in ipairs(questions or {}) do
+        if not answered[question.id] then
+            table.insert(open, question)
+        end
+    end
+    while #open > MAX_QUESTIONS_KEPT do
+        table.remove(open, 1)  -- drop the oldest
+    end
+    return open
+end
+
+-- This character's questions that have no answer yet (a new list, maybe empty).
+local function openQuestions()
+    local entry = savedEntry()
+    return stillOpen(entry and entry.questions)
+end
+
+-- Save `text` as a question for the coach, then reload so WoW writes it to disk.
+-- Only call this from a click or a typed command: the reload is the player's action.
+-- Returns true, or false and a reason to show the player.
+local function askCoach(text)
+    text = strtrim(tostring(text or ""))
+    if text == "" then
+        return false, "type a question first."
+    end
+    if InCombatLockdown() then
+        return false, "you can ask after the fight."
+    end
+    local entry = characterTable()
+    local questions = stillOpen(entry.questions)
+    questionCounter = questionCounter + 1
+    table.insert(questions, {
+        id = time() .. "-" .. questionCounter,
+        text = cutText(text, MAX_QUESTION_BYTES),
+        askedAt = time(),
+    })
+    entry.questions = stillOpen(questions)  -- applies the cap again
+    say("asking your coach (the screen reloads for a few seconds)...")
+    pendingReason = "ask"
+    ReloadUI()  -- triggers PLAYER_LOGOUT, which saves the snapshot and the question
+    return true
+end
+
+-- For CoachLinkPanel.lua (loaded after this file; see the .toc).
+ns.askCoach = askCoach
+ns.openQuestions = openQuestions
+ns.myAdvice = myAdvice
+ns.characterKey = characterKey
+ns.say = say
+
+
+-------------------------------------------------------------------------------
 -- /coach command
 -------------------------------------------------------------------------------
 
 SLASH_COACHLINK1 = "/coach"
 SlashCmdList.COACHLINK = function(argument)
-    argument = string.lower(strtrim(argument or ""))
-    if argument == "help" then
+    -- "/coach ask Where is Brill?": the first word is the command, the rest keeps its capitals.
+    local command, rest = strtrim(argument or ""):match("^(%S*)%s*(.-)$")
+    command = string.lower(command)
+    if command == "help" then
         say("/coach: save your character for the coach on this PC (reloads the UI, a few seconds).")
+        say("/coach panel: open the Coach panel with your coach's advice; you can ask there too.")
+        say("/coach ask <question>: ask your coach (saves and reloads the UI).")
         say("/coach copy (or /coach export): show your character as text to copy into any AI chat. No reload.")
         say("/coach help: show this list.")
         say("The bank, mailbox and recipes are saved when you open them. Play time is saved by itself.")
         return
     end
-    if argument == "copy" or argument == "export" then
+    if command == "copy" or command == "export" then
         copyCommand()
+        return
+    end
+    if command == "ask" then
+        local asked, reason = askCoach(rest)
+        if not asked then
+            say(reason)
+        end
+        return
+    end
+    if command == "panel" then
+        -- WoW only reads a new addon file (CoachLinkPanel.lua) after a full game restart.
+        if ns.togglePanel then
+            ns.togglePanel()
+        else
+            say("please restart the game once to finish updating CoachLink, then try /coach panel again.")
+        end
         return
     end
     say("saving your character for the coach...")

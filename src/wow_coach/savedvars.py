@@ -24,6 +24,8 @@ class Character:
     history: list[LuaValue]  # oldest first, as the addon writes it
     # Progress points, oldest first. Empty for saves made before addon 0.5.0.
     progress: list[LuaValue] = field(default_factory=list)
+    # Questions typed in the Coach panel, oldest first (addon 0.8.0+). See advice/contract.py.
+    questions: list[LuaValue] = field(default_factory=list)
 
 
 def find_saved_variables(wow_dir: Path) -> Path:
@@ -71,9 +73,11 @@ def _build_character(key: str, raw: LuaValue) -> Character:
     snapshot = table.get("snapshot")
     history = table.get("history")
     progress = table.get("progress")
+    questions = table.get("questions")
     return Character(
         key=key,
         snapshot=snapshot if isinstance(snapshot, dict) else {},
         history=history if isinstance(history, list) else [],
         progress=progress if isinstance(progress, list) else [],
+        questions=questions if isinstance(questions, list) else [],
     )

@@ -229,15 +229,23 @@ CoachLinkAdvice = {
 
 ```python
 class Provider(Protocol):
-    name: str                       # "ChatGPT (your plan)", the only one for now
-    def ask(self, messages: list[Message], *, model: str, max_output_tokens: int,
-            json_schema: dict[str, object] | None = None) -> Answer: ...
-    def check(self) -> str: ...     # "ok" or a plain sentence about what is wrong
+    name: str  # "ChatGPT (your plan)", the only one for now
+
+    def ask(
+        self,
+        messages: list[Message],
+        *,
+        model: str,
+        max_output_tokens: int,
+        json_schema: dict[str, object] | None = None,
+    ) -> Answer: ...
+    def check(self) -> str: ...  # "ok" or a plain sentence about what is wrong
+
 
 @dataclass(frozen=True, slots=True)
 class Answer:
     text: str
-    usage: Usage                    # input/output tokens, as the provider reported them
+    usage: Usage  # input/output tokens, as the provider reported them
 ```
 
 - There is one real implementation (`ChatGPTPlan`). Tests use a `FakeProvider`, and no test
