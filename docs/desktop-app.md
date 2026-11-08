@@ -75,7 +75,7 @@ uv --version
 Paste this line and press Enter:
 
 ```
-uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.9.0"
+uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.10.0"
 ```
 
 It downloads WoW Coach and the parts it needs (about 100 MB, once). This can take a few
@@ -151,7 +151,7 @@ uv --version
 ### 3. Install WoW Coach
 
 ```
-uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.9.0"
+uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.10.0"
 ```
 
 It downloads WoW Coach and the parts it needs (about 100 MB, once).
@@ -227,7 +227,7 @@ something to do, a button.
    changing it, click **Restart WoW Coach**.
 2. **CoachLink addon**: if it is missing or old, click **Install CoachLink** (or **Update
    CoachLink**). WoW Coach downloads the addon that matches the app and puts it in your game.
-   **You should see:** "CoachLink 0.9.0 is installed and up to date." (after the
+   **You should see:** "CoachLink 0.10.0 is installed and up to date." (after the
    work finishes, the card says to restart WoW).
 3. **Answers folder**: if it says the folder does not exist, click **Create it**. (Installing
    CoachLink creates it too.) This is the folder where the coach puts its answers for the game.
@@ -420,16 +420,16 @@ Script" action running the command; we have not tested that.
 
 New versions are announced on the
 [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest). The install line has
-a version in it (the `@v0.9.0` at the end), and `uv tool upgrade` keeps to the constraints you
+a version in it (the `@v0.10.0` at the end), and `uv tool upgrade` keeps to the constraints you
 installed with (this is what [uv's documentation](https://docs.astral.sh/uv/concepts/tools/)
 says), so it does not move you to a newer tag. To update, install again with the new version:
 
 1. Quit WoW Coach: **Quit** in the tray icon's menu.
-2. Run the install line again, with the new version number in place of `v0.9.0`, and `--force`
+2. Run the install line again, with the new version number in place of `v0.10.0`, and `--force`
    after `install`:
 
    ```
-   uv tool install --force "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.9.0"
+   uv tool install --force "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.10.0"
    ```
 
 3. Start WoW Coach again. Click **Setup**. If the **CoachLink addon** card says an update is

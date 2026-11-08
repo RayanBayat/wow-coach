@@ -45,7 +45,7 @@ installed wow-coach without `[desktop]`. Run the install line from the guide aga
 `--force` after `install`:
 
 ```
-uv tool install --force "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.9.0"
+uv tool install --force "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach@v0.10.0"
 ```
 
 The program `wow-coach-app` prints a similar message ("WoW Coach needs its desktop extra").
@@ -155,7 +155,7 @@ The AI app cannot see your game. Paste the text from `/coach copy` into the mess
 
 ## `wow-coach check` says the game folder wasn't found
 
-1. Easiest: run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach setup`.
+1. Easiest: run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup`.
    It asks for the folder, checks it and remembers it. If it says a saved folder does not
    exist any more (you moved the game), run it again.
 2. Or find the `_forever_` folder (see [Install the addon](install-the-addon.md), step 2)

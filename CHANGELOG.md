@@ -6,6 +6,12 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-08
+
+WoW Coach is now a real desktop app in a game-style look: chat with your coach, quick
+buttons, a card or overlay on top of the game, and a coach that looks things up, gives its
+sources and updates your next steps every time the game saves.
+
 ### Added
 
 - **The WoW Coach app** (`wow-coach app`): your coach in its own window instead of a browser
