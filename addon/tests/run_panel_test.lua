@@ -597,6 +597,10 @@ local bindingsXml = bindingsFile:read("*a")
 bindingsFile:close()
 check(has(bindingsXml, 'name="COACHLINK_TOGGLE"') and has(bindingsXml, 'SlashCmdList.COACHLINK("panel")'),
     "Bindings.xml toggles the panel through /coach panel")
+check(type(BINDING_NAME_COACHLINK_SAVE) == "string" and BINDING_NAME_COACHLINK_SAVE ~= "",
+    "the save key binding has a name")
+check(has(bindingsXml, 'name="COACHLINK_SAVE"') and has(bindingsXml, 'SlashCmdList.COACHLINK("");'),
+    "Bindings.xml saves for the coach through /coach (the same path as typing it)")
 
 -- Opening at login must not happen during a fight.
 coach = startSession()
