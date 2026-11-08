@@ -18,6 +18,7 @@ _log = logging.getLogger(__name__)
 
 SHOW_MESSAGE: Final = b"show"
 CONNECT_TIMEOUT_MS: Final = 500
+READ_TIMEOUT_MS: Final = 200
 
 
 def default_name() -> str:
@@ -90,12 +91,16 @@ class SingleInstance(QObject):
     def _on_connection(self) -> None:
         server = self._server
         while server is not None and server.hasPendingConnections():
-            socket = server.nextPendingConnection()
-            socket.readyRead.connect(lambda sock=socket: self._read(sock))
-            socket.disconnected.connect(socket.deleteLater)
-            if socket.bytesAvailable():
-                self._read(socket)
+            self._handle(server.nextPendingConnection())
 
-    def _read(self, socket: QLocalSocket) -> None:
-        if bytes(socket.readAll().data()) == SHOW_MESSAGE:
+    def _handle(self, socket: QLocalSocket) -> None:
+        """Read the one short message of a second copy, act on it and hang up.
+
+        The message is a few bytes on this computer only, so waiting a moment for it is
+        harmless and keeps the code simple (no connections to keep track of).
+        """
+        got_data = socket.bytesAvailable() > 0 or socket.waitForReadyRead(READ_TIMEOUT_MS)
+        if got_data and bytes(socket.readAll().data()) == SHOW_MESSAGE:
             self.show_requested.emit()
+        socket.disconnectFromServer()
+        socket.deleteLater()

@@ -178,6 +178,7 @@ class SetupCard(QFrame):
         self.button.setProperty("kind", "primary" if primary else "secondary")
         self.button.style().unpolish(self.button)  # make Qt read the changed property
         self.button.style().polish(self.button)
+        self.button.updateGeometry()  # the new text and style may need a different width
         self.button.show()
 
 

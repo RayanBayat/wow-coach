@@ -84,7 +84,7 @@ class MainWindow(QMainWindow):
             self._stack.addWidget(page)
             page.navigate.connect(self.show_page)
         for page in self.pages:
-            if isinstance(page, SetupPage):
+            if isinstance(page, SetupPage) and game_dir is not None:
                 page.set_game_dir(game_dir)
         if self.pages:
             self.show_page(self.pages[0].name)
