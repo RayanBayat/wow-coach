@@ -24,10 +24,10 @@ from wow_coach.advice.merge import add_answer
 from wow_coach.advice.questions import open_questions
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.advice.writer import interface_from_coachlink, update_advice
-from wow_coach.ai.base import Answer as AIAnswer
 from wow_coach.ai.base import Provider
 from wow_coach.app_settings import AppSettings
 from wow_coach.characters import pick_character
+from wow_coach.engine.agent import Activity, AgentResult, run_agent
 from wow_coach.engine.answer import ANSWER_SCHEMA, parse_answer
 from wow_coach.engine.contract import CoachReply
 from wow_coach.engine.conversation import (
@@ -42,15 +42,19 @@ from wow_coach.engine.conversation import (
 )
 from wow_coach.engine.memory import LocalMemory
 from wow_coach.engine.prompt import PromptData, build_messages
-from wow_coach.engine.redact import other_player_names, without_own_names
+from wow_coach.engine.redact import other_player_names, redact_names, without_own_names
 from wow_coach.errors import WowCoachError
 from wow_coach.notes import journal_path, notes_path
 from wow_coach.report import format_history, format_status
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
+from wow_coach.tools import CoachTool, build_coach_tools
+from wow_coach.web import Fetch
 
 MAX_OUTPUT_TOKENS: Final = 800
 CONTEXT_MESSAGES: Final = 60  # newest chat messages read for the prompt (it keeps what fits)
 HISTORY_EVENTS: Final = 10
+_NOTES_TOOLS: Final = ("read_coach_notes", "save_coach_notes", "save_player_notes")
+type ActivityListener = Callable[[str, Activity], None]  # (character key, what is happening)
 _WRITE_ERRORS: Final = (WowCoachError, OSError, ValueError, OverflowError, RecursionError)
 
 
@@ -97,6 +101,8 @@ class ChatCoach:
         environ: Mapping[str, str],
         settings: AppSettings,
         now: Callable[[], float] = time.time,
+        on_activity: ActivityListener | None = None,
+        fetch: Fetch | None = None,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -104,6 +110,8 @@ class ChatCoach:
         self._environ = environ
         self._settings = settings
         self._now = now
+        self._on_activity = on_activity
+        self._fetch = fetch  # None: the real, polite wiki fetcher
         self._memory = LocalMemory(environ=environ)
         self._own_characters: frozenset[str] = frozenset()  # every character in the save
 
@@ -172,13 +180,9 @@ class ChatCoach:
     def _answer(self, found: Character, question: str, asked: Question | None) -> CoachReply:
         history = self._chat_history(found.key)
         hidden = self._names_to_hide(found)
-        messages = build_messages(self._prompt_data(found, question, history), hidden_names=hidden)
-        reply = self._provider.ask(
-            messages,
-            model=self._model,
-            max_output_tokens=MAX_OUTPUT_TOKENS,
-            json_schema=ANSWER_SCHEMA,
-        )
+        build_messages(self._prompt_data(found, question, history), hidden_names=hidden)
+        run = self._run_ai(found, hidden, question, history, asked)
+        reply = run.answer
         parsed = parse_answer(reply.text, answered_at=int(self._now()), source=self._provider.name)
         answer = self._tie_to_question(parsed, asked)
         if asked is not None:  # before the write, which may fail
@@ -186,11 +190,75 @@ class ChatCoach:
                 self._memory.add_answered(found.key, asked.id)
         written, note = self._write(found, answer)
         self._remember(
-            found.key, question, answer, reply, source="game" if asked else "app", asked=asked
+            found.key, question, answer, run, source="game" if asked else "app", asked=asked
         )
         return CoachReply(
-            character_key=found.key, answer=answer, written_to_game=written, note=note
+            character_key=found.key,
+            answer=answer,
+            written_to_game=written,
+            note=note,
+            sources=run.sources,
+            lookups=run.lookups,
         )
+
+    def _run_ai(
+        self,
+        found: Character,
+        hidden: set[str],
+        question: str,
+        history: list[ChatMessage],
+        asked: Question | None,
+    ) -> AgentResult:
+        """Ask the AI, letting it use the tools the player allowed (see ``engine/agent.py``)."""
+        tools = self._tools(found, hidden)
+        search = self._settings.web_search
+        messages = build_messages(
+            self._prompt_data(found, question, history),
+            hidden_names=hidden,
+            tools=bool(tools) or search,
+            save_notes=any(tool.kind == "write" for tool in tools),
+        )
+        del asked  # a question from the game is answered the same way
+
+        def on_activity(activity: Activity) -> None:
+            if self._on_activity is not None:
+                self._on_activity(found.key, activity)
+
+        return run_agent(
+            self._provider,
+            messages,
+            model=self._model,
+            max_output_tokens=MAX_OUTPUT_TOKENS,
+            json_schema=ANSWER_SCHEMA,
+            tools=tools,
+            web_search=search,
+            on_activity=on_activity,
+        )
+
+    def _tools(self, found: Character, hidden: set[str]) -> tuple[CoachTool, ...]:
+        """The tools the player allows for this character; none when tools are off.
+
+        Every tool output hides other players' names, like the prompt does. Without
+        permission to share the notes, the notes tools are left out; without permission
+        to save, the two save tools are.
+        """
+        if not self._settings.use_tools:
+            return ()
+        tools = build_coach_tools(
+            self._wow_dir,
+            found.key,
+            environ=self._environ,
+            now=self._now,
+            clean=lambda text: redact_names(text, hidden),
+            fetch=self._fetch,
+        )
+        allowed = [
+            tool
+            for tool in tools
+            if (self._settings.save_notes or tool.kind != "write")
+            and (self._settings.send_coach_notes or tool.name not in _NOTES_TOOLS)
+        ]
+        return tuple(allowed)
 
     @staticmethod
     def _tie_to_question(answer: AdviceAnswer, asked: Question | None) -> AdviceAnswer:
@@ -245,7 +313,7 @@ class ChatCoach:
         character_key: str,
         question: str,
         answer: AdviceAnswer,
-        reply: AIAnswer,
+        run: AgentResult,
         *,
         source: Source,
         asked: Question | None,
@@ -263,8 +331,15 @@ class ChatCoach:
                 now_iso(answered_at),
                 source,
                 provider=provider_id(self._provider.name),
-                model=reply.model,
-                answer=ChatAnswer(answer.title, answer.steps, answer.text, answer.warnings),
+                model=run.answer.model,
+                answer=ChatAnswer(
+                    answer.title,
+                    answer.steps,
+                    answer.text,
+                    answer.warnings,
+                    sources=run.sources,
+                    lookups=run.lookups,
+                ),
             ),
         ]
         with contextlib.suppress(OSError):
