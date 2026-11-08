@@ -71,6 +71,7 @@ def make(
         which=lambda name: f"/bin/{name}" if name in programs else None,
         runner=runner,
         popen=popen,
+        environ={},  # no SYSTEMROOT: the fake `which` decides, on every real system
     )
     return system, runner, popen
 
@@ -277,6 +278,7 @@ def test_programs_run_by_resolved_path_not_bare_name() -> None:
             which=lambda name: f"/found/{name}",
             runner=FakeRunner(),
             popen=FakePopen(),
+            environ={},
         )
         command = system._notify_command("t", "b")
         assert command is not None and command[0][0].startswith("/found/")
@@ -288,7 +290,13 @@ def test_windows_prefers_the_system32_powershell(
     exe = tmp_path / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
     exe.parent.mkdir(parents=True)
     exe.write_text("")
-    monkeypatch.setenv("SYSTEMROOT", str(tmp_path))
-    system, runner, _ = make("win32")
+    del monkeypatch  # SYSTEMROOT is given directly, not through the real environment
+    system = SystemAlerts(
+        platform="win32",
+        which=lambda name: f"/bin/{name}",
+        runner=(runner := FakeRunner()),
+        popen=FakePopen(),
+        environ={"SYSTEMROOT": str(tmp_path)},
+    )
     system.notify("t", "b")
     assert runner.calls[0][0][0] == str(exe)

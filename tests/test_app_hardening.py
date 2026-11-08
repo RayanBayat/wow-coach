@@ -1,5 +1,6 @@
 """Fixes from the security review: private launcher file, plan protection, outside-write race."""
 
+import os
 import stat
 from pathlib import Path
 
@@ -26,8 +27,9 @@ def test_the_launcher_file_and_folder_are_private(tmp_path: Path) -> None:
     page = write_launcher(START_URL, {"XDG_RUNTIME_DIR": str(tmp_path)})
     try:
         assert page.parent.parent == tmp_path
-        assert stat.S_IMODE(page.stat().st_mode) == 0o600
-        assert stat.S_IMODE(page.parent.stat().st_mode) == 0o700
+        if os.name != "nt":  # Windows has no such modes; its user folders are private anyway
+            assert stat.S_IMODE(page.stat().st_mode) == 0o600
+            assert stat.S_IMODE(page.parent.stat().st_mode) == 0o700
         text = page.read_text("utf-8")
         assert 'http-equiv="refresh"' in text and START_URL in text
     finally:

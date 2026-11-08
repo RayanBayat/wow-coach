@@ -164,8 +164,11 @@ class SystemAlerts:
         which: Callable[[str], str | None] = shutil.which,
         runner: Runner = default_runner,
         popen: Popen = default_popen,
+        environ: Mapping[str, str] | None = None,
     ) -> None:
         self._platform = platform
+        # Only used to find Windows' own PowerShell (SYSTEMROOT); tests pass their own.
+        self._environ = os.environ if environ is None else environ
         self._which = which
         self._runner = runner
         self._popen = popen
@@ -269,7 +272,7 @@ class SystemAlerts:
 
     def _find_powershell(self) -> str | None:
         """Windows PowerShell: the copy in System32 if it exists, else whatever `which` finds."""
-        root = os.environ.get("SYSTEMROOT")
+        root = self._environ.get("SYSTEMROOT")
         if root and self._platform == "win32":
             system_copy = Path(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
             if system_copy.exists():
