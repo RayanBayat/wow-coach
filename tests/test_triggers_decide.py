@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from wow_coach.triggers.contract import Event, EventKind, OnSave, TriggerSettings
 from wow_coach.triggers.decide import MAX_NOTIFICATION_CHARS, notification_text, worth_knowing
-from wow_coach.triggers.prompt import MAX_EVENTS, coach_request_for
+from wow_coach.triggers.prompt import MAX_EVENTS, STATUS_UPDATED, coach_request_for
 
 NOW = 1_000_000
 KEY = "Test-Realm"
@@ -69,11 +69,11 @@ def test_coach_request_lists_the_events() -> None:
         [event("died", summary="Died in Brill."), event("level_up", summary="Reached level 9.")]
     )
     assert "Died in Brill." in request and "Reached level 9." in request
-    assert request.endswith("Keep it short.")
+    assert request.startswith("Status updated")
 
 
-def test_coach_request_is_empty_without_events() -> None:
-    assert coach_request_for([]) == ""
+def test_without_events_the_request_still_asks_what_next() -> None:
+    assert coach_request_for([]) == STATUS_UPDATED
 
 
 def test_coach_request_lists_only_so_many_events() -> None:

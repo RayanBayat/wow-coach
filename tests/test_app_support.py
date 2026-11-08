@@ -35,6 +35,8 @@ def write_save(
     deaths_at: tuple[int, ...] = (),
     levels_at: tuple[int, ...] = (),
     in_instance: bool = False,
+    zone: str = "Tirisfal Glades",
+    reason: str = "ask",
 ) -> Path:
     """Write a CoachLink.lua with one character, its (id, text) questions and some deaths."""
     instance = '["instance"] = {["name"] = "Deadmines"},\n' if in_instance else ""
@@ -52,7 +54,7 @@ def write_save(
     path.write_text(
         'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
         f'["{KEY}"] = {{\n["snapshot"] = {{\n["name"] = "Testchar",\n["level"] = 8,\n'
-        f'["savedAt"] = {mtime},\n["reason"] = "ask",\n{instance}}},\n'
+        f'["savedAt"] = {mtime},\n["reason"] = "{reason}",\n["zone"] = "{zone}",\n{instance}}},\n'
         f'["questions"] = {{\n{asked}}},\n'
         f'["history"] = {{\n{deaths}}},\n'
         "},\n},\n}\n",

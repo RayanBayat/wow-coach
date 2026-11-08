@@ -69,7 +69,7 @@ def test_off_says_nothing(tmp_path: Path) -> None:
 
 def test_advice_notifies_and_asks_the_coach_once(tmp_path: Path) -> None:
     rig, watcher, mailbox = setup(tmp_path, {"on_save": "advice"})
-    write_save(rig.wow_dir, mtime=2_000, deaths_at=(1_500,), levels_at=(1_600,))
+    write_save(rig.wow_dir, mtime=2_000, deaths_at=(1_500,), levels_at=(1_600,), reason="coach")
     watcher.check_once()
     assert len(rig.coach.asked) == 1
     assert "Died" in rig.coach.asked[0] and "level" in rig.coach.asked[0].lower()
@@ -80,11 +80,46 @@ def test_advice_notifies_and_asks_the_coach_once(tmp_path: Path) -> None:
 
 def test_advice_asks_again_for_a_later_save_with_new_things(tmp_path: Path) -> None:
     rig, watcher, _ = setup(tmp_path, {"on_save": "advice"})
-    write_save(rig.wow_dir, mtime=2_000, deaths_at=(1_500,))
+    write_save(rig.wow_dir, mtime=2_000, deaths_at=(1_500,), reason="coach")
     watcher.check_once()
-    write_save(rig.wow_dir, mtime=2_050, deaths_at=(1_500, 2_040))
+    write_save(rig.wow_dir, mtime=2_050, deaths_at=(1_500, 2_040), reason="coach")
     watcher.check_once()
     assert len(rig.coach.asked) == 2  # one per save, never more
+
+
+def test_update_my_next_steps_asks_after_any_save_that_changed_something(
+    tmp_path: Path,
+) -> None:
+    rig, watcher, mailbox = setup(tmp_path, {"on_save": "advice"})
+    write_save(rig.wow_dir, mtime=2_000, zone="Silverpine Forest", reason="coach")  # moved
+    watcher.check_once()
+    assert len(rig.coach.asked) == 1
+    assert rig.coach.asked[0].startswith("Status updated")
+    assert len(events_of(mailbox, "answer")) == 1  # the chat and the small card show it
+    assert rig.alerts.notified[-1][0] == "Your coach answered"
+
+
+def test_a_reload_with_nothing_new_does_not_ask(tmp_path: Path) -> None:
+    rig, watcher, _ = setup(tmp_path, {"on_save": "advice"})
+    write_save(rig.wow_dir, mtime=2_000, zone="Silverpine Forest", reason="coach")
+    watcher.check_once()
+    write_save(rig.wow_dir, mtime=2_050, zone="Silverpine Forest", reason="coach")  # same
+    watcher.check_once()
+    assert len(rig.coach.asked) == 1
+
+
+def test_a_question_from_the_game_gets_its_own_answer_not_a_second_one(tmp_path: Path) -> None:
+    rig, watcher, _ = setup(tmp_path, {"on_save": "advice"})
+    write_save(rig.wow_dir, ("q1", "Where is Brill?"), mtime=2_000, zone="Silverpine Forest")
+    watcher.check_once()
+    assert rig.coach.asked == []  # no "status updated" request on top of its own answer
+
+
+def test_notify_only_never_asks_even_when_things_changed(tmp_path: Path) -> None:
+    rig, watcher, _ = setup(tmp_path, {"on_save": "notify"})
+    write_save(rig.wow_dir, mtime=2_000, zone="Silverpine Forest", reason="coach")
+    watcher.check_once()
+    assert rig.coach.asked == []  # notifications only, never an AI call
 
 
 def test_quiet_in_an_instance(tmp_path: Path) -> None:
@@ -97,7 +132,7 @@ def test_quiet_in_an_instance(tmp_path: Path) -> None:
 def test_an_ai_error_becomes_an_error_event_but_the_notification_stays(tmp_path: Path) -> None:
     rig, watcher, mailbox = setup(tmp_path, {"on_save": "advice"})
     rig.coach.error = PlanLimitReached("Your plan is used up.")
-    write_save(rig.wow_dir, mtime=2_000, deaths_at=(1_500,))
+    write_save(rig.wow_dir, mtime=2_000, deaths_at=(1_500,), reason="coach")
     watcher.check_once()
     assert [e.data["message"] for e in events_of(mailbox, "error")] == ["Your plan is used up."]
     assert rig.alerts.notified == [("wow-coach", "Died in Brill (level 8).")]

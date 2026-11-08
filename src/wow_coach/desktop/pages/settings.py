@@ -53,7 +53,7 @@ TOOL_KEYS: Final = ("use_tools", "web_search", "save_notes", "show_lookups")
 ON_SAVE_CHOICES: Final = (
     ("off", "Off"),
     ("notify", "Tell me what's worth knowing"),
-    ("advice", "Tell me and add the coach's advice"),
+    ("advice", "Tell me and update my next steps"),
 )
 
 

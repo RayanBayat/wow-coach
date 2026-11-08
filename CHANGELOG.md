@@ -70,7 +70,9 @@ All notable changes to this project are written here. The format follows
 - **"Coach on its own" is now one setting, "When the game saves".** Choose Off, **Tell me
   what's worth knowing** (the default: one free notification listing what changed, such as a
   level-up, full bags, a finished quest or a death, worked out without any AI) or **Tell me
-  and add the coach's advice** (the same plus one coach answer). The timer, quiet hours, the
+  and update my next steps** (the same, and after every save that changed something the coach
+  is asked "Status updated: what next?"; the answer shows in the chat and on the keep-on-top
+  card). The timer, quiet hours, the
   per-event rules, the waiting time between answers and the small-AI filter are gone, because
   the game only shares your data when it saves, so nothing could ever be live. "Stay quiet in
   dungeons and raids" stays. Older settings files still work and are mapped to the new choice.

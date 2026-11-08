@@ -68,8 +68,12 @@ In **Settings**, under **Coach on its own**, **When the game saves** has three c
   worth knowing, in one short text. It is worked out by wow-coach itself from what changed
   between the two saves, so it is free and uses nothing from your plan. When nothing
   happened, you get nothing.
-- **Tell me and add the coach's advice:** the same notification, plus one coach answer about
-  those things, shown in the chat like any other answer. It uses one call of your plan.
+- **Tell me and update my next steps:** the same notification, and after every save that
+  changed something (you moved, levelled, looted, finished or picked up a quest...) the coach
+  gets "Status updated: what should I do next?". Its answer shows in the chat and on the small
+  keep-on-top card, so your next steps are always fresh. It uses one call of your plan per
+  save; a `/reload` with nothing new costs nothing, and a save made by asking in the game
+  only answers your question.
 
 What counts as worth knowing:
 

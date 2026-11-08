@@ -6,15 +6,20 @@ The steps for one save, in plain words:
    (you died, you levelled up...).
 2. ``worth_knowing`` applies the player's choice and the quiet rule. No AI is used.
 3. What is worth knowing becomes ONE desktop notification (one short text).
-4. If the player chose "advice", the same events also make ONE coach request. So one save
-   never costs more than one unasked AI call, and nothing is remembered between saves:
-   a /reload with nothing new gives no events, so it gives nothing.
+4. If the player chose "advice" ("Update my next steps"), every save that changed something
+   that matters (``triggers/status.py``) also makes ONE "status updated, what next?" coach
+   request, which mentions the events if there were any. Its answer shows in the chat and on
+   the small keep-on-top card. So one save never costs more than one unasked AI call, and a
+   /reload with nothing new gives nothing.
+5. A save that carries a question typed in the game gets no extra request: that question
+   gets its own answer.
 
 The AI call runs while holding the shared AI lock: one AI call at a time, everywhere.
 """
 
 import time
 from collections.abc import Callable
+from typing import Final
 
 from wow_coach.app.core import AppCore
 from wow_coach.characters import pick_character
@@ -22,6 +27,10 @@ from wow_coach.savedvars import Character
 from wow_coach.triggers.decide import notification_text, worth_knowing
 from wow_coach.triggers.events import events_between
 from wow_coach.triggers.prompt import coach_request_for
+from wow_coach.triggers.status import status_changed
+
+# The addon saves with this reason when the player asked a question in the game's Coach panel.
+ASKED_IN_GAME: Final = "ask"
 
 
 class SpeakUp:
@@ -38,16 +47,22 @@ class SpeakUp:
         newest = pick_character(characters, None)
         if newest is None:
             return
-        events = events_between(self._previous.get(newest.key), newest, now=int(self._clock()))
+        before = self._previous.get(newest.key)
+        events = events_between(before, newest, now=int(self._clock()))
         self._previous = dict(characters)
         core = self._core
         settings = core.settings.triggers
-        events = worth_knowing(events, settings, in_instance=bool(newest.snapshot.get("instance")))
-        if not events:
+        in_instance = bool(newest.snapshot.get("instance"))
+        events = worth_knowing(events, settings, in_instance=in_instance)
+        if events:
+            core.notify_text(notification_text(events))
+        if settings.on_save != "advice" or (settings.quiet_in_instances and in_instance):
             return
-        core.notify_text(notification_text(events))
-        if settings.on_save == "advice":
-            with core.ai_lock:  # one AI call at a time
-                reply = core.coach.ask(coach_request_for(events), character=newest.key)
-                core.publish_reply(reply)
-                core.alert(reply.answer)
+        if not events and not status_changed(before, newest):
+            return  # a /reload with nothing new: nothing to update
+        if newest.snapshot.get("reason") == ASKED_IN_GAME:
+            return  # this save carries a question typed in the game: it gets its own answer
+        with core.ai_lock:  # one AI call at a time
+            reply = core.coach.ask(coach_request_for(events), character=newest.key)
+            core.publish_reply(reply)
+            core.alert(reply.answer)

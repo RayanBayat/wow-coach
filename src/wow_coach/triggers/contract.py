@@ -4,7 +4,8 @@ The game only hands data to wow-coach when it saves (/reload, /coach, logout, th
 panel's Ask), so nothing here can ever be live. Each save is compared with the one before,
 which gives ``Event``s: you died, you levelled up, your bags are almost full... The player
 makes one choice (``OnSave``): tell nothing, tell what is worth knowing in one
-notification, or also add the coach's advice. Working out what is worth knowing uses no AI.
+notification, or also update the player's next steps (one coach answer after every save that
+changed something). Working out what is worth knowing uses no AI.
 """
 
 from dataclasses import dataclass
