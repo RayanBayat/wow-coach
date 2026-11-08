@@ -1,13 +1,13 @@
 """The scrolling conversation.
 
-New messages fade in. The view glides down to a new message, unless the player has scrolled
-up to read: then it stays put and shows a small "New answer ↓" button instead.
+New messages fade in, and the view always glides down to the newest one (the player asked
+for this: a new answer should never hide below the bottom edge). The coach's typing dots
+are brought into view too.
 """
 
 import time
 
 from PySide6.QtCore import QPropertyAnimation, QSize, Qt, QTimer
-from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
 from wow_coach.desktop.state import AnswerView
@@ -25,7 +25,6 @@ from wow_coach.desktop.widgets.bubbles import (
 
 FOLLOW_SECONDS = 0.5  # how long after adding a message the view keeps following the growth
 MIN_CHAT_WIDTH = 240
-NEAR_BOTTOM_PIXELS = 40  # "at the bottom" means within this many pixels of it
 
 
 class _Content(QWidget):
@@ -67,12 +66,6 @@ class ChatView(QScrollArea):
         self._follow_until = 0.0
         self._follow_animated = True
         self.verticalScrollBar().rangeChanged.connect(self._range_changed)
-        self._new_pill = QPushButton("New answer ↓", self)
-        self._new_pill.setProperty("kind", "primary")
-        self._new_pill.setToolTip("Jump down to the newest answer.")
-        self._new_pill.clicked.connect(self.scroll_to_newest)
-        self._new_pill.hide()
-        self.verticalScrollBar().valueChanged.connect(self._hide_pill_at_bottom)
 
     # ---- reading ------------------------------------------------------------------------
 
@@ -83,11 +76,6 @@ class ChatView(QScrollArea):
     def texts(self) -> list[str]:
         """The visible words of every message, oldest first (used by tests)."""
         return [_all_text(row.content) for row in self._rows]
-
-    @property
-    def pill_visible(self) -> bool:
-        """True when the "New answer ↓" button is shown."""
-        return not self._new_pill.isHidden()
 
     @property
     def typing_visible(self) -> bool:
@@ -149,7 +137,6 @@ class ChatView(QScrollArea):
             row.deleteLater()
         self._rows.clear()
         self._coach_bubbles.clear()
-        self._new_pill.hide()
 
     def set_typing(self, on: bool) -> None:
         """Show or hide the coach's typing dots, and keep them in view."""
@@ -157,10 +144,9 @@ class ChatView(QScrollArea):
             self._typing.set_activity("")
         if on == self.typing_visible:
             return
-        stick = self._at_bottom()
         self._typing_row.setVisible(on)
-        if on and stick:
-            self._scroll_soon()
+        if on:
+            self._scroll_soon()  # the dots (and what the coach is looking up) stay in view
 
     def set_activity(self, text: str) -> None:
         """Show what the coach is looking up inside the typing bubble (while it is shown)."""
@@ -181,7 +167,6 @@ class ChatView(QScrollArea):
 
     def scroll_to_newest(self) -> None:
         """Glide to the bottom."""
-        self._new_pill.hide()
         if self._glide is not None:
             self._glide.stop()  # two glides at once would fight over the scrollbar
         bar = self.verticalScrollBar()
@@ -208,19 +193,12 @@ class ChatView(QScrollArea):
     def _add(
         self, content: QWidget, *, on_right: bool, animate: bool, share: float = 0.7
     ) -> MessageRow:
-        stick = self._at_bottom() or not self._rows
         row = MessageRow(content, on_right=on_right, share=share)
         self._column.insertWidget(len(self._rows), row)
         self._rows.append(row)
         if animate:
             fade_in(row)
-            if stick or on_right:
-                self._scroll_soon()  # the player's own question always brings us down
-            else:
-                self._new_pill.show()
-                self._place_pill()
-        else:
-            self._scroll_soon(animated=False)
+        self._scroll_soon(animated=animate)  # every new message brings the view down
         return row
 
     def _scroll_soon(self, *, animated: bool = True) -> None:
@@ -243,27 +221,6 @@ class ChatView(QScrollArea):
         """The chat got taller: if we are following new messages, follow this growth too."""
         if time.monotonic() < self._follow_until:
             self._follow()
-
-    def _at_bottom(self) -> bool:
-        bar = self.verticalScrollBar()
-        return bar.maximum() - bar.value() <= NEAR_BOTTOM_PIXELS
-
-    def _hide_pill_at_bottom(self) -> None:
-        if self._at_bottom():
-            self._new_pill.hide()
-
-    def _place_pill(self) -> None:
-        self._new_pill.adjustSize()
-        x = (self.width() - self._new_pill.width()) // 2
-        y = self.height() - self._new_pill.height() - SPACE
-        self._new_pill.move(x, y)
-        self._new_pill.raise_()
-
-    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt's method name
-        """Keep the "New answer ↓" button at the bottom middle."""
-        super().resizeEvent(event)
-        if not self._new_pill.isHidden():
-            self._place_pill()
 
 
 def _all_text(widget: QWidget) -> str:

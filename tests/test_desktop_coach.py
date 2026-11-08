@@ -331,7 +331,7 @@ def test_answer_text_is_shown_as_plain_text_never_as_markup(qtbot: QtBot, tmp_pa
     assert any(label.text() == "<b>Bold?</b>" for label in labels)
 
 
-def test_scrolled_up_readers_get_a_new_answer_pill_instead_of_being_moved(
+def test_a_new_answer_always_scrolls_down_even_after_reading_older_ones(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
     many = [sample_answer(f"Answer {i}", answered_at=1_000 + i) for i in range(30, 0, -1)]
@@ -343,10 +343,8 @@ def test_scrolled_up_readers_get_a_new_answer_pill_instead_of_being_moved(
     bar.setValue(0)
     qtbot.wait(100)
     setup.event("answer", **answer_event("Late one", answered_at=2_900))
-    assert setup.page.chat.pill_visible is True
-    assert bar.value() == 0
-    setup.page.chat.scroll_to_newest()
-    assert setup.page.chat.pill_visible is False
+    # A new answer always brings the view down, even after scrolling up to read.
+    qtbot.waitUntil(lambda: bar.value() == bar.maximum() and bar.maximum() > 0, timeout=3000)
 
 
 # ---- not signed in, problems and open questions ----------------------------------------------
