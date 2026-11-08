@@ -279,6 +279,12 @@ def _reply_text(reply: CoachReply) -> str:
     if answer.text:
         lines += ["", answer.text]
     lines += [f"Watch out: {warning}" for warning in answer.warnings]
+    if reply.sources:
+        lines += ["", "Sources:"]
+        lines += [
+            f"- {source.title}: {source.url}" if source.title else f"- {source.url}"
+            for source in reply.sources
+        ]
     lines += ["", f"From {answer.source}. AI can be wrong.", reply.note]
     return "\n".join(lines)
 
