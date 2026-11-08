@@ -34,6 +34,9 @@ Last updated: 2026-11-08.
 | Your "when to speak up" rules in your own words, and short summaries of game events (for example "Died in Brill") | wow-coach's data folder (settings) | OpenAI's smallest model on your plan, only if you turn on "use a small AI to decide" |
 | Names of other players the coach has seen (to keep hiding them), and the ids of questions already answered | wow-coach's data folder (`hidden-names-v2.json`, `answered-questions.json`), kept until you delete them. `import-state.json` only remembers how far your Claude Code session files were read | Nobody |
 | Words you look up on the Warcraft Wiki | Nowhere | The Warcraft Wiki (warcraft.wiki.gg), when the coach looks something up |
+| Web searches the built-in coach makes (the search words and the pages found) | The conversation file keeps the pages it cited as the answer's sources | OpenAI, who run the search as part of your ChatGPT plan. Turn off "Let the coach search the web too" in Settings to stop them |
+| What the built-in coach reads with its tools (your character's data, recent history, your notes) | Nowhere new | OpenAI, as part of the answer. Sections of your notes about your computer are left out of what it reads, and kept when it saves |
+| Notes the built-in coach saves (the character journal and the player notes) | wow-coach's data folder, with the last 20 earlier versions in a `.history` folder next to each file | Nobody. Turn off "Let the coach update your notebook" in Settings to stop it |
 
 wow-coach's data folder is `~/.local/share/wow-coach` on Linux (or `$XDG_DATA_HOME/wow-coach`),
 `~/Library/Application Support/wow-coach` on macOS, and `%LOCALAPPDATA%\wow-coach` on
@@ -64,6 +67,10 @@ the requests (`store: false`).
 - **Your Claude coach chats:** turn off "Use my Claude coach chats" (Settings, Privacy) so they
   are not imported, not shown, and never sent to ChatGPT. Chats already imported stay in the
   conversation file until you delete it (`conversations/<character>.jsonl` in the data folder).
+- **The coach's tools:** turn off "Let the coach look things up" to stop its tools (it then
+  answers only from the data sent with your question), "Let the coach search the web too" to
+  stop web searches, and "Let the coach update your notebook" to stop it saving notes.
+  "Show what the coach looked up" only changes what you see.
 - **The coach's notes:** turn off "send the coach's notes" to keep your player notes and
   journals on your computer (answers fit you less well).
 

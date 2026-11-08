@@ -27,6 +27,12 @@ QFrame#coachBubble QLabel[role="muted"], QFrame#coachBubble QLabel[role="small"]
 }}
 QFrame#coachBubble QPushButton[kind="ghost"] {{ color: {c.parchment_muted}; padding: 0; }}
 QFrame#coachBubble QPushButton[kind="ghost"]:hover {{ color: {c.on_parchment}; }}
+QFrame#coachBubble QPushButton[kind="source"] {{
+    background: transparent; border: none; padding: 0 2px; text-align: left;
+    color: {c.on_parchment}; text-decoration: none;
+}}
+QFrame#coachBubble QPushButton[kind="source"]:hover,
+QFrame#coachBubble QPushButton[kind="source"]:focus {{ text-decoration: underline; }}
 QFrame#playerBubble {{
     background: {c.player_bubble}; border: 1px solid {with_alpha(c.info, 0.35)};
     border-radius: {RADIUS}px;
@@ -47,13 +53,6 @@ QFrame#waitingNotice {{
 QFrame#problemBanner, QFrame#questionsBar {{
     background: {with_alpha(c.info, 0.12)}; border: 1px solid {with_alpha(c.info, 0.45)};
     border-radius: {RADIUS}px;
-}}
-QFrame#refreshBanner {{
-    background: {with_alpha(c.accent, 0.12)}; border: 1px solid {with_alpha(c.accent, 0.5)};
-    border-radius: {RADIUS}px;
-}}
-QFrame#refreshBanner[state="done"] {{
-    background: {with_alpha(c.success, 0.14)}; border: 1px solid {with_alpha(c.success, 0.5)};
 }}
 QFrame#freshnessPill {{
     background: {c.surface_raised}; border: 1px solid {c.border}; border-radius: {RADIUS_PILL}px;

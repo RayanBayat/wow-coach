@@ -111,3 +111,22 @@ def test_claude_chats_are_used_by_default_and_can_be_turned_off(tmp_path: Path) 
     path = tmp_path / "settings.json"
     save_settings(path, changed)
     assert load_settings(path).use_claude_chats is False
+
+
+def test_coach_tool_settings_default_on_round_trip_and_refuse_bad_values(tmp_path: Path) -> None:
+    for name in ("use_tools", "web_search", "save_notes", "show_lookups"):
+        assert getattr(DEFAULTS, name) is True
+        off = update_settings(DEFAULTS, {name: False})
+        assert getattr(off, name) is False
+        assert getattr(update_settings(off, {name: "yes"}), name) is False  # refused
+    path = tmp_path / "settings.json"
+    save_settings(path, update_settings(DEFAULTS, {"web_search": False, "save_notes": False}))
+    loaded = load_settings(path)
+    assert (loaded.web_search, loaded.save_notes, loaded.use_tools) == (False, False, True)
+
+
+def test_an_old_file_without_the_tool_settings_gets_the_defaults(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text('{"notify": false, "use_claude_chats": false}', "utf-8")
+    loaded = load_settings(path)
+    assert loaded.use_tools and loaded.web_search and loaded.save_notes and loaded.show_lookups

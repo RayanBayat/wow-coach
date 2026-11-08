@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from wow_coach.characters import pick_character, snapshot_time
+from wow_coach.engine.notes_digest import is_private, split_sections, without_private_sections
 from wow_coach.errors import WowCoachError
 from wow_coach.notes import (
     PLAYER_NOTES_MISSING,
@@ -132,29 +133,60 @@ def _read_file_or_explain(path: Path, missing_message: str) -> str:
         return f"Could not read {path}: {error}"
 
 
-def answer_read_notes(player_file: Path, journal_file: Path | None, character_key: str) -> str:
+def answer_read_notes(
+    player_file: Path,
+    journal_file: Path | None,
+    character_key: str,
+    *,
+    hide_private: bool = False,
+) -> str:
     """Text for the ``read_coach_notes`` tool: the player notes, then the character journal.
+
+    With ``hide_private`` the sections about the player's computer are left out (the built-in
+    coach sends what it reads to the AI, and those sections stay on this computer).
 
     ``journal_file`` is None when the character could not be found; ``character_key`` then
     holds the explanation instead of a name.
     """
     player = _read_file_or_explain(player_file, PLAYER_NOTES_MISSING)
+    if hide_private:
+        player = without_private_sections(player)
     if journal_file is None:
         journal = character_key
         heading = "# Character journal"
     else:
         journal = _read_file_or_explain(journal_file, journal_missing_message(character_key))
+        if hide_private:
+            journal = without_private_sections(journal)
         heading = f"# Character journal: {character_key}"
     return f"# Player notes (shared by all characters)\n\n{player}\n\n---\n\n{heading}\n\n{journal}"
 
 
-def answer_save_notes(notes_file: Path, text: str, what: str) -> str:
+def _with_private_sections_back(notes_file: Path, text: str) -> str:
+    """``text`` plus the saved file's computer sections that ``text`` does not have itself.
+
+    The AI never saw those sections (see ``answer_read_notes``), so its text lacks them;
+    saving must not erase them.
+    """
+    try:
+        old = notes_file.read_text(encoding="utf-8") if notes_file.is_file() else ""
+    except OSError:
+        return text
+    have = {section.heading for section in split_sections(text) if is_private(section)}
+    missing = [s for s in split_sections(old) if is_private(s) and s.heading not in have]
+    return "\n\n".join([text.rstrip(), *(s.text for s in missing)]) + "\n" if missing else text
+
+
+def answer_save_notes(notes_file: Path, text: str, what: str, *, keep_private: bool = False) -> str:
     """Text for the two save tools (errors become messages the AI can act on).
 
     ``what`` names the kind of notes in the confirmation, for example ``"journal"``.
     The file being replaced is first kept in a ``.history`` folder (see ``notes.save_notes``).
+    With ``keep_private`` the file's sections about the player's computer are kept.
     """
     try:
+        if keep_private:
+            text = _with_private_sections_back(notes_file, text)
         return save_notes(notes_file, text, what=what)
     except WowCoachError as error:
         return str(error)

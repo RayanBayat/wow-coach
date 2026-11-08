@@ -373,11 +373,49 @@ ChatGPT plan. The pieces (the plan, the rules and the reasons: `docs/plans/coach
 | Sign-in | `ai/chatgpt_signin.py`, `keychain.py` | Sign in with ChatGPT: OAuth with PKCE, a one-shot loopback server on 127.0.0.1:1455, the refresh token in the system keychain (never a file), a refresh lock file, revoke on sign-out. Details and what a real sign-in showed: `docs/plans/chatgpt-signin-notes.md` |
 | The plan | `ai/chatgpt_plan.py`, `usage.py` | The Responses API with the plan token (`store: false`, streamed, JSON schema answers). Every attempt is counted in `usage.jsonl` before it is sent (only counted: wow-coach sets no limit of its own, the plan's own limit applies) |
 | The engine | `engine/` | The prompt (coaching rules from the skill, then fenced data blocks: status, history, journal, player notes, conversation, question; about 12 000 tokens at most). The notes are sent section by section, most useful first, and sections about the player's computer never (`engine/notes_digest.py`). Other players' names are replaced with "a player". The answer is JSON (title, steps, text, warnings), written to the Coach panel's file. The conversation is one shared chat history per character, for any AI (see "The data folder: shared storage") |
+| The tools | `tools/`, `engine/agent.py`, `engine/sources.py` | The built-in coach uses tools while answering, like the Claude coach does. See "The tool loop" below |
 | Putting it together | `companion.py` | One builder for the CLI and the window: the same keychain entry, usage log and refresh lock. `LiveCoach` reads `settings.json` before every answer |
 | Settings | `app_settings.py` | `settings.json` in the data folder, no secrets. Every value is checked; a damaged file gives the defaults |
 | When to speak | `triggers/` | Two saves give events (death, level-up, quest ready, bags...). The player's rules per event (off, notify, coach), quiet hours, quiet in instances, a cooldown, a timer, and an optional triage step with the smallest plan model. One save never costs more than one unasked AI call |
 | The window | `app/` | A page on 127.0.0.1 (see below), and a watcher that answers the Coach panel's questions and runs the triggers |
 | Alerts | `alerts.py` | Desktop notifications through the system's own programs (`notify-send`, `osascript`, PowerShell) |
+
+**The tool loop** (`engine/agent.py`, the loop documented in `ai/base.py`). The engine builds
+the tools for the character (`tools/registry.py`: status, history, progress, read and save the
+notes, search and read the Warcraft Wiki, find a quest by id; the same abilities as the MCP
+server) and asks the AI with the tool list and, if allowed, the provider's own web search.
+While the answer asks for tools, each one is run (`CoachTool.run`, which never raises: an
+unknown tool name or unreadable arguments become a plain sentence the AI can act on) and the
+results are sent back. At most 8 rounds, then one last ask without tools, so there is always an
+answer. Failures degrade like this:
+- the provider refuses the web search: the same round is asked again without it, and search
+  stays off for the rest of that question;
+- any other failure while tools are on: the whole question is asked once more the old way (no
+  tools, no search), and logged. "Not signed in" and the plan limit are raised at once, because
+  asking again cannot fix them;
+- every tool output goes through the same hiding of other players' names as the prompt, and the
+  notes tools never show or lose the notes' sections about the player's computer (they are left
+  out of what is read and kept when the notes are saved).
+
+Progress is reported through a callback, one plain sentence per lookup ("Searched the Warcraft
+Wiki for ...", "Read your character journal", "Saved your character journal"). The app core
+turns each into an `activity` event, which the Coach page shows in its typing bubble.
+
+**Sources, always.** Under each answer the window lists the pages it came from. The list is
+built by our own code and never from links the AI wrote (`engine/sources.py`): the web
+search's own citations, plus the Warcraft Wiki pages a tool actually read (`read_wiki_page`).
+Pages that a search or `find_quest` only *listed* count only when nothing was read. No repeats,
+in the order used, at most 8, and only `http` and `https` links (so no `javascript:` or `file:`).
+The same rule is applied again when the window reads them, whoever stored them. They are shown
+as buttons with the page title (or the site) and the whole link as tooltip, and opened only on
+a click. The CLI `ask` prints them as a "Sources:" list. The game's `Advice.lua` is unchanged.
+
+**The settings that control it** (`app_settings.py`, all on by default): `use_tools` ("Let the
+coach look things up"), `web_search` ("Let the coach search the web too"), `save_notes` ("Let
+the coach update your notebook"; off leaves out the two save tools) and `show_lookups` ("Show
+what the coach looked up"). With "send the coach's notes" off, the notes tools are left out
+too. Every time the coach saves a notes file, the version it replaces goes to a `.history`
+folder next to it, and the last 20 versions are kept.
 
 **The window's safety rules** (`app/server.py`):
 - **Where it listens:** 127.0.0.1 only, on a random port. The Host header must be exactly
@@ -446,9 +484,11 @@ importer finished after the first draw), the chat is drawn again in time order.
 
 **Refreshing the game data.** Only the game can save the character, and only at a reload or a
 logout. An outside program pressing keys in the game would break Blizzard's rules, so the app
-never does. The addon has a "Save for the coach" key binding (the same as `/coach`); the
-Refresh button asks the player to press it and waits for the watcher's `save` event. A
-question typed while waiting is sent after the save.
+never does. The addon has a "Save for the coach" key binding (the same as `/coach`). The app
+has no refresh button: the watcher notices every save by itself and publishes a `save` event;
+the window then re-reads the state, updates the freshness pill and shows a calm "Got your
+latest game data" note for about 3 seconds. A question is never held back for a save: it is
+asked right away with the data from the last one.
 
 **What we tested and ruled out (2026-11-08):** the game's chat log (`/chatlog`,
 `Logs/WoWChatLog.txt`) is not written while playing: it stayed empty through 30 minutes of
@@ -511,7 +551,14 @@ One message per line, oldest first:
 | `source` | Where it happened: `"app"` (the window or `wow-coach ask`), `"game"` (the game's Coach panel), `"claude-code"` (imported from the player's Claude Code coach), `"outside"` (an answer another app wrote into `Advice.lua`) |
 | `provider` | Who answered: `"chatgpt"`, `"claude-code"`, or a short id of a future provider; `null` for the player |
 | `model` | The model id the provider reported, or `null` |
-| `answer` | The structured coach answer (`title`, `steps`, `text`, `warnings`), only for display; `null` otherwise |
+| `answer` | The structured coach answer (`title`, `steps`, `text`, `warnings`, and optionally `sources` and `lookups`), only for display; `null` otherwise |
+
+The optional parts of `answer` (left out when empty; an older line simply lacks them):
+`"sources": [{"title": "Abigail Shiel", "url": "https://warcraft.wiki.gg/wiki/Abigail_Shiel"}]`
+(the pages the answer came from; `title` may be empty; a reader drops anything that is not an
+`http` or `https` link) and `"lookups": [{"kind": "web", "text": "Read the Warcraft Wiki page
+\"Abigail Shiel\""}]` (what the coach looked up or saved, as plain sentences; `kind` is `read`,
+`write` or `web`).
 
 Rules for every reader and writer:
 

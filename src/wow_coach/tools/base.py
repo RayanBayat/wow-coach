@@ -21,6 +21,31 @@ _CUT_NOTE = "\n\n[Cut here: the answer was longer than {limit} characters.]"
 
 
 @dataclass(frozen=True, slots=True)
+class ToolSource:
+    """A web page a tool used, to show the player as a source."""
+
+    title: str
+    url: str
+
+
+@dataclass(frozen=True, slots=True)
+class ToolRun:
+    """The result of running a tool: its text and the pages it used.
+
+    ``only_listed`` is True when the pages were only found in a list (a search), not read.
+    A list is a weaker source: the engine shows listed pages only when nothing was read.
+    """
+
+    output: str
+    sources: tuple[ToolSource, ...] = ()
+    only_listed: bool = False
+
+
+type Sourcer = Callable[[str], tuple[ToolSource, ...]]
+"""Finds the pages a tool used in its (raw) output. It must never raise."""
+
+
+@dataclass(frozen=True, slots=True)
 class CoachTool:
     """A tool: what the AI sees (``spec``), what it does (``handler``) and how to say it.
 
@@ -34,6 +59,8 @@ class CoachTool:
     handler: Callable[[dict[str, object]], str]
     describer: Callable[[Mapping[str, object]], str]
     clean: Callable[[str], str] = field(default=lambda text: text)
+    sourcer: Sourcer | None = None  # None: this tool does not use web pages
+    only_listed: bool = False  # True: ``sourcer`` finds pages in a list, which were not read
 
     @property
     def name(self) -> str:
@@ -42,14 +69,35 @@ class CoachTool:
 
     def run(self, arguments: Mapping[str, object]) -> str:
         """Run the tool. Always returns text: a problem becomes a sentence the AI can act on."""
+        return self.run_with_sources(arguments).output
+
+    def run_with_sources(self, arguments: Mapping[str, object]) -> ToolRun:
+        """Like ``run``, and also says which web pages the answer came from.
+
+        The pages are found in the tool's own output, never in anything the AI wrote.
+        """
         checked = check_arguments(self.spec.parameters, arguments)
         if isinstance(checked, str):
-            return checked
+            return ToolRun(checked)
         try:
             output = self.handler(checked)
         except (WowCoachError, OSError) as error:
-            output = f"The {self.name} tool could not finish: {error}"
-        return cap_text(self.clean(output), MAX_OUTPUT_CHARACTERS)
+            problem = f"The {self.name} tool could not finish: {error}"
+            return ToolRun(cap_text(self.clean(problem), MAX_OUTPUT_CHARACTERS))
+        return ToolRun(
+            cap_text(self.clean(output), MAX_OUTPUT_CHARACTERS),
+            self._sources_in(output),
+            self.only_listed,
+        )
+
+    def _sources_in(self, output: str) -> tuple[ToolSource, ...]:
+        if self.sourcer is None:
+            return ()
+        try:
+            found = self.sourcer(output)
+        except ValueError, IndexError:  # a parsing slip must never cost the answer
+            return ()
+        return tuple(ToolSource(self.clean(item.title), item.url) for item in found)
 
     def describe(self, arguments: Mapping[str, object]) -> str:
         """A short plain sentence about this call, for people (never raises)."""

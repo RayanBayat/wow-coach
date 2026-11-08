@@ -5,8 +5,8 @@ The built-in coach has no MCP, so this package offers the same abilities as plai
 objects:
 
 * ``answers``: the ``answer_*`` functions both sides share (status, history, notes, ...).
-* ``base``: ``CoachTool`` (a tool's spec, kind, ``run`` and ``describe``) and the argument
-  checking that keeps a confused AI from doing harm.
+* ``base``: ``CoachTool`` (a tool's spec, kind, ``run``, ``run_with_sources`` and
+  ``describe``) and the argument checking that keeps a confused AI from doing harm.
 * ``registry``: ``build_coach_tools`` builds the tools for one character.
 
 How a new AI provider (Gemini, the Claude API, ...) plugs in
@@ -32,7 +32,20 @@ Left out on purpose, compared with the MCP server:
   questions itself and the app, not the AI, writes the in-game panel file.
 """
 
-from wow_coach.tools.base import MAX_OUTPUT_CHARACTERS, CoachTool, ToolKind
+from wow_coach.tools.base import (
+    MAX_OUTPUT_CHARACTERS,
+    CoachTool,
+    ToolKind,
+    ToolRun,
+    ToolSource,
+)
 from wow_coach.tools.registry import build_coach_tools
 
-__all__ = ["MAX_OUTPUT_CHARACTERS", "CoachTool", "ToolKind", "build_coach_tools"]
+__all__ = [
+    "MAX_OUTPUT_CHARACTERS",
+    "CoachTool",
+    "ToolKind",
+    "ToolRun",
+    "ToolSource",
+    "build_coach_tools",
+]

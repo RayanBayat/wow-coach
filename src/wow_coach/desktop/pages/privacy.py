@@ -32,12 +32,28 @@ SENT_TO_CHATGPT = (
     "The coach's notes: your own notes and the character journal. You can turn this off in "
     "Settings.",
 )
+CLAUDE_CHATS = (
+    "Your chats with your Claude coach are copied from this computer into the coach's chat "
+    "history. They are sent to ChatGPT as part of the recent conversation, unless you turn "
+    'off "Use my Claude coach chats" in Settings.'
+)
+TOOLS_SEND = (
+    "Warcraft Wiki searches go to the Warcraft Wiki (warcraft.wiki.gg). It sees the words "
+    "the coach looks up.",
+    "Web searches are run by OpenAI as part of your ChatGPT plan. Only the search words and "
+    "what the search finds are involved.",
+    "What the coach reads from your character data and notes is sent to ChatGPT with the "
+    "answer. Sections of your notes about your computer are never read by the coach.",
+    "When the coach saves your notes, they stay on this computer. The last 20 versions are "
+    "kept in a .history folder next to them, so a mistake can be undone.",
+)
 YOUR_CHOICES = (
     "Don't sign in: then nothing is sent to OpenAI at all.",
     "Sign out any time on the ChatGPT page. You can also disconnect WoW Coach in your "
     "ChatGPT settings.",
     "Other players' names are hidden from the AI unless you turn that on in Settings.",
     'Turn off "Send my coach notes" in Settings to keep your notes on this computer.',
+    'Turn off the "Coach tools" in Settings to stop lookups, web searches and note saving.',
 )
 
 
@@ -84,7 +100,16 @@ class PrivacyPage(Page):
                 "small",
             )
         )
+        sent.body.addWidget(make_label(CLAUDE_CHATS, "small"))
         column.addWidget(sent)
+
+        tools = Card(
+            "What the coach's tools send, and where",
+            "While answering, the coach can look things up. You can see each lookup under "
+            "the answer, and turn the tools off in Settings.",
+        )
+        bullet_list(tools, TOOLS_SEND)
+        column.addWidget(tools)
 
         choices = Card("You are in charge")
         bullet_list(choices, YOUR_CHOICES)

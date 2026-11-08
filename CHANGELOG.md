@@ -8,6 +8,14 @@ All notable changes to this project are written here. The format follows
 
 ### Added
 
+- **The coach uses tools, searches the web and shows its sources.** WoW Coach's own coach now
+  works like your Claude coach: while it answers it can read your character's status, history
+  and notes, look things up on the Warcraft Wiki, search the web and save your notebook (the
+  last 20 versions of your notes are kept). Under each answer you see **Sources** (buttons that
+  open the pages it used) and **What the coach looked up**, and the chat says what it is doing
+  while it works. The links come from what was really searched and read, never from links the
+  AI wrote. New **Coach tools** card in Settings to turn any of it off, and `wow-coach ask`
+  prints a "Sources:" list ([privacy](docs/privacy.md)).
 - **One chat history that any AI can use, and your Claude coach chats in the app.** WoW Coach
   keeps one chat file per character in a standard format (JSON Lines, documented in
   [the design notes](docs/design.md#the-data-folder-shared-storage)), so a new AI (Gemini, the
@@ -21,9 +29,10 @@ All notable changes to this project are written here. The format follows
   page ([guide](docs/desktop-app.md)). Install it with the `desktop` extra (Qt for Python).
   - A chat with your coach, and quick buttons: What next?, Check my gear, Spells to train,
     Plan my session, Why did I die?, Make gold, Explain a word.
-  - "Game data: 12 min old" shows how fresh the coach's view is. **Refresh game data** tells
-    you to press your new key in WoW, waits for the save, and sends any question you typed
-    with the fresh data.
+  - "Game data: 12 min old" shows how fresh the coach's view is. It updates by itself whenever
+    the game saves (press your new key in WoW, type `/coach`, or `/reload`), with a short
+    "Got your latest game data" note. There is no refresh button, and a question is always
+    asked right away.
   - **Keep on top of the game**: a small card above the game with the newest answer.
   - **Settings**, **ChatGPT** and **Privacy** pages. Settings save by themselves.
   - **Setup** page: checks the game folder, installs or updates CoachLink, creates the
@@ -56,6 +65,8 @@ All notable changes to this project are written here. The format follows
 
 ### Changed
 
+- The "From ChatGPT · 10 min ago" line under answers is gone; the time shows when you point at
+  an answer.
 - `wow-coach app` opens the new app when it is installed, and the browser window otherwise.
   `wow-coach app --browser` always opens the browser window. `--hidden` starts the app in the
   tray (used by "start when I log in").

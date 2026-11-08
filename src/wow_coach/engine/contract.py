@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from wow_coach.advice.contract import AdviceAnswer
+from wow_coach.engine.conversation import Lookup
+from wow_coach.engine.sources import SourceLink
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +23,8 @@ class CoachReply:
     answer: AdviceAnswer  # what the panel shows (title, steps, text, warnings, source)
     written_to_game: bool  # True when Advice.lua now holds it
     note: str  # a plain sentence for the player, e.g. "In the game after your next /reload."
+    sources: tuple[SourceLink, ...] = ()  # the web pages the answer came from
+    lookups: tuple[Lookup, ...] = ()  # what the coach looked up, as plain sentences
 
 
 class Coach(Protocol):

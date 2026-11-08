@@ -1,4 +1,4 @@
-"""The card at the top of the Coach page: who you play, how fresh the data is, two buttons."""
+"""The card at the top of the Coach page: who you play, how fresh the data is, one button."""
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
@@ -29,8 +29,8 @@ class FreshnessPill(QFrame):
         row.addWidget(self._dot, 0, Qt.AlignmentFlag.AlignVCenter)
         row.addWidget(self._text)
         self.setToolTip(
-            "How long ago the game last saved your character. "
-            "Your coach can only see what the game has saved."
+            "Updates by itself whenever the game saves: press your Save for the coach key "
+            "in WoW, type /coach, or /reload."
         )
 
     def show_freshness(self, value: Freshness) -> None:
@@ -75,10 +75,9 @@ def describe_character(character: CharacterView | None) -> str:
 
 
 class HeaderCard(QFrame):
-    """Character, freshness and the two header buttons."""
+    """Character, freshness and the "keep on top" button."""
 
     character_chosen = Signal(str)
-    refresh_clicked = Signal()
     keep_on_top_clicked = Signal()
 
     def __init__(self) -> None:
@@ -95,13 +94,6 @@ class HeaderCard(QFrame):
         self._detail = plain_label("", "muted")
         self.pill = FreshnessPill()
 
-        self.refresh_button = QPushButton("Refresh game data")
-        self.refresh_button.setProperty("kind", "secondary")
-        self.refresh_button.setToolTip(
-            "Shows how to make the game save your character again, so the coach sees "
-            "what you did just now."
-        )
-        self.refresh_button.clicked.connect(self.refresh_clicked)
         self.keep_button = QPushButton("Keep on top of the game")
         self.keep_button.setProperty("kind", "chip")
         self.keep_button.setToolTip(
@@ -117,7 +109,6 @@ class HeaderCard(QFrame):
         top.addWidget(self.pill)
         buttons = QHBoxLayout()
         buttons.setSpacing(SPACE_SMALL)
-        buttons.addWidget(self.refresh_button)
         buttons.addWidget(self.keep_button)
         buttons.addStretch(1)
         column = QVBoxLayout(self)
@@ -159,7 +150,6 @@ class HeaderCard(QFrame):
 
     def use_icons(self, colors: Colors) -> None:
         """Draw the buttons' icons in the current theme's colors."""
-        self.refresh_button.setIcon(icon("refresh", colors.text, 16))
         self.keep_button.setIcon(icon("pin", colors.text, 16))
 
     def _picked(self, index: int) -> None:

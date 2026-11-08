@@ -5,7 +5,7 @@ from pathlib import Path
 
 from desktop_support import KEY, FakeCore, make_bridge, sample_answer, sample_state
 from PySide6.QtCore import QSettings, Qt
-from PySide6.QtWidgets import QLabel, QPlainTextEdit
+from PySide6.QtWidgets import QLabel, QPlainTextEdit, QPushButton
 from pytestqt.qtbot import QtBot
 
 from wow_coach.desktop.bridge import CoreBridge
@@ -15,12 +15,11 @@ from wow_coach.desktop.pages.coach import (
     MAX_TYPED_REMEMBERED,
     OPEN_BUSY_TEXT,
     OPEN_NONE_TEXT,
-    WAITING_FOR_SAVE_TEXT,
+    SAVED_NOTICE_TEXT,
     CoachPage,
 )
 from wow_coach.desktop.quick_actions import QUICK_ACTIONS
 from wow_coach.desktop.theme import WOW
-from wow_coach.desktop.widgets.refresh_banner import HINT_AFTER_SECONDS
 from wow_coach.desktop.widgets.styles import chat_style
 
 NOW = 2_600.0  # ten minutes after the sample answer
@@ -109,52 +108,61 @@ def test_the_header_shows_the_character_and_a_picker_for_several(
     assert two.core.state_reads[-1] == "Other-Realm"
 
 
-# ---- refreshing and asking with fresh data -------------------------------------------------
+# ---- the game saves by itself --------------------------------------------------------------
 
 
-def test_refresh_shows_a_banner_and_a_save_turns_it_into_success(
-    qtbot: QtBot, tmp_path: Path
-) -> None:
+def test_there_is_no_refresh_button_or_banner(qtbot: QtBot, tmp_path: Path) -> None:
     setup = start(qtbot, tmp_path)
-    banner = setup.page.refresh_banner
-    setup.page.start_refresh()
-    assert banner.state == "waiting"
-    assert setup.page.header.refresh_button.isEnabled() is False
-    setup.event("save", saved_at=2_599, problem=None)
-    assert banner.state == "done"
-    assert banner.message.startswith("Got it: fresh data from")
-    assert setup.page.header.refresh_button.isEnabled() is True
+    assert not hasattr(setup.page.header, "refresh_button")
+    assert not hasattr(setup.page, "refresh_banner")
+    texts = " ".join(label.text() for label in setup.page.findChildren(QLabel))
+    buttons = [b.text() for b in setup.page.header.findChildren(QPushButton)]
+    assert "Refresh game data" not in buttons and "Refresh" not in texts
+    assert "Keep on top of the game" in buttons
 
 
-def test_after_two_minutes_the_banner_asks_about_the_addon(qtbot: QtBot, tmp_path: Path) -> None:
+def test_the_pill_explains_that_it_updates_by_itself(qtbot: QtBot, tmp_path: Path) -> None:
+    pill = start(qtbot, tmp_path).page.header.pill
+    assert pill.toolTip() == (
+        "Updates by itself whenever the game saves: press your Save for the coach key "
+        "in WoW, type /coach, or /reload."
+    )
+
+
+def test_a_question_is_asked_right_away(qtbot: QtBot, tmp_path: Path) -> None:
     setup = start(qtbot, tmp_path)
-    setup.page.start_refresh()
-    setup.clock.now += HINT_AFTER_SECONDS
-    setup.page.refresh_banner.tick()
-    assert setup.page.refresh_banner.hint_visible is True
-
-
-def test_a_question_asked_while_waiting_goes_out_when_the_save_arrives(
-    qtbot: QtBot, tmp_path: Path
-) -> None:
-    setup = start(qtbot, tmp_path)
-    setup.page.start_refresh()
     setup.page.send_question("Where next?")
-    assert setup.core.asked == []
-    assert WAITING_FOR_SAVE_TEXT in setup.texts()
-    setup.event("save", saved_at=2_599, problem=None)
     assert setup.core.asked == [("Where next?", KEY)]
-    assert WAITING_FOR_SAVE_TEXT not in setup.texts()
     assert setup.page.chat.typing_visible is True
 
 
-def test_cancelling_the_refresh_asks_with_the_data_we_have(qtbot: QtBot, tmp_path: Path) -> None:
-    setup = start(qtbot, tmp_path)
-    setup.page.start_refresh()
-    setup.page.send_question("Where next?")
-    setup.page.refresh_banner.cancel()
-    assert setup.core.asked == [("Where next?", KEY)]
-    assert setup.page.header.refresh_button.isEnabled() is True
+def test_a_save_shows_a_calm_note_that_fades_and_updates_the_pill(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    setup = start(qtbot, tmp_path, answers=[sample_answer("Old", answered_at=2_000)])
+    before = setup.page.chat.message_count()
+    setup.page._save_notice_timer.setInterval(50)  # the real note stays about 3 seconds
+    setup.core.raw_state = sample_state(
+        last_save=2_599, answers=[sample_answer("Old", answered_at=2_000)]
+    )
+    setup.event("save", saved_at=2_599, problem=None)
+    assert SAVED_NOTICE_TEXT in setup.texts()
+    assert setup.page.header.pill.text == "Game data: just now"
+    qtbot.waitUntil(lambda: SAVED_NOTICE_TEXT not in setup.texts(), timeout=3_000)
+    assert setup.page.chat.message_count() == before
+
+
+def test_two_saves_in_a_row_show_one_note(qtbot: QtBot, tmp_path: Path) -> None:
+    setup = start(qtbot, tmp_path, answers=[sample_answer("Old", answered_at=2_000)])
+    setup.event("save", saved_at=2_599, problem=None)
+    setup.event("save", saved_at=2_600, problem=None)
+    assert setup.texts().count(SAVED_NOTICE_TEXT) == 1
+
+
+def test_a_save_in_an_empty_chat_keeps_the_welcome_screen(qtbot: QtBot, tmp_path: Path) -> None:
+    setup = start(qtbot, tmp_path, answers=[])
+    setup.event("save", saved_at=2_599, problem=None)
+    assert setup.page.chat.message_count() == 0
 
 
 # ---- the coach is busy ---------------------------------------------------------------------
@@ -313,20 +321,6 @@ def test_answer_text_is_shown_as_plain_text_never_as_markup(qtbot: QtBot, tmp_pa
         assert label.textFormat() == Qt.TextFormat.PlainText
         assert not label.openExternalLinks()
     assert any(label.text() == "<b>Bold?</b>" for label in labels)
-
-
-def test_the_meta_line_says_when_the_answer_is_also_in_the_game(
-    qtbot: QtBot, tmp_path: Path
-) -> None:
-    setup = start(qtbot, tmp_path, answers=[])
-    event = answer_event("Saved one", answered_at=2_599)
-    event["written_to_game"] = True
-    setup.event("answer", **event)
-    assert any("Also in your in-game panel after your next reload" in t for t in setup.texts())
-    assert any("just now" in t for t in setup.texts())
-    setup.clock.now += 5 * 60
-    setup.page._tick()
-    assert any("5 min ago" in t for t in setup.texts())
 
 
 def test_scrolled_up_readers_get_a_new_answer_pill_instead_of_being_moved(
@@ -566,8 +560,6 @@ def test_a_character_switch_drops_the_old_characters_waiting_questions(
     setup = start(qtbot, tmp_path)
     setup.core.busy = True
     setup.page.send_question("Queued for the first")
-    setup.page.start_refresh()
-    setup.page.send_question("Waiting for a save")
     setup.core.raw_state = sample_state(selected="Other-Realm", characters=[KEY, "Other-Realm"])
     setup.bridge.refresh_state()
     setup.core.busy = False

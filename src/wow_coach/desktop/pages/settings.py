@@ -51,7 +51,13 @@ SIMPLE_KEYS: Final = (
     "share_other_player_names",
     "send_coach_notes",
     "use_claude_chats",
+    "use_tools",
+    "web_search",
+    "save_notes",
+    "show_lookups",
 )
+# The coach-tools switches are all on until the player turns one off.
+TOOL_KEYS: Final = ("use_tools", "web_search", "save_notes", "show_lookups")
 
 # The events the player can give a rule to, in the order shown (same words as the browser window).
 TRIGGER_KINDS: Final = (
@@ -155,6 +161,7 @@ class SettingsPage(Page):
         form_column.setContentsMargins(0, 0, 0, 0)
         form_column.setSpacing(SPACE)
         form_column.addWidget(self._build_answers_card())
+        form_column.addWidget(self._build_tools_card())
         form_column.addWidget(self._build_triggers_card())
         form_column.addWidget(self._build_privacy_card())
         self.form.setEnabled(False)
@@ -197,6 +204,41 @@ class SettingsPage(Page):
             "Show a notification when an answer is ready",
             "A small message on your desktop, so you can stay in the game.",
             "Show a desktop notification for each answer.",
+        )
+        return card
+
+    def _build_tools_card(self) -> Card:
+        card = Card(
+            "Coach tools",
+            "While answering, the coach can look things up the way your Claude coach does. "
+            "Under each answer you see where it looked, with links to the pages it used.",
+        )
+        self.use_tools = self._toggle(
+            card,
+            "Let the coach look things up (your status, notes, the Warcraft Wiki)",
+            "The coach reads your character's data and notes, and searches and reads "
+            "Warcraft Wiki pages, instead of guessing.",
+            "Give the coach tools to read your data and the Warcraft Wiki while it answers.",
+        )
+        self.web_search = self._toggle(
+            card,
+            "Let the coach search the web too",
+            "OpenAI runs the search as part of your ChatGPT plan. Only the search words "
+            "leave this computer.",
+            "Let the coach use OpenAI's web search for things the wiki does not have.",
+        )
+        self.save_notes = self._toggle(
+            card,
+            "Let the coach update your notebook",
+            "It can save your goals and progress in your notes. Your last 20 versions are "
+            "kept, so a mistake can be undone.",
+            "Let the coach save your player notes and the character journal.",
+        )
+        self.show_lookups = self._toggle(
+            card,
+            "Show what the coach looked up",
+            "A line while it works, and a list under each answer.",
+            "Show the coach's lookups in the chat.",
         )
         return card
 
@@ -364,6 +406,8 @@ class SettingsPage(Page):
         self._set_check(self.share_names, settings.get("share_other_player_names"), False)
         self._set_check(self.send_notes, settings.get("send_coach_notes"), True)
         self._set_check(self.use_claude_chats, settings.get("use_claude_chats"), True)
+        for key in TOOL_KEYS:
+            self._set_check(getattr(self, key), settings.get(key), True)
         self._fill_triggers(_as_mapping(settings.get("triggers")))
 
     def _fill_triggers(self, rules: Mapping[str, object]) -> None:
@@ -462,6 +506,7 @@ class SettingsPage(Page):
             "share_other_player_names": self.share_names.check.isChecked(),
             "send_coach_notes": self.send_notes.check.isChecked(),
             "use_claude_chats": self.use_claude_chats.check.isChecked(),
+            **{key: getattr(self, key).check.isChecked() for key in TOOL_KEYS},
             "triggers": self._trigger_values(),
         }
 
@@ -478,6 +523,7 @@ class SettingsPage(Page):
             "share_other_player_names": _as_bool(settings.get("share_other_player_names"), False),
             "send_coach_notes": _as_bool(settings.get("send_coach_notes"), True),
             "use_claude_chats": _as_bool(settings.get("use_claude_chats"), True),
+            **{key: _as_bool(settings.get(key), True) for key in TOOL_KEYS},
             "triggers": {
                 "modes": {kind: modes.get(kind, "off") for kind in self.mode_boxes},
                 "every_minutes": _as_int(rules.get("every_minutes"), 0),

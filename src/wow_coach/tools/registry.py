@@ -26,7 +26,7 @@ from wow_coach.tools.answers import (
     answer_recent_history,
     answer_save_notes,
 )
-from wow_coach.tools.base import CoachTool, ToolKind
+from wow_coach.tools.base import CoachTool, Sourcer, ToolKind, ToolSource
 from wow_coach.web import Fetch, PoliteFetcher, build_user_agent
 from wow_coach.wiki import (
     DEFAULT_MAX_CHARS,
@@ -34,6 +34,8 @@ from wow_coach.wiki import (
     answer_find_quest,
     answer_read_wiki_page,
     answer_search_wiki,
+    source_from_page_output,
+    sources_from_results_output,
 )
 
 # Limits for the arguments. Notes text has no length limit here: the save helper refuses
@@ -72,6 +74,7 @@ def build_coach_tools(
     now: Callable[[], float] = time.time,
     clean: Callable[[str], str] | None = None,
     fetch: Fetch | None = None,
+    hide_private_notes: bool = False,
 ) -> tuple[CoachTool, ...]:
     """The coach tools for one character.
 
@@ -83,6 +86,9 @@ def build_coach_tools(
         clean: Applied to every output; the engine passes its hiding of other players' names.
         fetch: How web pages are downloaded (default: a polite fetcher with a cache). Tests
             pass a fake one so they never use the network.
+        hide_private_notes: Leave the notes' sections about the player's computer out of what
+            the AI reads, and keep them when it saves. The built-in coach sets this, because
+            everything it reads is sent to the AI.
     """
     env = os.environ if environ is None else environ
     download = PoliteFetcher(build_user_agent()) if fetch is None else fetch
@@ -97,6 +103,8 @@ def build_coach_tools(
         parameters: dict[str, object],
         handler: Callable[[dict[str, object]], str],
         describer: Callable[[Mapping[str, object]], str],
+        sourcer: Sourcer | None = None,
+        only_listed: bool = False,
     ) -> CoachTool:
         return CoachTool(
             spec=ToolSpec(name, description, parameters),
@@ -104,6 +112,8 @@ def build_coach_tools(
             handler=handler,
             describer=describer,
             clean=cleaner,
+            sourcer=sourcer,
+            only_listed=only_listed,
         )
 
     def number(arguments: dict[str, object], name: str) -> int:
@@ -182,7 +192,9 @@ def build_coach_tools(
             "what to do next. If there is no journal yet, ask for the goal and create it "
             "with save_coach_notes.",
             _schema(),
-            lambda _args: answer_read_notes(player_notes, journal, character_key),
+            lambda _args: answer_read_notes(
+                player_notes, journal, character_key, hide_private=hide_private_notes
+            ),
             lambda _args: "Read your character journal",
         ),
         tool(
@@ -197,7 +209,9 @@ def build_coach_tools(
                 {"text": {"type": "string", "description": "The complete new journal."}},
                 ("text",),
             ),
-            lambda args: answer_save_notes(journal, text(args, "text"), "journal"),
+            lambda args: answer_save_notes(
+                journal, text(args, "text"), "journal", keep_private=hide_private_notes
+            ),
             lambda _args: "Saved your character journal",
         ),
         tool(
@@ -212,7 +226,9 @@ def build_coach_tools(
                 {"text": {"type": "string", "description": "The complete new player notes."}},
                 ("text",),
             ),
-            lambda args: answer_save_notes(player_notes, text(args, "text"), "player notes"),
+            lambda args: answer_save_notes(
+                player_notes, text(args, "text"), "player notes", keep_private=hide_private_notes
+            ),
             lambda _args: "Saved your player notes",
         ),
         tool(
@@ -240,6 +256,8 @@ def build_coach_tools(
             ),
             lambda args: answer_search_wiki(text(args, "query"), number(args, "limit"), download),
             lambda args: f'Searched the Warcraft Wiki for "{_text_of(args, "query")}"',
+            _listed_pages,
+            only_listed=True,
         ),
         tool(
             "read_wiki_page",
@@ -274,6 +292,7 @@ def build_coach_tools(
                 text(args, "title"), section_of(args), number(args, "max_chars"), download
             ),
             _describe_read_page,
+            _read_page,
         ),
         tool(
             "find_quest",
@@ -295,6 +314,8 @@ def build_coach_tools(
             ),
             lambda args: answer_find_quest(number(args, "quest_id"), download),
             lambda args: f"Looked up quest {_text_of(args, 'quest_id')} on the Warcraft Wiki",
+            _listed_pages,
+            only_listed=True,
         ),
     )
 
@@ -304,3 +325,14 @@ def _describe_read_page(arguments: Mapping[str, object]) -> str:
     section = _text_of(arguments, "section")
     where = f', section "{section}"' if section else ""
     return f'Read the Warcraft Wiki page "{title}"{where}'
+
+
+def _read_page(output: str) -> tuple[ToolSource, ...]:
+    """The page ``read_wiki_page`` returned (none when the answer was a problem sentence)."""
+    found = source_from_page_output(output)
+    return () if found is None else (ToolSource(*found),)
+
+
+def _listed_pages(output: str) -> tuple[ToolSource, ...]:
+    """The pages a wiki search or quest lookup listed."""
+    return tuple(ToolSource(title, url) for title, url in sources_from_results_output(output))

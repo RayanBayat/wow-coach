@@ -10,11 +10,16 @@ Format v1, one message per line::
      "role": "user" | "assistant", "content": "plain text",
      "source": "app" | "game" | "claude-code" | "outside",
      "provider": "chatgpt" | "claude-code" | null, "model": "gpt-..." | null,
-     "answer": {"title", "steps", "text", "warnings"} | null}
+     "answer": {"title", "steps", "text", "warnings",
+                "sources": [{"title", "url"}], "lookups": [{"kind", "text"}]} | null}
 
 * ``content`` is always the plain-text form of the message: any AI can be given it as is.
   That is what makes the history provider-neutral.
 * ``answer`` keeps the structured coach answer, only for nicer display in the window.
+  ``sources`` and ``lookups`` are optional (left out when empty; old lines do not have them):
+  ``sources`` are the web pages the answer came from (only ``http``/``https`` links are kept,
+  also when reading), and ``lookups`` are plain sentences about what the coach looked up,
+  with a ``kind`` of ``read`` (the player's own data), ``write`` (notes saved) or ``web``.
 * A line from an older wow-coach (just ``role`` and ``content``) still reads fine, with safe
   defaults. Unknown fields are ignored, and a damaged line is skipped.
 * The file holds no secrets, and never grows past ``MAX_STORED_MESSAGES`` messages.
@@ -32,6 +37,7 @@ from pathlib import Path
 from typing import Final, Literal
 
 from wow_coach.datafolder import data_folder
+from wow_coach.engine.sources import MAX_SOURCES, MAX_TITLE_CHARS, SourceLink, is_web_url
 from wow_coach.filelock import locked
 from wow_coach.notes import safe_file_name
 
@@ -42,6 +48,8 @@ MAX_MESSAGE_CHARS: Final = 6_000
 MAX_FILE_BYTES: Final = 6_000_000
 MAX_READ_BYTES: Final = 2 * MAX_FILE_BYTES  # a bigger file is not ours: do not read it
 MAX_ANSWER_ITEMS: Final = 20
+MAX_LOOKUPS: Final = 30
+MAX_LOOKUP_CHARS: Final = 300
 
 type Role = Literal["user", "assistant"]
 type Source = Literal["app", "game", "claude-code", "outside"]
@@ -50,13 +58,26 @@ _SOURCES: Final[tuple[Source, ...]] = ("app", "game", "claude-code", "outside")
 
 
 @dataclass(frozen=True, slots=True)
+class Lookup:
+    """One thing the coach looked up or saved while answering, as a plain sentence."""
+
+    kind: str  # "read", "write" or "web"
+    text: str
+
+
+@dataclass(frozen=True, slots=True)
 class ChatAnswer:
-    """The structured form of a coach answer (the same four parts the game's panel shows)."""
+    """The structured form of a coach answer (the same four parts the game's panel shows).
+
+    ``sources`` and ``lookups`` are what the window shows under the answer.
+    """
 
     title: str
     steps: tuple[str, ...]
     text: str
     warnings: tuple[str, ...]
+    sources: tuple[SourceLink, ...] = ()
+    lookups: tuple[Lookup, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +136,33 @@ def _strings(value: object) -> tuple[str, ...]:
     return tuple(item for item in value if isinstance(item, str))[:MAX_ANSWER_ITEMS]
 
 
+def _sources_from(value: object) -> tuple[SourceLink, ...]:
+    """The stored sources; anything that is not a plain web link is dropped."""
+    if not isinstance(value, list):
+        return ()
+    found: list[SourceLink] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        url, title = item.get("url"), item.get("title")
+        if isinstance(url, str) and is_web_url(url):
+            found.append(SourceLink(title[:MAX_TITLE_CHARS] if isinstance(title, str) else "", url))
+    return tuple(found[:MAX_SOURCES])
+
+
+def _lookups_from(value: object) -> tuple[Lookup, ...]:
+    if not isinstance(value, list):
+        return ()
+    found: list[Lookup] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        kind, text = item.get("kind"), item.get("text")
+        if isinstance(kind, str) and isinstance(text, str) and text.strip():
+            found.append(Lookup(kind, text[:MAX_LOOKUP_CHARS]))
+    return tuple(found[:MAX_LOOKUPS])
+
+
 def _answer_from(value: object) -> ChatAnswer | None:
     if not isinstance(value, dict):
         return None
@@ -124,6 +172,8 @@ def _answer_from(value: object) -> ChatAnswer | None:
         steps=_strings(value.get("steps")),
         text=text if isinstance(text, str) else "",
         warnings=_strings(value.get("warnings")),
+        sources=_sources_from(value.get("sources")),
+        lookups=_lookups_from(value.get("lookups")),
     )
 
 
@@ -164,15 +214,23 @@ def message_to_dict(message: ChatMessage) -> dict[str, object]:
         "source": message.source,
         "provider": message.provider,
         "model": message.model,
-        "answer": None
-        if answer is None
-        else {
-            "title": answer.title,
-            "steps": list(answer.steps),
-            "text": answer.text,
-            "warnings": list(answer.warnings),
-        },
+        "answer": None if answer is None else answer_to_dict(answer),
     }
+
+
+def answer_to_dict(answer: ChatAnswer) -> dict[str, object]:
+    """A structured answer as stored; ``sources`` and ``lookups`` only when there are some."""
+    data: dict[str, object] = {
+        "title": answer.title,
+        "steps": list(answer.steps),
+        "text": answer.text,
+        "warnings": list(answer.warnings),
+    }
+    if answer.sources:
+        data["sources"] = [{"title": item.title, "url": item.url} for item in answer.sources]
+    if answer.lookups:
+        data["lookups"] = [{"kind": item.kind, "text": item.text} for item in answer.lookups]
+    return data
 
 
 def _legacy_id(line: str, number: int) -> str:

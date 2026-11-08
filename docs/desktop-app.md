@@ -65,13 +65,22 @@ itself, while you play. When you close the window, the coach keeps running next 
 - **Game data: 12 min old:** the top of the page shows how fresh the coach's view of your
   character is. The game only hands your character to other programs when it saves: when you
   log out, type `/reload`, or press your **Save for the coach** key.
-- **Refresh game data:** click it, then press your **Save for the coach** key in WoW. The game
-  reloads for a few seconds, and the app updates by itself. If you type a question while it
-  waits, the question is sent as soon as the fresh data arrives. (The key does nothing during a
-  fight, so a reload never catches you mid-combat. Press it again when the fight is over.)
+- **The app updates by itself.** There is no refresh button: WoW Coach notices every time the
+  game saves, shows a short "Got your latest game data" note in the chat and updates "Game data:
+  ... old". To make the game save, press your **Save for the coach** key in WoW, type `/coach`,
+  or type `/reload`. The game reloads for a few seconds. (The key does nothing during a fight,
+  so a reload never catches you mid-combat. Press it again when the fight is over.) A question
+  you type is always asked right away, with the data from the last save.
 
-  Why can't the app do this alone? Programs that press keys in your game break Blizzard's
-  rules, so WoW Coach never does it. One key press from you is all it needs.
+  Why can't the app make the game save alone? Programs that press keys in your game break
+  Blizzard's rules, so WoW Coach never does it. One key press from you is all it needs.
+- **Sources and lookups:** while the coach works, the typing bubble says what it is doing
+  ("Searched the Warcraft Wiki for ..."). Under each answer you see **Sources**: small link
+  buttons with the page title (or the website) that open the page in your browser when you click
+  them. Point at one to see the whole link. The links come from what the coach really searched
+  and read, never from links the AI wrote. **What the coach looked up (3)** unfolds to a list of
+  what it checked, including when it saved your notes. Point at an answer to see when it came.
+  Both also show for older answers in the history.
 - **Keep on top of the game:** opens a small card that stays above the game window and shows
   the newest answer. Drag it where you like; it remembers the spot. It never takes the
   keyboard away from the game.
@@ -84,7 +93,8 @@ itself, while you play. When you close the window, the coach keeps running next 
 
 ## The other pages
 
-- **Settings:** notifications, answering game questions by itself, when the
+- **Settings:** the **Coach tools** (let the coach look things up, search the web, update your
+  notebook, and show what it looked up; all on at first), notifications, answering game questions by itself, when the
   coach should speak up on its own (when you die, level up, need repairs...), quiet hours,
   and what is shared with the AI. Changes save by themselves. More about speaking up: [the coach window guide](coach-window.md#when-the-coach-speaks-up-by-itself).
 - **ChatGPT:** your sign-in, how many questions you asked in the last hour and day,

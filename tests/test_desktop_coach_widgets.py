@@ -23,12 +23,6 @@ from wow_coach.desktop.widgets.formatting import (
     relative_time,
 )
 from wow_coach.desktop.widgets.header import character_label
-from wow_coach.desktop.widgets.refresh_banner import (
-    HINT_AFTER_SECONDS,
-    STILL_WAITING_TEXT,
-    WAITING_TEXT,
-    RefreshBanner,
-)
 from wow_coach.savedvars import Character
 
 # ---- words and numbers ----------------------------------------------------------------
@@ -71,67 +65,6 @@ def test_relative_time_words() -> None:
     assert relative_time(12 * 60) == "12 min ago"
     assert relative_time(86_400) == "1 day ago"
     assert age_words(3 * 3_600) == "3 h"
-
-
-# ---- the refresh banner -----------------------------------------------------------------
-
-
-class Clock:
-    """A clock the test moves by hand."""
-
-    def __init__(self, start: float = 1_000_000.0) -> None:
-        self.now = start
-
-    def __call__(self) -> float:
-        return self.now
-
-
-def test_banner_waits_then_shows_the_hint_after_two_minutes(qtbot: QtBot) -> None:
-    clock = Clock()
-    banner = RefreshBanner(now=clock)
-    qtbot.addWidget(banner)
-    assert banner.state == "idle"
-    banner.start()
-    assert banner.state == "waiting"
-    assert banner.message == WAITING_TEXT
-    clock.now += HINT_AFTER_SECONDS - 1
-    banner.tick()
-    assert banner.hint_visible is False
-    clock.now += 1
-    banner.tick()
-    assert banner.hint_visible is True
-    assert STILL_WAITING_TEXT.startswith("Still waiting")
-
-
-def test_banner_turns_into_a_success_message_and_fades_away(qtbot: QtBot) -> None:
-    clock = Clock()
-    banner = RefreshBanner(now=clock, done_visible_ms=20)
-    qtbot.addWidget(banner)
-    banner.start()
-    banner.mark_saved(int(clock.now) - 5)
-    assert banner.state == "done"
-    assert banner.message == "Got it: fresh data from just now"
-    with qtbot.waitSignal(banner.closed, timeout=3_000):
-        pass
-    assert banner.state == "idle"
-    assert banner.isHidden()
-
-
-def test_a_save_without_a_waiting_banner_changes_nothing(qtbot: QtBot) -> None:
-    banner = RefreshBanner(now=Clock())
-    qtbot.addWidget(banner)
-    banner.mark_saved(5)
-    assert banner.state == "idle"
-
-
-def test_cancel_stops_waiting_and_says_so(qtbot: QtBot) -> None:
-    banner = RefreshBanner(now=Clock())
-    qtbot.addWidget(banner)
-    banner.start()
-    with qtbot.waitSignal(banner.cancelled):
-        banner.cancel()
-    assert banner.state == "idle"
-    assert banner.isHidden()
 
 
 # ---- the composer ---------------------------------------------------------------------

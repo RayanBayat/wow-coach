@@ -8,6 +8,7 @@ characters and are never read as page code or turned into links.
 import math
 import time
 from collections.abc import Callable
+from urllib.parse import urlsplit
 
 from PySide6.QtCore import QRectF, Qt, QTimer, QUrl, Signal
 from PySide6.QtGui import (
@@ -31,16 +32,21 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from wow_coach.desktop.state import AnswerView
+from wow_coach.desktop.state import AnswerView, LookupView, SourceView
 from wow_coach.desktop.theme import SPACE, SPACE_SMALL, current_colors
+from wow_coach.desktop.widgets.flow import FlowLayout
 from wow_coach.desktop.widgets.formatting import relative_time
+from wow_coach.engine.sources import is_web_url
 
 USAGE_URL = "https://chatgpt.com/settings/usage"  # where the player manages their plan's usage
 BUBBLE_WIDTH_SHARE = 0.7  # a bubble is at most 70% as wide as the chat
 MIN_BUBBLE_WIDTH = 120
 BUBBLE_TEXT_SLACK = 80  # room for the bubble's padding and the step numbers
 COLLAPSE_AFTER_CHARS = 700  # a longer reply starts folded, with a "Show more" button
-SAVED_IN_GAME_NOTE = "Also in your in-game panel after your next reload"
+MAX_SOURCE_LABEL_CHARS = 60  # a long page title is cut, the tooltip has the whole link
+SOURCES_HEADING = "Sources"
+LOOKUPS_OPEN_MARK = "\u25be"  # a small triangle pointing down
+LOOKUPS_CLOSED_MARK = "\u25b8"  # a small triangle pointing right
 
 
 def plain_label(text: str, role: str | None = None, *, selectable: bool = False) -> QLabel:
@@ -67,15 +73,100 @@ def _frame(name: str, margins: int = SPACE) -> tuple[QFrame, QVBoxLayout]:
     return frame, column
 
 
-class CoachBubble(QFrame):
-    """One answer from the coach: title, numbered steps, text, warnings and a small meta line."""
+def domain_of(url: str) -> str:
+    """The site of a link without "www.", for a source that has no title."""
+    host = urlsplit(url).hostname or url
+    return host.removeprefix("www.")
 
-    def __init__(self, answer: AnswerView, *, note: str, written_to_game: bool, now: float) -> None:
+
+def open_source(url: str) -> None:
+    """Open a source link in the browser. Only plain web links are ever opened."""
+    if is_web_url(url):
+        QDesktopServices.openUrl(QUrl(url))
+
+
+class SourcesList(QWidget):
+    """ "Sources" and one small link button per source (title, or the site when it has none).
+
+    The full link is the button's tooltip. Nothing is opened until a button is clicked. These
+    links come from our own code (see ``engine/sources.py``), never from the AI's words.
+    """
+
+    def __init__(self, sources: tuple[SourceView, ...]) -> None:
+        super().__init__()
+        column = QVBoxLayout(self)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(2)
+        column.addWidget(plain_label(SOURCES_HEADING, "small"))
+        holder = QWidget()
+        flow = FlowLayout(holder, spacing=SPACE_SMALL)
+        self.buttons: list[QPushButton] = []
+        for source in sources:
+            label = source.title or domain_of(source.url)
+            if len(label) > MAX_SOURCE_LABEL_CHARS:
+                label = label[: MAX_SOURCE_LABEL_CHARS - 1] + "\u2026"
+            button = QPushButton(label)
+            button.setProperty("kind", "source")
+            button.setCursor(Qt.CursorShape.PointingHandCursor)
+            button.setToolTip(source.url)
+            button.setAccessibleName(f"Source: {label}")
+            button.clicked.connect(lambda _checked=False, url=source.url: open_source(url))
+            flow.addWidget(button)
+            self.buttons.append(button)
+        column.addWidget(holder)
+
+
+class LookupsToggle(QWidget):
+    """A folded "What the coach looked up (N)" that opens to show one sentence per lookup."""
+
+    def __init__(self, lookups: tuple[LookupView, ...]) -> None:
+        super().__init__()
+        self._title = f"What the coach looked up ({len(lookups)})"
+        column = QVBoxLayout(self)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(2)
+        self.button = QPushButton()
+        self.button.setProperty("kind", "ghost")
+        self.button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.button.clicked.connect(self._flip)
+        column.addWidget(self.button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.details = plain_label("\n".join(f"\u2022 {item.text}" for item in lookups), "small")
+        self.details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        column.addWidget(self.details)
+        self._show(opened=False)
+
+    def _flip(self) -> None:
+        self._show(opened=self.details.isHidden())
+
+    def _show(self, *, opened: bool) -> None:
+        self.details.setVisible(opened)
+        mark = LOOKUPS_OPEN_MARK if opened else LOOKUPS_CLOSED_MARK
+        self.button.setText(f"{mark} {self._title}")
+
+    @property
+    def opened(self) -> bool:
+        """True while the sentences are shown."""
+        return not self.details.isHidden()
+
+
+def _time_tooltip(seconds: float | None, now: float) -> str:
+    """ "Answered 5 min ago", for pointing at an answer; empty when the time is unknown."""
+    if seconds is None or seconds <= 0:
+        return ""
+    return f"Answered {relative_time(now - seconds)}"
+
+
+class CoachBubble(QFrame):
+    """One answer from the coach: title, numbered steps, text, warnings, sources and lookups.
+
+    There is no small line with the AI's name or the time under the answer: the time shows
+    when the player points at the bubble.
+    """
+
+    def __init__(self, answer: AnswerView, *, now: float, show_lookups: bool = True) -> None:
         super().__init__()
         self.setObjectName("coachBubble")
         self._answered_at = answer.answered_at
-        self._meta_tail = _meta_tail(note, written_to_game)
-        self._source = answer.source
         column = QVBoxLayout(self)
         column.setContentsMargins(SPACE, SPACE - 2, SPACE, SPACE - 2)
         column.setSpacing(SPACE_SMALL)
@@ -89,25 +180,19 @@ class CoachBubble(QFrame):
             column.addWidget(plain_label(answer.text, selectable=True))
         for warning in answer.warnings:
             column.addWidget(_warning_callout(warning))
-        self._meta = plain_label("", "small")
-        column.addWidget(self._meta)
+        self.sources_list: SourcesList | None = None
+        if answer.sources:
+            self.sources_list = SourcesList(answer.sources)
+            column.addWidget(self.sources_list)
+        self.lookups_toggle: LookupsToggle | None = None
+        if answer.lookups and show_lookups:
+            self.lookups_toggle = LookupsToggle(answer.lookups)
+            column.addWidget(self.lookups_toggle)
         self.update_time(now)
 
     def update_time(self, now: float) -> None:
-        """Redraw the meta line, so "just now" slowly becomes "5 min ago"."""
-        pieces: list[str] = []
-        if self._source:
-            pieces.append(f"From {self._source}")
-        if self._answered_at:
-            pieces.append(relative_time(now - self._answered_at))
-        pieces.extend(self._meta_tail)
-        self._meta.setText(" · ".join(pieces))
-        self._meta.setVisible(bool(pieces))
-
-    @property
-    def meta_text(self) -> str:
-        """The text of the small line under the answer (for tests)."""
-        return self._meta.text()
+        """Refresh the tooltip, so "just now" slowly becomes "5 min ago"."""
+        self.setToolTip(_time_tooltip(self._answered_at, now))
 
 
 class ReplyBubble(QFrame):
@@ -136,8 +221,6 @@ class ReplyBubble(QFrame):
         self._toggle.clicked.connect(self._flip)
         self._toggle.setVisible(self._folded)
         column.addWidget(self._toggle, 0, Qt.AlignmentFlag.AlignLeft)
-        self._meta = plain_label("", "small")
-        column.addWidget(self._meta)
         self._show_text()
         self.update_time(now)
 
@@ -153,15 +236,8 @@ class ReplyBubble(QFrame):
         self._toggle.setText("Show more" if self._folded else "Show less")
 
     def update_time(self, now: float) -> None:
-        """Redraw the small time line, so "just now" slowly becomes "5 min ago"."""
-        known = self._seconds is not None and self._seconds > 0
-        self._meta.setText(relative_time(now - (self._seconds or 0)) if known else "")
-        self._meta.setVisible(known)
-
-    @property
-    def meta_text(self) -> str:
-        """The text of the small line under the reply (for tests)."""
-        return self._meta.text()
+        """Refresh the tooltip, so "just now" slowly becomes "5 min ago"."""
+        self.setToolTip(_time_tooltip(self._seconds, now))
 
     @property
     def folded(self) -> bool:
@@ -172,13 +248,6 @@ class ReplyBubble(QFrame):
     def toggle_button(self) -> QPushButton:
         """The "Show more" button (for tests)."""
         return self._toggle
-
-
-def _meta_tail(note: str, written_to_game: bool) -> list[str]:
-    tail = [note] if note else []
-    if written_to_game:
-        tail.append(SAVED_IN_GAME_NOTE)
-    return tail
 
 
 def _step_row(number: int, step: str) -> QHBoxLayout:
@@ -353,7 +422,7 @@ class TypingIndicator(QWidget):
 
 
 class TypingBubble(QFrame):
-    """The coach's bubble that holds the typing dots."""
+    """The coach's bubble that holds the typing dots and, when it looks something up, what."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -361,7 +430,20 @@ class TypingBubble(QFrame):
         row = QHBoxLayout(self)
         row.setContentsMargins(SPACE, 4, SPACE, 4)
         row.addWidget(TypingIndicator())
+        self._activity = plain_label("", "small")
+        self._activity.hide()
+        row.addWidget(self._activity, 1)
         self.setToolTip("Your coach is working on an answer.")
+
+    def set_activity(self, text: str) -> None:
+        """Show the newest thing the coach is doing next to the dots ("" hides it)."""
+        self._activity.setText(text)
+        self._activity.setVisible(bool(text))
+
+    @property
+    def activity_text(self) -> str:
+        """The line shown next to the dots (for tests)."""
+        return self._activity.text()
 
 
 class ClickableCard(QFrame):

@@ -58,9 +58,35 @@ _INTRO: Final = (
     "You are wow-coach, a patient teacher and play partner for one player of World of "
     "Warcraft: Forever. You are given the character's saved data, the coach's notebook and a "
     "question. Answer from that data, the coaching playbook below and what you know about "
-    "classic WoW; if you are unsure, say so. In this chat you cannot look things up or save "
-    "notes: when a plan or a choice should be remembered, tell the player to save it with "
-    "their coach (for example the Claude Code coach) or in their notes."
+    "classic WoW; if you are unsure, say so."
+)
+_NO_TOOLS: Final = (
+    "In this chat you cannot look things up or save notes: when a plan or a choice should be "
+    "remembered, tell the player to save it with their coach (for example the Claude Code "
+    "coach) or in their notes."
+)
+_TOOLS_USE: Final = (
+    "You have tools, listed with this request. Use them when the data below does not answer "
+    "the question: read the character status, history or notes, or look something up on the "
+    "Warcraft Wiki. For anything about Forever, check the Warcraft Wiki or the web instead "
+    "of guessing."
+)
+_CANNOT_SAVE: Final = (
+    "You cannot save notes in this chat: when a plan or a choice should be remembered, tell "
+    "the player to write it in their notes."
+)
+_SOURCES_NOTE: Final = (
+    "The app shows your sources under the answer itself, so say where a fact came from in "
+    'words (for example "on the Warcraft Wiki") and do not write links, even where the '
+    "playbook says to give the link."
+)
+_SAVE_TOOLS: Final = (
+    "You can also save the notebook with save_coach_notes (this character's journal) and "
+    "save_player_notes (shared by all characters). Saving replaces the whole file, so first "
+    "call read_coach_notes and send back the WHOLE updated text: keep every section "
+    '(never drop "## This computer" or any other section), and write dates as absolute '
+    'dates (for example 2026-11-08), not "today". Do not save on every question: save '
+    "only for real decisions, goals, plans and progress."
 )
 # The parts of the coaching skill (``SKILL.md``) every coach gets, matched by the start of
 # their ``## `` heading. The other parts are about tools this chat doesn't have.
@@ -72,6 +98,7 @@ _PLAYBOOK: Final = (
     "Limits to remember",
     "Hard rules",
 )
+_LOOKING_UP: Final = "Looking things up"
 _OWN_RULES: Final = """\
 Rules for every answer:
 - Start with the next 1-3 concrete actions, then the why. Plain words, short sentences.
@@ -111,11 +138,22 @@ def _section(markdown: str, heading: str) -> str:
     return "\n".join(body).strip()
 
 
-def system_message() -> str:
-    """The coaching instructions: the skill's playbook (``_PLAYBOOK``), plus our own rules."""
+def system_message(*, tools: bool = False, save_notes: bool = True) -> str:
+    """The coaching instructions: the skill's playbook (``_PLAYBOOK``), plus our own rules.
+
+    With ``tools`` the coach may look things up, so the playbook also gets the skill's
+    "Looking things up" part; ``save_notes`` says whether it may also save the notebook.
+    """
     skill = read_asset_text(SKILL_PATH)
-    parts = [_INTRO]
-    for heading in _PLAYBOOK:
+    if not tools:
+        guidance = _NO_TOOLS
+    else:
+        guidance = " ".join(
+            (_TOOLS_USE, _SAVE_TOOLS if save_notes else _CANNOT_SAVE, _SOURCES_NOTE)
+        )
+    parts = [f"{_INTRO} {guidance}"]
+    headings = (*_PLAYBOOK, _LOOKING_UP) if tools else _PLAYBOOK
+    for heading in headings:
         body = _section(skill, heading)
         if body:
             parts.append(f"{heading}:\n{body}")
@@ -239,9 +277,11 @@ def user_message(data: PromptData, *, hidden_names: set[str]) -> str:
     return "\n".join(f"<{tag}>\n{blocks[tag]}\n</{tag}>" for tag in _ORDER if tag in blocks)
 
 
-def build_messages(data: PromptData, *, hidden_names: set[str]) -> list[Message]:
+def build_messages(
+    data: PromptData, *, hidden_names: set[str], tools: bool = False, save_notes: bool = True
+) -> list[Message]:
     """The two messages sent to the AI: instructions first, then data and question."""
     return [
-        Message("system", system_message()),
+        Message("system", system_message(tools=tools, save_notes=save_notes)),
         Message("user", user_message(data, hidden_names=hidden_names)),
     ]
