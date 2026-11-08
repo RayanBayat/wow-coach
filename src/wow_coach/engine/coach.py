@@ -117,12 +117,14 @@ class ChatCoach:
 
     # ---- the Coach contract ---------------------------------------------------------
 
-    def ask(self, question: str, *, character: str | None = None) -> CoachReply:
-        """Answer a question typed outside the game."""
+    def ask(
+        self, question: str, *, character: str | None = None, source: Source = "app"
+    ) -> CoachReply:
+        """Answer a question typed outside the game (or sent after a save, ``source="save"``)."""
         text = question.strip()
         if not text:
             raise WowCoachError("Type a question first.")
-        return self._answer(self._load_character(character), text, None)
+        return self._answer(self._load_character(character), text, None, source=source)
 
     def answer_open_questions(self, *, character: str | None = None) -> list[CoachReply]:
         """Answer every question from the Coach panel that has no answer yet."""
@@ -177,7 +179,9 @@ class ChatCoach:
             current | self._memory.seen_names(found.key), found, own=self._own_characters
         )
 
-    def _answer(self, found: Character, question: str, asked: Question | None) -> CoachReply:
+    def _answer(
+        self, found: Character, question: str, asked: Question | None, *, source: Source = "app"
+    ) -> CoachReply:
         history = self._chat_history(found.key)
         hidden = self._names_to_hide(found)
         build_messages(self._prompt_data(found, question, history), hidden_names=hidden)
@@ -190,7 +194,7 @@ class ChatCoach:
                 self._memory.add_answered(found.key, asked.id)
         written, note = self._write(found, answer)
         self._remember(
-            found.key, question, answer, run, source="game" if asked else "app", asked=asked
+            found.key, question, answer, run, source="game" if asked else source, asked=asked
         )
         return CoachReply(
             character_key=found.key,

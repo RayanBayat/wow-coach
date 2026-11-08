@@ -116,8 +116,10 @@ class FakeCoach:
         os.utime(advice, (self.clock, self.clock))
         return CoachReply(KEY, answer, True, "In the game after your next /reload.")
 
-    def ask(self, question: str, *, character: str | None = None) -> CoachReply:
-        del character
+    def ask(
+        self, question: str, *, character: str | None = None, source: str = "app"
+    ) -> CoachReply:
+        del character, source
         if self.gate is not None:
             self.gate.wait(5)
         if self.error is not None:

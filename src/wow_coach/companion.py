@@ -16,6 +16,7 @@ from wow_coach.config import config_path
 from wow_coach.datafolder import data_folder
 from wow_coach.engine.coach import ActivityListener, ChatCoach
 from wow_coach.engine.contract import CoachReply
+from wow_coach.engine.conversation import Source
 from wow_coach.engine.model import choose_model
 from wow_coach.gamedir import resolve_game_folder
 from wow_coach.keychain import Keychain
@@ -128,9 +129,11 @@ class LiveCoach:
             on_activity=self._on_activity,
         )
 
-    def ask(self, question: str, *, character: str | None = None) -> CoachReply:
-        """Answer a question typed outside the game."""
-        return self._coach().ask(question, character=character)
+    def ask(
+        self, question: str, *, character: str | None = None, source: Source = "app"
+    ) -> CoachReply:
+        """Answer a question typed outside the game (or sent after a save)."""
+        return self._coach().ask(question, character=character, source=source)
 
     def answer_open_questions(self, *, character: str | None = None) -> list[CoachReply]:
         """Answer the questions waiting in the game's Coach panel."""

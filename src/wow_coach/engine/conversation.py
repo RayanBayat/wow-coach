@@ -8,7 +8,7 @@ Format v1, one message per line::
 
     {"v": 1, "id": "app:3f2a...", "at": "2026-11-07T22:14:07.767Z",
      "role": "user" | "assistant", "content": "plain text",
-     "source": "app" | "game" | "claude-code" | "outside",
+     "source": "app" | "game" | "save" | "claude-code" | "outside",
      "provider": "chatgpt" | "claude-code" | null, "model": "gpt-..." | null,
      "answer": {"title", "steps", "text", "warnings",
                 "sources": [{"title", "url"}], "lookups": [{"kind", "text"}]} | null}
@@ -52,9 +52,10 @@ MAX_LOOKUPS: Final = 30
 MAX_LOOKUP_CHARS: Final = 300
 
 type Role = Literal["user", "assistant"]
-type Source = Literal["app", "game", "claude-code", "outside"]
+# "save" marks the automatic "status updated" question sent after the game saved.
+type Source = Literal["app", "game", "save", "claude-code", "outside"]
 _ROLES: Final[tuple[Role, ...]] = ("user", "assistant")
-_SOURCES: Final[tuple[Source, ...]] = ("app", "game", "claude-code", "outside")
+_SOURCES: Final[tuple[Source, ...]] = ("app", "game", "save", "claude-code", "outside")
 
 
 @dataclass(frozen=True, slots=True)

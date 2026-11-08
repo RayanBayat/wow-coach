@@ -3,7 +3,14 @@
 from collections.abc import Callable
 from pathlib import Path
 
-from desktop_support import KEY, FakeCore, make_bridge, sample_answer, sample_state
+from desktop_support import (
+    KEY,
+    FakeCore,
+    make_bridge,
+    sample_answer,
+    sample_message,
+    sample_state,
+)
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtWidgets import QLabel, QPlainTextEdit, QPushButton
 from pytestqt.qtbot import QtBot
@@ -15,6 +22,7 @@ from wow_coach.desktop.pages.coach import (
     MAX_TYPED_REMEMBERED,
     OPEN_BUSY_TEXT,
     OPEN_NONE_TEXT,
+    SAVE_DIVIDER_TEXT,
     SAVED_NOTICE_TEXT,
     CoachPage,
 )
@@ -583,3 +591,21 @@ def test_remembered_typed_questions_cannot_grow_forever(qtbot: QtBot, tmp_path: 
     for number in range(MAX_TYPED_REMEMBERED + 30):
         setup.page.send_question(f"Question {number}")
     assert len(setup.page._typed_questions) == MAX_TYPED_REMEMBERED
+
+
+def test_the_automatic_question_after_a_save_is_a_slim_line_not_a_bubble(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    conversation = [
+        sample_message(
+            "Status updated: my game just saved...",
+            message_id="save:1",
+            seconds=1_900,
+            source="save",
+        ),
+        sample_message("Back to Brill.", role="assistant", message_id="app:2", seconds=1_901),
+    ]
+    setup = start(qtbot, tmp_path, conversation=conversation)
+    texts = setup.texts()
+    assert SAVE_DIVIDER_TEXT in texts
+    assert not any(text.startswith("Status updated") for text in texts)

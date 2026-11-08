@@ -160,3 +160,18 @@ def test_the_settings_round_trip_through_the_api(tmp_path: Path) -> None:
         assert rig.core.settings.triggers.quiet_in_instances is False  # a partial change stays
     finally:
         server.stop()
+
+
+def test_the_automatic_question_is_marked_as_coming_from_a_save(tmp_path: Path) -> None:
+    rig, watcher, _ = setup(tmp_path, {"on_save": "advice"})
+    seen: list[str] = []
+    original = rig.coach.ask
+
+    def spy(question: str, *, character: str | None = None, source: str = "app") -> object:
+        seen.append(source)
+        return original(question, character=character, source=source)
+
+    rig.coach.ask = spy  # type: ignore[method-assign]
+    write_save(rig.wow_dir, mtime=2_000, reason="coach")
+    watcher.check_once()
+    assert seen == ["save"]

@@ -60,6 +60,6 @@ class SpeakUp:
         if newest.snapshot.get("reason") == ASKED_IN_GAME:
             return  # this save carries a question typed in the game: it gets its own answer
         with core.ai_lock:  # one AI call at a time
-            reply = core.coach.ask(coach_request_for(events), character=newest.key)
+            reply = core.coach.ask(coach_request_for(events), character=newest.key, source="save")
             core.publish_reply(reply)
             core.alert(reply.answer)

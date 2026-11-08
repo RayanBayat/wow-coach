@@ -75,6 +75,7 @@ GLANCE_MIN_PAGE_WIDTH: Final = 900
 type AnswerKey = tuple[int, str]  # (when it was answered, its title)
 
 # Where a message came from, in words for the player.
+SAVE_DIVIDER_TEXT: Final = "Game saved: next steps updated"
 SOURCE_TAGS: Final = {
     "game": "from the game",
     "claude-code": "from your Claude coach",
@@ -599,6 +600,10 @@ class CoachPage(Page):
         """Draw one stored chat message: the player's words, a structured answer or a reply."""
         self._seen_ids.add(message.id)
         tag = SOURCE_TAGS.get(message.source)
+        if message.role == "user" and message.source == "save":
+            # The automatic question after a save is ours, not the player's: a slim line.
+            self.chat.add_notice(SAVE_DIVIDER_TEXT, animate=live)
+            return
         if message.role == "user":
             if message.id.startswith("game:"):
                 self._game_questions_seen.add(message.id.removeprefix("game:"))
