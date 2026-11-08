@@ -81,13 +81,13 @@ def test_every_block_is_capped_and_the_total_too() -> None:
 
 
 def test_least_important_blocks_are_cut_first() -> None:
-    turns = [Turn("user", "c" * 1_300), Turn("assistant", "c" * 1_300), Turn("user", "c" * 1_300)]
-    data = PromptData(status="s" * 12_000, history="h" * 3_000, journal="j" * 4_000,
-                      player_notes="n" * 3_000, turns=turns, question="Q")  # fmt: skip
+    turns = [Turn("user", "c" * 1_950), Turn("assistant", "c" * 1_950), Turn("user", "c" * 1_950)]
+    data = PromptData(status="s" * 16_000, history="h" * 3_000, journal="j" * 16_000,
+                      player_notes="n" * 6_000, turns=turns, question="Q" * 2_000)  # fmt: skip
     message = user_message(data, hidden_names=set())
     assert len(message) <= MAX_PROMPT_CHARS
-    assert "s" * 12_000 in message  # the status survived whole
-    assert "j" * 4_000 in message and "n" * 3_000 in message  # more important blocks whole
+    assert "s" * 16_000 in message  # the status survived whole
+    assert "j" * 16_000 in message and "n" * 6_000 in message  # more important blocks whole
     history = message.split("<recent_history>")[1].split("</recent_history>")[0]
     assert "[cut: too long]" in history  # the history was cut first
 

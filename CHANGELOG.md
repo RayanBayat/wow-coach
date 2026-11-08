@@ -32,6 +32,10 @@ All notable changes to this project are written here. The format follows
 
 ### Fixed
 
+- wow-coach's own coach now sees the whole coach's notebook. It used to send only the first
+  4 000 characters of a character's journal, so it missed your next steps, choices and
+  progress. Long notes now keep their most useful sections whole, and sections about your
+  computer (for example "## This computer") are never sent.
 - `/coach` and the new key no longer reload the interface during a fight. They say "Can't save
   during a fight" instead.
 

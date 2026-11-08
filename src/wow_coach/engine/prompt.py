@@ -1,7 +1,10 @@
 """Build the messages for the AI: the rules first, then the character's data, then the question.
 
-Every token comes out of the player's ChatGPT plan, so the prompt is small and each block
-has a size cap. The data blocks are *untrusted*: mail subjects, other players' names and
+Every token comes out of the player's ChatGPT plan, so each block has a size cap. The caps
+leave room for the whole coach's notebook (a typical journal is about 12 000 characters):
+without it the coach forgets what the player already decided and learned. The notes are sent
+section by section, most useful first, and sections about the player's computer are never
+sent (``notes_digest.py``). The data blocks are *untrusted*: mail subjects, other players' names and
 wiki text can contain tricks such as "ignore your rules". The system message says to treat
 them as data, and ``_neutralise`` stops a block from faking its own closing tag.
 """
@@ -14,16 +17,17 @@ from wow_coach.advice.contract import MAX_STEP_CHARS, MAX_STEPS, MAX_TEXT_CHARS,
 from wow_coach.ai.base import Message
 from wow_coach.assets import SKILL_PATH, read_asset_text
 from wow_coach.engine.conversation import Turn
+from wow_coach.engine.notes_digest import digest, without_private_sections
 from wow_coach.engine.redact import redact_names
 
-MAX_PROMPT_CHARS: Final = 24_000  # all data blocks together, about 6 000 tokens
+MAX_PROMPT_CHARS: Final = 48_000  # all data blocks together, about 12 000 tokens
 # Per-block caps, in characters.
 _BLOCK_CAPS: Final = {
-    "character_status": 12_000,
+    "character_status": 16_000,
     "recent_history": 3_000,
-    "journal": 4_000,
-    "player_notes": 3_000,
-    "conversation": 4_000,
+    "journal": 16_000,
+    "player_notes": 6_000,
+    "conversation": 6_000,
     "question": 2_000,
 }
 # When everything together is too big, cut the least important block first.
@@ -44,6 +48,8 @@ _ORDER: Final = (
     "conversation",
     "question",
 )
+# Notes files: shortened section by section (most useful first), not at a fixed length.
+_NOTES: Final = ("journal", "player_notes")
 _CUT_MARK: Final = "[cut: too long]"
 # "<question" or "</journal" inside data would look like one of our own tags.
 _FAKE_TAG = re.compile(rf"<(?=\s*/?\s*(?:{'|'.join(_ORDER)})\b)", re.IGNORECASE)
@@ -114,6 +120,13 @@ def _cut(text: str, size: int, *, keep_end: bool) -> str:
     return f"{text[:room].rstrip()}\n{_CUT_MARK}"
 
 
+def _shrink(tag: str, text: str, size: int) -> str:
+    """Shorten one block to about ``size`` characters, the right way for its kind."""
+    if tag in _NOTES:
+        return digest(text, size)
+    return _cut(text, size, keep_end=tag in _KEEP_END)
+
+
 def _block_size(tag: str, text: str) -> int:
     return len(text) + 2 * len(tag) + 8  # "<tag>\n", "\n</tag>" and the line break
 
@@ -148,7 +161,7 @@ def _fit_total(blocks: dict[str, str], budget: int) -> dict[str, str]:
         if smaller <= len(_CUT_MARK) + 20:
             del fitted[tag]  # not worth keeping a few words
         else:
-            fitted[tag] = _cut(fitted[tag], smaller, keep_end=tag in _KEEP_END)
+            fitted[tag] = _shrink(tag, fitted[tag], smaller)
     return fitted
 
 
@@ -162,11 +175,13 @@ def build_blocks(data: PromptData, *, hidden_names: set[str]) -> dict[str, str]:
         "conversation": _conversation_text(data.turns),
         "question": data.question,
     }
+    for tag in _NOTES:  # sections about the player's computer stay on this computer
+        raw[tag] = without_private_sections(raw[tag])
     blocks: dict[str, str] = {}
     for tag in _ORDER:
         text = _neutralise(redact_names(raw[tag].strip(), hidden_names))
         if text:
-            blocks[tag] = _cut(text, _BLOCK_CAPS[tag], keep_end=tag in _KEEP_END)
+            blocks[tag] = _shrink(tag, text, _BLOCK_CAPS[tag])
     return _fit_total(blocks, MAX_PROMPT_CHARS)
 
 

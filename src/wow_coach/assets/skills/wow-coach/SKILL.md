@@ -336,10 +336,13 @@ journal is `characters/<Name-Realm>.md`.
 ## Player
 - Started WoW Forever: <date>, experience level
 - Preferences: detail level, click-by-click or not, Questie or not, solo/group, pace
-- Computer notes:
 
 ## Terms they know
 -
+
+## This computer
+- Game folder, performance notes, anything about the PC (wow-coach's own coach never sends
+  a section whose heading mentions the computer)
 ```
 
 ### Character journal template
