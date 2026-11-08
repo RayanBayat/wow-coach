@@ -10,7 +10,7 @@ How the pieces fit together:
 * ``state.py`` turns the core's plain dict into small typed objects the pages can read.
 * ``theme.py`` holds every color, size and style, in one place.
 * ``main_window.py`` is the window: a sidebar on the left and one page at a time on the right.
-* ``pages/`` holds one file per page (Coach chat, Settings, ChatGPT, Setup, Privacy).
+* ``pages/`` holds one file per page (Coach chat, Notebook, Settings, ChatGPT, Setup, Privacy).
 * ``run.py`` builds everything and starts the app.
 
 Qt is an optional extra (``wow-coach[desktop]``), so nothing outside this package imports it.
