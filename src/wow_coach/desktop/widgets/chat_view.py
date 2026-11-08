@@ -229,5 +229,7 @@ class ChatView(QScrollArea):
 
 
 def _all_text(widget: QWidget) -> str:
-    """All the label text inside a message, joined with spaces."""
-    return " ".join(label.text() for label in widget.findChildren(QLabel) if label.text())
+    """All the label and button text inside a message, joined with spaces."""
+    pieces = [label.text() for label in widget.findChildren(QLabel)]
+    pieces += [button.text() for button in widget.findChildren(QPushButton)]
+    return " ".join(piece for piece in pieces if piece)
