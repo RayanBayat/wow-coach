@@ -6,7 +6,6 @@ the reply as text.
 """
 
 import json
-import re
 from typing import Final
 
 from wow_coach.advice.contract import (
@@ -41,14 +40,19 @@ ANSWER_SCHEMA: Final[dict[str, object]] = {
     "additionalProperties": False,
 }
 
-# Some models wrap JSON in a ```json fence even when told not to.
-_FENCE = re.compile(r"^```[a-zA-Z]*\s*(.*?)\s*```$", re.DOTALL)
+FENCE = "```"
 
 
 def _unfenced(reply: str) -> str:
+    """Remove a ```json fence some models add. Plain string checks: a regex was slow."""
     text = reply.strip()
-    match = _FENCE.match(text)
-    return match.group(1) if match else text
+    if len(text) < 2 * len(FENCE) or not (text.startswith(FENCE) and text.endswith(FENCE)):
+        return text
+    inner = text[len(FENCE) : -len(FENCE)]
+    start = 0  # skip the language word after the opening fence ("json")
+    while start < len(inner) and inner[start].isascii() and inner[start].isalpha():
+        start += 1
+    return inner[start:].strip()
 
 
 def _strings(value: object) -> tuple[str, ...] | None:

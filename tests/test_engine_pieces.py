@@ -1,6 +1,7 @@
 """Tests for the engine's small parts: model choice, answer parsing, redaction, conversation."""
 
 import json
+import time
 from pathlib import Path
 
 from test_engine_support import KEY, SAVE, make_world
@@ -15,6 +16,7 @@ from wow_coach.engine.conversation import (
     conversation_path,
     load_turns,
 )
+from wow_coach.engine.memory import LocalMemory
 from wow_coach.engine.model import choose_model, choose_small_model
 from wow_coach.engine.redact import looks_like_player_name, other_player_names, redact_names
 from wow_coach.savedvars import find_saved_variables, load_characters
@@ -122,9 +124,9 @@ def test_redact_whole_words_only() -> None:
     assert redact_names(text, {"Ann"}) == "a player met Annex and a player's pal, then a player."
 
 
-def test_redact_longest_name_first_and_is_case_sensitive() -> None:
+def test_redact_longest_name_first_and_short_names_are_case_sensitive() -> None:
     assert redact_names("Annabel and Ann", {"Ann", "Annabel"}) == "a player and a player"
-    assert redact_names("I will go. Will came.", {"Will"}) == "I will go. a player came."
+    assert redact_names("Go to bo. Bo came.", {"Bo"}) == "Go to bo. a player came."
 
 
 def test_redact_handles_special_characters_in_names() -> None:
@@ -190,3 +192,60 @@ def test_damaged_file_is_tolerated(tmp_path: Path) -> None:
 
 def test_missing_file_gives_no_turns(tmp_path: Path) -> None:
     assert load_turns(tmp_path / "nope.jsonl") == []
+
+
+def test_names_of_four_letters_or_more_match_in_any_case() -> None:
+    text = "gorbo wrote GORBO and Gorbo"
+    assert redact_names(text, {"Gorbo"}) == "a player wrote a player and a player"
+
+
+def test_digits_belong_to_the_word() -> None:
+    assert redact_names("Gorbo2 and Gorbo", {"Gorbo"}) == "Gorbo2 and a player"
+    assert redact_names("Gorbo2 and Gorbo", {"Gorbo", "Gorbo2"}) == "a player and a player"
+
+
+def test_cross_realm_names_are_found_and_both_forms_hidden(tmp_path: Path) -> None:
+    save = SAVE.replace('["sender"] = "Gorbo"', '["sender"] = "Crossy-Stormrage"').replace(
+        '["from"] = "Mirela"', '["from"] = "Zed-Hyjal"'
+    )
+    character = load_characters(find_saved_variables(make_world(tmp_path, save=save).wow_dir))[KEY]
+    names = other_player_names(character)
+    assert {"Crossy-Stormrage", "Crossy", "Zed-Hyjal", "Zed"} <= names
+    assert redact_names("Crossy-Stormrage and Crossy", names) == "a player and a player"
+    assert not looks_like_player_name("Auction House-Realm")
+
+
+def test_killers_are_players_unless_an_attacker_says_monster(tmp_path: Path) -> None:
+    death = (
+        '{ ["time"] = 1793899500, ["kind"] = "death", ["text"] = "Killing blow: %s", '
+        '["killer"] = { ["name"] = "%s" }, ["attackers"] = { %s } },\n'
+    )
+    monster = '{ ["name"] = "Wolf", ["level"] = 3, ["isPlayer"] = false }'
+    events = death % ("Karnak", "Karnak", "") + death % ("Wolf", "Wolf", monster)
+    save = SAVE.replace('["history"] = {\n', '["history"] = {\n' + events)
+    character = load_characters(find_saved_variables(make_world(tmp_path, save=save).wow_dir))[KEY]
+    names = other_player_names(character)
+    assert "Karnak" in names and "Wolf" not in names
+
+
+def test_fence_removal_is_fast_on_pathological_replies() -> None:
+    for reply in ("```" + " " * 3200, "```json" + "\n" * 3200 + "x", " " * 3200 + "```"):
+        started = time.perf_counter()
+        parse(reply)
+        assert time.perf_counter() - started < 0.1
+
+
+def test_memory_files_are_capped_atomic_and_tolerate_damage(tmp_path: Path) -> None:
+    environ = {"WOW_COACH_DATA_DIR": str(tmp_path)}
+    memory = LocalMemory(environ=environ)
+    memory.add_seen_names(KEY, {f"Name{number}x" for number in range(300)})
+    assert len(memory.seen_names(KEY)) == 200
+    memory.add_answered(KEY, "1-1")
+    assert memory.answered_ids(KEY) == {"1-1"}
+    assert memory.answered_ids("Other-Realm") == set()
+    (tmp_path / "answered-questions.json").write_bytes(b"\xff{{{")
+    (tmp_path / "hidden-names.json").write_text('{"a": 5, "b": [1, "ok"], "c": "x"}')
+    assert memory.answered_ids(KEY) == set()
+    assert memory.seen_names("b") == {"ok"}
+    memory.add_answered(KEY, "2-1")  # a damaged file is simply replaced
+    assert memory.answered_ids(KEY) == {"2-1"}

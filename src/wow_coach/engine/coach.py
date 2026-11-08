@@ -30,8 +30,9 @@ from wow_coach.characters import pick_character
 from wow_coach.engine.answer import ANSWER_SCHEMA, parse_answer
 from wow_coach.engine.contract import CoachReply
 from wow_coach.engine.conversation import Turn, append_turns, conversation_path, load_turns
+from wow_coach.engine.memory import LocalMemory
 from wow_coach.engine.prompt import PromptData, build_messages
-from wow_coach.engine.redact import other_player_names
+from wow_coach.engine.redact import other_player_names, without_own_names
 from wow_coach.errors import WowCoachError
 from wow_coach.notes import journal_path, notes_path
 from wow_coach.report import format_history, format_status
@@ -84,6 +85,7 @@ class ChatCoach:
         self._environ = environ
         self._settings = settings
         self._now = now
+        self._memory = LocalMemory(environ=environ)
 
     # ---- the Coach contract ---------------------------------------------------------
 
@@ -98,7 +100,9 @@ class ChatCoach:
         """Answer every question from the Coach panel that has no answer yet."""
         found = self._load_character(character)
         advice = read_advice_file(self._advice_path())
-        return [self._answer(found, item.text, item) for item in open_questions(found, advice)]
+        done = self._memory.answered_ids(found.key)
+        todo = [q for q in open_questions(found, advice) if q.id not in done]
+        return [self._answer(found, item.text, item) for item in todo]
 
     # ---- steps ---------------------------------------------------------------------
 
@@ -121,15 +125,28 @@ class ChatCoach:
         return PromptData(
             status=format_status(found.snapshot, now=now),
             history=format_history(found.history, limit=HISTORY_EVENTS, now=now),
-            journal=_read_text_or_empty(journal_path(found.key, environ=self._environ)),
-            player_notes=_read_text_or_empty(notes_path(environ=self._environ)),
+            journal=self._coach_notes(journal_path(found.key, environ=self._environ)),
+            player_notes=self._coach_notes(notes_path(environ=self._environ)),
             turns=turns,
             question=question,
         )
 
+    def _coach_notes(self, path: Path) -> str:
+        """A notes file's text, or nothing when the player keeps their notes to themselves."""
+        return _read_text_or_empty(path) if self._settings.send_coach_notes else ""
+
+    def _names_to_hide(self, found: Character) -> set[str]:
+        """Other players' names in this save plus those seen in earlier saves."""
+        if self._settings.share_other_player_names:
+            return set()
+        current = other_player_names(found)
+        with contextlib.suppress(OSError):
+            self._memory.add_seen_names(found.key, current)
+        return without_own_names(current | self._memory.seen_names(found.key), found)
+
     def _answer(self, found: Character, question: str, asked: Question | None) -> CoachReply:
         turns = load_turns(conversation_path(found.key, environ=self._environ))
-        hidden = set() if self._settings.share_other_player_names else other_player_names(found)
+        hidden = self._names_to_hide(found)
         messages = build_messages(self._prompt_data(found, question, turns), hidden_names=hidden)
         reply = self._provider.ask(
             messages,
@@ -139,6 +156,9 @@ class ChatCoach:
         )
         parsed = parse_answer(reply.text, answered_at=int(self._now()), source=self._provider.name)
         answer = self._tie_to_question(parsed, asked)
+        if asked is not None:  # before the write, which may fail
+            with contextlib.suppress(OSError):
+                self._memory.add_answered(found.key, asked.id)
         written, note = self._write(found, answer)
         self._remember(found.key, question, answer)
         return CoachReply(
