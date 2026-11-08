@@ -137,9 +137,6 @@ class SpeakUp:
         if not request:
             return
         core = self._core
-        try:
-            reply = core.coach.ask(request, character=character_key)
-        finally:
-            core.baseline.refresh()  # our own write is not an "outside change"
+        reply = core.coach.ask(request, character=character_key)
         core.publish_reply(reply)
         core.alert(reply.answer, allow_speak=True)

@@ -1,6 +1,7 @@
 """The coach window's web server: security checks, static files and the API."""
 
 import http.client
+import io
 import json
 import socket
 import threading
@@ -23,6 +24,7 @@ from test_app_support import (
 
 from wow_coach.advice.contract import MAX_QUESTION_CHARS
 from wow_coach.ai.base import AIError, NotSignedIn, PlanLimitReached
+from wow_coach.app.run import print_links_on_enter
 from wow_coach.app.server import MAX_BODY_BYTES, STATIC_FILES, CoachServer
 from wow_coach.errors import WowCoachError
 
@@ -520,3 +522,48 @@ def test_only_a_few_event_streams_may_be_open(rig: Rig) -> None:
         for conn in streams:
             conn.close()
         server.stop()
+
+
+def test_the_session_answer_carries_the_instance_id(server: CoachServer, client: Client) -> None:
+    _, state = client.json("GET", "/api/state")
+    assert state["instance"] == server.instance_id and len(server.instance_id) == 16
+
+
+def test_a_fresh_link_cancels_an_unused_one_and_a_used_one_is_replaced(
+    server: CoachServer,
+) -> None:
+    first = server.start_url().split("#", 1)[1]
+    second = server.fresh_start_url().split("#", 1)[1]
+    assert first != second
+    page = Client(server)
+    assert page.request("POST", "/api/session", {"token": first})[0] == 403
+    assert page.request("POST", "/api/session", {"token": second})[0] == 200
+    third = server.start_url().split("#", 1)[1]  # used one: a new token is made
+    assert third not in (first, second)
+    assert Client(server).request("POST", "/api/session", {"token": third})[0] == 200
+
+
+def test_pressing_enter_prints_a_new_link(server: CoachServer) -> None:
+    out = io.StringIO()
+    print_links_on_enter(server, out, io.StringIO("\n\n"))
+    links = [line for line in out.getvalue().splitlines() if line.startswith("http://")]
+    assert len(links) == 2 and links[0] != links[1]
+    assert "paste the link above" in out.getvalue()
+
+
+def test_answer_now_with_no_replies_sends_an_info_event(rig: Rig, client: Client) -> None:
+    write_save(rig.wow_dir, ("1-1", "How?"))
+    rig.coach.reply_nothing = True
+    mailbox = rig.core.bus.subscribe()
+    assert client.json("POST", "/api/answer-open", {})[0] == 202
+    data = wait_for_event(mailbox, "info")
+    assert data == {"text": "Those questions were already answered."}
+    assert client.json("POST", "/api/answer-open", {})[1]["started"] is False
+
+
+def test_answer_now_that_fails_sends_an_error_event(rig: Rig, client: Client) -> None:
+    write_save(rig.wow_dir, ("1-1", "How?"))
+    rig.coach.error = PlanLimitReached("Your ChatGPT plan is used up.")
+    mailbox = rig.core.bus.subscribe()
+    client.json("POST", "/api/answer-open", {})
+    assert wait_for_event(mailbox, "error")["message"] == "Your ChatGPT plan is used up."

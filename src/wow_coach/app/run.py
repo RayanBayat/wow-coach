@@ -21,6 +21,8 @@ from wow_coach.companion import LiveCoach, build_sign_in, build_usage_log
 from wow_coach.engine.model import choose_small_model
 from wow_coach.usage import UsageLog
 
+SNAP_HINT = "If your browser shows an error or does not open, paste the link above into it."
+
 
 def run_app(
     *,
@@ -50,8 +52,10 @@ def run_app(
     print(f"The wow-coach window is open at {url}", file=out, flush=True)
     print("It only works on this computer. Press Ctrl+C to close it.", file=out, flush=True)
     clean_up = open_start_page(url, webbrowser.open) if open_in_browser else None
+    print(SNAP_HINT, file=out, flush=True)
+    print("Press Enter here for a new link, Ctrl+C to close.", file=out, flush=True)
     try:
-        _wait_for_ctrl_c()
+        _wait_for_ctrl_c(server, out)
     finally:
         if clean_up is not None:
             clean_up()
@@ -59,10 +63,18 @@ def run_app(
         server.stop()
 
 
-def _wait_for_ctrl_c() -> None:
-    """Block until Ctrl+C (the main thread has nothing else to do)."""
+def _wait_for_ctrl_c(server: CoachServer, out: TextIO) -> None:
+    """Wait until Ctrl+C. Each Enter prints a new one-time link (the old, unused one stops)."""
     with contextlib.suppress(KeyboardInterrupt):
-        threading.Event().wait()
+        print_links_on_enter(server, out, sys.stdin)
+        threading.Event().wait()  # no terminal input available: just wait for Ctrl+C
+
+
+def print_links_on_enter(server: CoachServer, out: TextIO, stdin: TextIO | None) -> None:
+    """For each line the player types (Enter), print a fresh one-time start link."""
+    while stdin is not None and stdin.readline():
+        print(server.fresh_start_url(), file=out, flush=True)
+        print(SNAP_HINT, file=out, flush=True)
 
 
 def _build_core(wow_dir: Path, environ: Mapping[str, str]) -> AppCore:

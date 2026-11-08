@@ -128,7 +128,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     app.add_argument("--port", type=int, default=0, help="the port to use (default: a free one)")
     app.add_argument(
-        "--no-browser", action="store_true", help="only print the link, don't open the browser"
+        "--no-browser",
+        action="store_true",
+        help="only print the link, don't open the browser (use it if your browser, for example "
+        "a Snap one, can't open the start page: paste the link into it)",
     )
     return parser
 

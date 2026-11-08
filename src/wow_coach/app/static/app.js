@@ -11,10 +11,18 @@ const NEXT_QUESTION = "What should I do next?";
 
 let state = null; // the last state the server sent
 let selectedCharacter = null;
-// The session secret lives ONLY in this variable (never in a cookie or in browser storage), so no
-// other program on this computer can get it from the browser. Reloading the page loses it.
+// The session secret is sent in a header by this page only. It is never a cookie (cookies
+// ignore ports, so any other program on 127.0.0.1 would get it). It is kept in memory and in
+// sessionStorage: that belongs to this tab and this exact address (including the port), is
+// never sent by the browser by itself, and lets a reload keep the session.
 let sessionSecret = null;
-const SESSION_GONE = "Open the window again from the terminal link.";
+let serverInstance = null; // an id of THIS wow-coach run; a different one means another program
+let gaveUp = false; // true once we know wow-coach is gone: stop asking
+let eventFailures = 0;
+const STORAGE_KEY = "wow-coach-session";
+const MAX_EVENT_FAILURES = 10;
+const SESSION_GONE = "Press Enter in the wow-coach terminal for a new link, then open it.";
+const CLOSED = "wow-coach was closed. Start it again from the terminal.";
 const recentDecisions = []; // newest first, kept only while the window is open
 const MAX_DECISIONS = 8;
 
@@ -59,6 +67,44 @@ function formatTime(seconds) {
 }
 
 /** Talk to the server. Resolves to {ok, status, data}; never throws for HTTP errors. */
+function rememberSession() {
+  try {
+    sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ secret: sessionSecret, instance: serverInstance }),
+    );
+  } catch (error) {
+    // Storage may be blocked (private window): the session then lasts until a reload.
+  }
+}
+
+function recallSession() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "null");
+    if (saved && typeof saved.secret === "string") {
+      sessionSecret = saved.secret;
+      serverInstance = saved.instance || null;
+    }
+  } catch (error) {
+    sessionSecret = null;
+  }
+}
+
+function forgetSession() {
+  sessionSecret = null;
+  try {
+    sessionStorage.removeItem(STORAGE_KEY);
+  } catch (error) {
+    // Nothing to do.
+  }
+}
+
+/** Stop talking to the server for good and tell the player why. */
+function giveUp(message) {
+  gaveUp = true;
+  showBanner(message, true);
+}
+
 async function api(path, method, body) {
   if (!sessionSecret && path !== "/api/session") {
     return { ok: false, status: 401, data: { error: SESSION_GONE } };
@@ -75,6 +121,9 @@ async function api(path, method, body) {
   try {
     const response = await fetch(path, options);
     const data = await response.json().catch(() => ({}));
+    if (response.status === 401 && path !== "/api/session") {
+      forgetSession(); // the server does not know this session any more
+    }
     return { ok: response.ok, status: response.status, data };
   } catch (error) {
     return { ok: false, status: 0, data: { error: "wow-coach is not running any more." } };
@@ -287,6 +336,10 @@ async function loadState() {
     showBanner(result.data.error || "Could not load. Run wow-coach app again.", true);
     return;
   }
+  if (serverInstance && result.data.instance !== serverInstance) {
+    giveUp(CLOSED); // another program now answers on this port
+    return;
+  }
   state = result.data;
   selectedCharacter = state.selected;
   render();
@@ -445,6 +498,12 @@ function onError(event) {
   loadState();
 }
 
+function onInfo(event) {
+  const data = readEvent(event);
+  showThinking(false);
+  showBanner(data.text || "", false);
+}
+
 function onDecision(event) {
   const data = readEvent(event);
   recentDecisions.unshift(data);
@@ -485,30 +544,37 @@ function handleEventBlock(block) {
     error: onError,
     signin: onSignIn,
     decision: onDecision,
+    info: onInfo,
   };
   if (handlers[name]) {
     handlers[name]({ data });
   }
 }
 
-/** Read the live-update stream with fetch (so the session header can be sent). */
+/**
+ * Read the live-update stream with fetch (so the session header can be sent).
+ * Returns "gone" (session unknown), "failed" (could not connect) or "dropped" (was connected).
+ */
 async function listenForEvents() {
   const response = await fetch("/api/events", {
     credentials: "omit",
     headers: { "X-Wow-Coach-Session": sessionSecret },
   });
-  if (!response.ok || !response.body) {
-    showBanner(response.status === 401 ? SESSION_GONE : "Live updates are not available.", true);
-    return response.status !== 401; // try again later, unless the session is gone
+  if (response.status === 401) {
+    return "gone";
   }
+  if (!response.ok || !response.body) {
+    return "failed";
+  }
+  eventFailures = 0;
   await loadState(); // also catches anything missed while the stream was down
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  for (;;) {
+  while (!gaveUp) {
     const { done, value } = await reader.read();
     if (done) {
-      return true;
+      return "dropped";
     }
     buffer += decoder.decode(value, { stream: true });
     let end = buffer.indexOf("\n\n");
@@ -518,33 +584,46 @@ async function listenForEvents() {
       end = buffer.indexOf("\n\n");
     }
   }
+  return "dropped";
 }
 
 async function connectEvents() {
-  let again = true;
-  while (again) {
+  while (!gaveUp) {
+    let outcome = "failed";
     try {
-      again = await listenForEvents();
+      outcome = await listenForEvents();
     } catch (error) {
-      again = true; // the connection dropped: wait and reconnect
+      outcome = "failed"; // the connection broke
     }
-    if (again) {
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+    if (outcome === "gone") {
+      giveUp(SESSION_GONE);
+      return;
     }
+    eventFailures += 1;
+    if (eventFailures >= MAX_EVENT_FAILURES) {
+      giveUp(CLOSED);
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 3000));
   }
 }
 
 // ---- start ----------------------------------------------------------------------------
 
-/** Trade the one-time token in the link's # part for a session cookie. */
+/** Trade the one-time token in the link's # part for a session; else reuse this tab's one. */
 async function startSession() {
   const token = window.location.hash.slice(1);
   if (!token) {
+    recallSession();
     return;
   }
   const result = await api("/api/session", "POST", { token });
   if (result.ok) {
     sessionSecret = result.data.session;
+    serverInstance = result.data.instance;
+    rememberSession();
+  } else {
+    recallSession();
   }
   // Remove the token from the address bar and the browser history.
   history.replaceState(null, "", window.location.pathname);
