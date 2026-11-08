@@ -162,7 +162,11 @@ def test_question_is_filled_in_from_the_save(tmp_path: Path) -> None:
 
 def test_unknown_question_id_is_kept_with_a_note(tmp_path: Path) -> None:
     game = make_game(tmp_path)
-    assert "no open question has the id nope" in send(game, question_id="nope")
+    assert "not a valid id" in send(game, question_id="nope")
+    assert "no open question has the id 9-9" in send(game, question_id="9-9")
+    saved = read_advice_file(advice_path(game))
+    assert saved is not None
+    assert all(a.question_id is None for a in saved.characters[KEY].answers)
 
 
 def test_missing_title_or_content_is_a_plain_sentence(tmp_path: Path) -> None:

@@ -5,6 +5,7 @@ import pytest
 from wow_coach.advice.contract import (
     ADVICE_GLOBAL,
     MAX_ANSWERS_PER_CHARACTER,
+    MAX_CHARACTERS,
     MAX_FILE_BYTES,
     MAX_STEP_CHARS,
     MAX_STEPS,
@@ -15,8 +16,14 @@ from wow_coach.advice.contract import (
     CharacterAdvice,
     CoachPlan,
 )
+from wow_coach.advice.limits import AdviceInvalid
 from wow_coach.advice.reader import parse_advice_text
-from wow_coach.advice.serialize import AdviceTooLarge, advice_to_lua, lua_string
+from wow_coach.advice.serialize import (
+    AdviceTooLarge,
+    _render,
+    advice_to_lua,
+    lua_string,
+)
 from wow_coach.errors import WowCoachError
 from wow_coach.lua_table import parse_saved_variables
 
@@ -63,7 +70,7 @@ def test_output_has_header_and_one_statement() -> None:
 
 
 def test_keys_are_camel_case() -> None:
-    text = advice_to_lua(file_with(one_answer(question_id="x", asked_at=3)))
+    text = advice_to_lua(file_with(one_answer(question_id="1-1", asked_at=3)))
     for name in ("formatVersion", "writtenAt", "basedOnSave", "answeredAt", "questionId"):
         assert f'["{name}"]' in text
 
@@ -148,18 +155,81 @@ def test_lone_surrogates_are_replaced() -> None:
     assert only_answer(file_with(one_answer(text="a\ud800b"))).text == "a�b"
 
 
-def test_too_large_is_refused() -> None:
+def test_a_full_file_drops_the_oldest_answers_across_characters() -> None:
     big = "\x01" * MAX_TEXT_CHARS  # each one becomes 4 bytes
     characters = {
         f"Char{n}-Realm": CharacterAdvice(
-            based_on_save=1, answers=tuple(one_answer(text=big) for _ in range(10))
+            based_on_save=1,
+            answers=tuple(one_answer(text=big, answered_at=1000 * n + k) for k in range(10)),
+            answered_ids=("1-1",),
         )
         for n in range(6)
     }
+    text = advice_to_lua(AdviceFile(written_at=1, characters=characters))
+    assert len(text.encode("utf-8")) <= MAX_FILE_BYTES
+    back = parse_advice_text(text)
+    assert back is not None
+    # The newest character is untouched; the oldest answers went first.
+    assert len(back.characters["Char5-Realm"].answers) == 10
+    assert len(back.characters["Char0-Realm"].answers) < 10
+    assert back.characters["Char0-Realm"].answered_ids == ("1-1",)
+
+
+def test_one_answer_that_cannot_fit_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("wow_coach.advice.serialize.MAX_FILE_BYTES", 100)
     with pytest.raises(AdviceTooLarge) as caught:
-        advice_to_lua(AdviceFile(written_at=1, characters=characters))
+        advice_to_lua(file_with(one_answer(text="x" * 500)))
     assert isinstance(caught.value, WowCoachError)
-    assert str(MAX_FILE_BYTES) in str(caught.value)
+    assert "100" in str(caught.value)
+    assert "your" not in str(caught.value).lower()  # not worded as the AI's own fault
+
+
+def test_more_than_the_allowed_characters_drops_the_stalest() -> None:
+    characters = {
+        f"C{n:02d}-R": CharacterAdvice(1, (one_answer(answered_at=100 + n),)) for n in range(25)
+    }
+    back = parse_advice_text(advice_to_lua(AdviceFile(1, characters)))
+    assert back is not None
+    assert len(back.characters) == MAX_CHARACTERS
+    assert "C00-R" not in back.characters and "C24-R" in back.characters
+
+
+@pytest.mark.parametrize("key", ["", "a|b", "a\nb", "x" * 101, "bell\x07"])
+def test_bad_character_keys_are_refused(key: str) -> None:
+    with pytest.raises(AdviceInvalid):
+        advice_to_lua(AdviceFile(1, {key: CharacterAdvice(1)}))
+
+
+def test_answered_ids_are_written_and_read() -> None:
+    character = CharacterAdvice(1, (), None, ("1-1", "2-1"))
+    back = parse_advice_text(advice_to_lua(AdviceFile(1, {KEY: character})))
+    assert back is not None and back.characters[KEY].answered_ids == ("1-1", "2-1")
+
+
+def test_invalid_question_ids_are_dropped_not_cut() -> None:
+    long_id = "1-" + "9" * 50
+    answer = only_answer(file_with(one_answer(question_id=long_id, question="q", asked_at=4)))
+    assert (answer.question_id, answer.question, answer.asked_at) == (None, None, None)
+
+
+def test_numbers_are_clamped() -> None:
+    assert only_answer(file_with(one_answer(answered_at=-(10**30)))).answered_at == 0
+    assert only_answer(file_with(one_answer(answered_at=10**30))).answered_at == 2**40
+
+
+def test_blank_steps_after_cutting_are_dropped() -> None:
+    assert only_answer(file_with(one_answer(steps=("   ", "ok")))).steps == ("ok",)
+
+
+def test_wrong_types_are_refused_not_crashed() -> None:
+    with pytest.raises(AdviceInvalid):
+        advice_to_lua(file_with(one_answer(steps="abc")))
+    with pytest.raises(AdviceInvalid):
+        advice_to_lua(file_with(one_answer(text=5)))
+    with pytest.raises(AdviceInvalid):
+        advice_to_lua(file_with(one_answer(answered_at="5")))
+    with pytest.raises(AdviceInvalid):
+        _render(object(), 0)  # type: ignore[arg-type]
 
 
 def test_empty_file_is_valid() -> None:
