@@ -16,7 +16,7 @@ from typing import Final
 from wow_coach.advice.contract import MAX_STEP_CHARS, MAX_STEPS, MAX_TEXT_CHARS, MAX_WARNINGS
 from wow_coach.ai.base import Message
 from wow_coach.assets import SKILL_PATH, read_asset_text
-from wow_coach.engine.conversation import Turn
+from wow_coach.engine.conversation import ChatMessage
 from wow_coach.engine.notes_digest import digest, without_private_sections
 from wow_coach.engine.redact import redact_names
 
@@ -158,12 +158,42 @@ class PromptData:
     history: str = ""
     journal: str = ""
     player_notes: str = ""
-    turns: list[Turn] = field(default_factory=list)
+    messages: list[ChatMessage] = field(default_factory=list)  # the chat so far, oldest first
 
 
-def _conversation_text(turns: list[Turn]) -> str:
-    labels = {"user": "Player", "assistant": "Coach"}
-    return "\n".join(f"{labels[turn.role]}: {' '.join(turn.content.split())}" for turn in turns)
+MAX_LINE_CHARS: Final = 1_200  # one long message (for example a Claude reply) is shortened
+
+
+def _speaker(message: ChatMessage) -> str:
+    """Who spoke, so the AI can tell the player, this coach and other coaches apart."""
+    if message.role == "user":
+        return "Player"
+    if message.source == "claude-code":
+        return "Coach (Claude Code)"
+    if message.source == "outside":
+        return "Coach (another app)"
+    return "Coach"
+
+
+def _conversation_text(messages: list[ChatMessage]) -> str:
+    """The newest messages from every source that fit the block's size, oldest first.
+
+    Whole messages are kept or left out (a message is never cut in the middle of the block),
+    so the AI always reads complete sentences.
+    """
+    budget = _BLOCK_CAPS["conversation"]
+    lines: list[str] = []
+    used = 0
+    for message in reversed(messages):
+        text = " ".join(message.content.split())
+        if len(text) > MAX_LINE_CHARS:
+            text = text[:MAX_LINE_CHARS].rstrip() + "..."
+        line = f"{_speaker(message)}: {text}"
+        if lines and used + len(line) + 1 > budget:
+            break
+        lines.append(line)
+        used += len(line) + 1
+    return "\n".join(reversed(lines))
 
 
 def _fit_total(blocks: dict[str, str], budget: int) -> dict[str, str]:
@@ -190,7 +220,7 @@ def build_blocks(data: PromptData, *, hidden_names: set[str]) -> dict[str, str]:
         "recent_history": data.history,
         "journal": data.journal,
         "player_notes": data.player_notes,
-        "conversation": _conversation_text(data.turns),
+        "conversation": _conversation_text(data.messages),
         "question": data.question,
     }
     for tag in _NOTES:  # sections about the player's computer stay on this computer
