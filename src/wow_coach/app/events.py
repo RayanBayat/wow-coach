@@ -17,7 +17,7 @@ from typing import Final
 # "activity" = the coach is looking something up right now ({character, text, kind}); the
 # browser page ignores it, the app shows the newest line in its typing bubble.
 EVENT_KINDS: Final = (
-    "answer", "question", "save", "error", "signin", "decision", "info", "history", "activity",
+    "answer", "question", "save", "error", "signin", "info", "history", "activity",
 )  # fmt: skip
 MAILBOX_SIZE: Final = 200
 

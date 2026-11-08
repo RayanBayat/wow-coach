@@ -1,8 +1,7 @@
-"""The Settings page: answers, the coach speaking up by itself and privacy choices.
+"""The Settings page: answers, what the coach says after a save, and privacy choices.
 
 There is no "Save" button. A change is saved about 0.4 seconds after the last one (so typing
-a number does not save after every key), and a small "Saved" appears. A value that cannot
-work (for example a timer of 3 minutes) is not saved; a plain message says what to fix.
+a number does not save after every key), and a small "Saved" appears.
 
 While the player is editing, a new state from the core never overwrites their field.
 
@@ -20,8 +19,6 @@ from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
     QLabel,
-    QPlainTextEdit,
-    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -31,20 +28,13 @@ from wow_coach.desktop.forms import Card, ToggleRow, make_label, page_header, sc
 from wow_coach.desktop.pages.base import Page
 from wow_coach.desktop.state import StateView
 from wow_coach.desktop.theme import SPACE, Colors, current_colors
-from wow_coach.triggers.settings import (
-    MAX_COOLDOWN_MINUTES,
-    MAX_RULES_CHARS,
-    MAX_TIMER_MINUTES,
-    MIN_TIMER_MINUTES,
-)
 
 SAVE_DELAY_MS: Final = 400  # wait this long after the last change before saving
 SAVED_SHOWN_MS: Final = 2000  # how long "Saved" stays visible
 LABEL_WIDTH: Final = 300  # the width of the label column in the form rows
-NO_HOUR: Final = -1  # the "Off" position of a quiet-hours box
 LOADING_TEXT: Final = "Loading your settings\u2026"
 
-# The saved fields that are not trigger rules (the rules travel in one "triggers" dict).
+# The saved fields that are not "when the game saves" (those travel in one "triggers" dict).
 SIMPLE_KEYS: Final = (
     "answer_questions_from_game",
     "notify",
@@ -59,32 +49,11 @@ SIMPLE_KEYS: Final = (
 # The coach-tools switches are all on until the player turns one off.
 TOOL_KEYS: Final = ("use_tools", "web_search", "save_notes", "show_lookups")
 
-# The events the player can give a rule to, in the order shown (same words as the browser window).
-TRIGGER_KINDS: Final = (
-    ("died", "You die"),
-    ("died_again_soon", "You die again soon after coming back"),
-    ("level_up", "You level up"),
-    ("quest_done", "A quest is ready to turn in"),
-    ("bags_nearly_full", "Your bags are nearly full"),
-    ("new_zone", "You enter a new zone"),
-    ("talent_points", "You have unspent talent points"),
-    ("gear_hint", "The coach spots a possible gear upgrade"),
-    ("durability_low", "Your gear needs repair"),
-    ("timer", "The timer goes off"),
-)
-MODE_CHOICES: Final = (
+# The choices for "When the game saves", with the words the player sees (same as the browser).
+ON_SAVE_CHOICES: Final = (
     ("off", "Off"),
-    ("notify", "Notify me"),
-    ("coach", "Ask the coach"),
-)
-
-TIMER_PROBLEM: Final = (
-    f"The timer must be 0 (never) or between {MIN_TIMER_MINUTES} and {MAX_TIMER_MINUTES} "
-    'minutes. Nothing in "Coach on its own" was saved yet.'
-)
-QUIET_PROBLEM: Final = (
-    "Quiet hours need both a start and an end hour, or both set to Off. "
-    'Nothing in "Coach on its own" was saved yet.'
+    ("notify", "Tell me what's worth knowing"),
+    ("advice", "Tell me and add the coach's advice"),
 )
 
 
@@ -110,17 +79,12 @@ def _as_bool(value: object, default: bool) -> bool:
     return value if isinstance(value, bool) else default
 
 
-def _hour_or_none(value: object) -> int | None:
-    """A quiet-hours value as a whole hour, or None for Off."""
-    return None if isinstance(value, bool) or not isinstance(value, int) else value
-
-
 def _as_mapping(value: object) -> Mapping[str, object]:
     return value if isinstance(value, Mapping) else {}
 
 
 class SettingsPage(Page):
-    """Answers, the coach on its own and privacy choices."""
+    """Answers, what the coach says after a save, and privacy choices."""
 
     name = "settings"
     title = "Settings"
@@ -182,15 +146,6 @@ class SettingsPage(Page):
         card.body.addWidget(row)
         return row
 
-    def _spin(self, low: int, high: int, tooltip: str, suffix: str = "") -> QSpinBox:
-        box = QSpinBox()
-        box.setRange(low, high)
-        box.setSuffix(suffix)
-        box.setToolTip(tooltip)
-        box.setMinimumWidth(110)
-        box.valueChanged.connect(self._edited)
-        return box
-
     def _build_answers_card(self) -> Card:
         card = Card("Answers")
         self.answer_games = self._toggle(
@@ -245,58 +200,27 @@ class SettingsPage(Page):
     def _build_triggers_card(self) -> Card:
         card = Card(
             "Coach on its own",
-            'Every rule starts as Off: the coach only answers when you ask. "Notify me" '
-            'shows a short note and uses nothing from your plan. "Ask the coach" gives '
-            "advice and uses one call.",
+            "The game only shares your character when it saves (a /reload, logging out, or "
+            "the Save for the coach key), so this happens right after a save, never live. "
+            "Worth knowing is worked out here from what changed since the last save, "
+            "for free: a level-up, nearly full bags, a finished quest, a death, unspent "
+            "talent points, worn gear, a new zone.",
         )
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
         form.setVerticalSpacing(SPACE)
-        self.mode_boxes: dict[str, QComboBox] = {}
-        for kind, label in TRIGGER_KINDS:
-            box = QComboBox()
-            for mode, text in MODE_CHOICES:
-                box.addItem(text, mode)
-            box.setToolTip(f"What should happen when: {label.lower()}.")
-            box.setAccessibleName(label)
-            box.activated.connect(self._edited)
-            self.mode_boxes[kind] = box
-            form.addRow(self._buddy_label(label, box), box)
+        self.on_save_box = QComboBox()
+        for choice, text in ON_SAVE_CHOICES:
+            self.on_save_box.addItem(text, choice)
+        self.on_save_box.setToolTip(
+            "What the coach does after the game saves. The advice choice uses one call of "
+            "your plan per save, at most."
+        )
+        self.on_save_box.setAccessibleName("When the game saves")
+        self.on_save_box.activated.connect(self._edited)
+        form.addRow(self._buddy_label("When the game saves", self.on_save_box), self.on_save_box)
         card.body.addLayout(form)
-
-        self.timer_minutes = self._spin(
-            0,
-            MAX_TIMER_MINUTES,
-            "How often the timer goes off. 0 means never.",
-            " min",
-        )
-        self.timer_minutes.setSpecialValueText("Never")
-        self.timer_minutes.setSingleStep(5)
-        self.cooldown = self._spin(
-            0,
-            MAX_COOLDOWN_MINUTES,
-            "The least time between answers the coach starts itself.",
-            " min",
-        )
-        timing = QFormLayout()
-        timing.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
-        timing.setVerticalSpacing(SPACE)
-        timing.addRow(
-            self._buddy_label("Timer: ask the coach every", self.timer_minutes), self.timer_minutes
-        )
-        timing.addRow(
-            self._buddy_label("Wait at least this long between answers", self.cooldown),
-            self.cooldown,
-        )
-        card.body.addLayout(timing)
-        card.body.addWidget(
-            make_label(
-                f"The timer can be Never, or {MIN_TIMER_MINUTES} to {MAX_TIMER_MINUTES} minutes. "
-                "The wait between answers stops the coach from talking too much.",
-                "small",
-            )
-        )
 
         self.quiet_instances = self._toggle(
             card,
@@ -304,46 +228,7 @@ class SettingsPage(Page):
             "No unasked notes or advice while you are in an instance.",
             "Keep the coach quiet inside dungeons and raids.",
         )
-        self.quiet_from = self._hour_box("The hour quiet time starts.")
-        self.quiet_to = self._hour_box("The hour quiet time ends.")
-        quiet = QFormLayout()
-        quiet.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
-        quiet.setVerticalSpacing(SPACE)
-        quiet.addRow(self._buddy_label("Quiet hours from", self.quiet_from), self.quiet_from)
-        quiet.addRow(self._buddy_label("Quiet hours until", self.quiet_to), self.quiet_to)
-        card.body.addLayout(quiet)
-        card.body.addWidget(
-            make_label(
-                "The hour of the day, from 0 to 23, on this computer's clock. Off means the "
-                "coach is never quiet by the clock.",
-                "small",
-            )
-        )
-
-        self.use_triage = self._toggle(
-            card,
-            "Let a small AI decide what is worth the coach's time",
-            "A small, fast model reads what happened and your own words below. It uses a "
-            "little of your plan.",
-            "Use a small AI to filter events before waking the coach.",
-        )
-        self.rules_text = QPlainTextEdit()
-        self.rules_text.setPlaceholderText("For example: only if I die twice in 10 minutes")
-        self.rules_text.setToolTip("Your own words: when should the coach speak up?")
-        self.rules_text.setAccessibleName("In your own words, when should the coach speak up?")
-        self.rules_text.setFixedHeight(72)
-        self.rules_text.textChanged.connect(self._rules_text_edited)
-        card.body.addWidget(
-            self._buddy_label("In your own words: when should the coach speak up?", self.rules_text)
-        )
-        card.body.addWidget(self.rules_text)
-        self.use_triage.check.toggled.connect(self.rules_text.setEnabled)
         return card
-
-    def _hour_box(self, tooltip: str) -> QSpinBox:
-        box = self._spin(NO_HOUR, 23, tooltip, ":00")
-        box.setSpecialValueText("Off")
-        return box
 
     def _buddy_label(self, text: str, field: QWidget) -> QLabel:
         """A label tied to ``field``, so a screen reader and the Alt+key shortcuts find it."""
@@ -411,30 +296,14 @@ class SettingsPage(Page):
         self._fill_triggers(_as_mapping(settings.get("triggers")))
 
     def _fill_triggers(self, rules: Mapping[str, object]) -> None:
-        modes = _as_mapping(rules.get("modes"))
-        for kind, box in self.mode_boxes.items():
-            index = box.findData(modes.get(kind, "off"))
-            if not box.hasFocus():
-                box.setCurrentIndex(max(index, 0))
-        self._set_spin(self.timer_minutes, _as_int(rules.get("every_minutes"), 0))
-        self._set_spin(self.cooldown, _as_int(rules.get("cooldown_minutes"), 10))
+        index = self.on_save_box.findData(rules.get("on_save", "notify"))
+        if not self.on_save_box.hasFocus():
+            self.on_save_box.setCurrentIndex(max(index, 0))
         self._set_check(self.quiet_instances, rules.get("quiet_in_instances"), True)
-        self._set_spin(self.quiet_from, _as_int(rules.get("quiet_from_hour"), NO_HOUR))
-        self._set_spin(self.quiet_to, _as_int(rules.get("quiet_to_hour"), NO_HOUR))
-        self._set_check(self.use_triage, rules.get("use_triage"), False)
-        self.rules_text.setEnabled(self.use_triage.check.isChecked())
-        text = rules.get("rules_text")
-        changed = isinstance(text, str) and self.rules_text.toPlainText() != text
-        if changed and not self.rules_text.hasFocus():
-            self.rules_text.setPlainText(str(text))
 
     def _set_check(self, row: ToggleRow, value: object, default: bool) -> None:
         if not row.check.hasFocus():
             row.check.setChecked(value if isinstance(value, bool) else default)
-
-    def _set_spin(self, box: QSpinBox, value: int) -> None:
-        if not box.hasFocus():
-            box.setValue(value)
 
     def on_theme_changed(self) -> None:
         """Light or dark mode changed: restyle."""
@@ -448,27 +317,15 @@ class SettingsPage(Page):
             return
         self._save_timer.start()
 
-    def _rules_text_edited(self) -> None:
-        """Keep the free text within its limit, then treat it like any other edit."""
-        text = self.rules_text.toPlainText()
-        if len(text) > MAX_RULES_CHARS:
-            self.rules_text.setPlainText(text[:MAX_RULES_CHARS])
-            return  # setPlainText fired this again with the short text
-        self._edited()
-
     def save_now(self) -> None:
         """Save what the fields hold now, or explain what is wrong with them."""
         self._save_timer.stop()
-        changes, problem = self._collect_changes()
+        changes = self._collect_changes()
         if changes:
             self.bridge.change_settings(changes)
             self._remember_saved(changes)
             self.saved_label.show()
             self._saved_timer.start()
-        self.problem_label.setText(problem or "")
-        self.problem_label.setVisible(problem is not None)
-        if problem is not None:
-            self.saved_label.hide()
 
     def _remember_saved(self, changes: Mapping[str, object]) -> None:
         """Note what was just saved, so the next edit only sends what is new."""
@@ -479,24 +336,22 @@ class SettingsPage(Page):
             else:
                 self._saved_values[key] = value
 
-    def _collect_changes(self) -> tuple[dict[str, object], str | None]:
-        """Only the fields the player changed, and a plain message if the rules cannot be saved.
+    def _collect_changes(self) -> dict[str, object]:
+        """Only the fields the player changed.
 
         Saving just the changed fields means one edit can never overwrite a setting the
         player did not touch. ``update_settings`` keeps every field that is left out.
         """
         if not self._settings_loaded:
-            return {}, None  # the fields do not show the saved settings yet
+            return {}  # the fields do not show the saved settings yet
         now = self._current_values()
         changes = {key: now[key] for key in SIMPLE_KEYS if now[key] != self._saved_values.get(key)}
-        problem = self._trigger_problem()
-        if problem is None:
-            rules = _as_mapping(now["triggers"])
-            old_rules = _as_mapping(self._saved_values.get("triggers"))
-            changed_rules = {k: v for k, v in rules.items() if v != old_rules.get(k)}
-            if changed_rules:
-                changes["triggers"] = changed_rules
-        return changes, problem
+        rules = _as_mapping(now["triggers"])
+        old_rules = _as_mapping(self._saved_values.get("triggers"))
+        changed_rules = {k: v for k, v in rules.items() if v != old_rules.get(k)}
+        if changed_rules:
+            changes["triggers"] = changed_rules
+        return changes
 
     def _current_values(self) -> dict[str, object]:
         """What the fields hold now, in the shape the core saves."""
@@ -513,8 +368,6 @@ class SettingsPage(Page):
     def _values_from(self, settings: Mapping[str, object]) -> dict[str, object]:
         """The saved ``settings`` in the same shape as ``_current_values`` (same defaults)."""
         rules = _as_mapping(settings.get("triggers"))
-        modes = _as_mapping(rules.get("modes"))
-        text = rules.get("rules_text")
         return {
             "answer_questions_from_game": _as_bool(
                 settings.get("answer_questions_from_game"), True
@@ -525,37 +378,13 @@ class SettingsPage(Page):
             "use_claude_chats": _as_bool(settings.get("use_claude_chats"), True),
             **{key: _as_bool(settings.get(key), True) for key in TOOL_KEYS},
             "triggers": {
-                "modes": {kind: modes.get(kind, "off") for kind in self.mode_boxes},
-                "every_minutes": _as_int(rules.get("every_minutes"), 0),
-                "cooldown_minutes": _as_int(rules.get("cooldown_minutes"), 10),
+                "on_save": rules.get("on_save", "notify"),
                 "quiet_in_instances": _as_bool(rules.get("quiet_in_instances"), True),
-                "quiet_from_hour": _hour_or_none(rules.get("quiet_from_hour")),
-                "quiet_to_hour": _hour_or_none(rules.get("quiet_to_hour")),
-                "use_triage": _as_bool(rules.get("use_triage"), False),
-                "rules_text": text if isinstance(text, str) else "",
             },
         }
 
-    def _trigger_problem(self) -> str | None:
-        """A plain message when the trigger fields hold something that cannot work."""
-        minutes = self.timer_minutes.value()
-        if minutes != 0 and not MIN_TIMER_MINUTES <= minutes <= MAX_TIMER_MINUTES:
-            return TIMER_PROBLEM
-        if (self.quiet_from.value() == NO_HOUR) != (self.quiet_to.value() == NO_HOUR):
-            return QUIET_PROBLEM
-        return None
-
     def _trigger_values(self) -> dict[str, object]:
-        def hour(box: QSpinBox) -> int | None:
-            return None if box.value() == NO_HOUR else box.value()
-
         return {
-            "modes": {kind: box.currentData() for kind, box in self.mode_boxes.items()},
-            "every_minutes": self.timer_minutes.value(),
-            "cooldown_minutes": self.cooldown.value(),
+            "on_save": self.on_save_box.currentData(),
             "quiet_in_instances": self.quiet_instances.check.isChecked(),
-            "quiet_from_hour": hour(self.quiet_from),
-            "quiet_to_hour": hour(self.quiet_to),
-            "use_triage": self.use_triage.check.isChecked(),
-            "rules_text": self.rules_text.toPlainText(),
         }

@@ -5,11 +5,10 @@ import os
 import sys
 import threading
 import webbrowser
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TextIO
 
-from wow_coach.ai.base import AIError
 from wow_coach.ai.chatgpt_plan import ChatGPTPlan
 from wow_coach.alerts import SystemAlerts
 from wow_coach.app.core import AppCore
@@ -18,7 +17,6 @@ from wow_coach.app.server import CoachServer
 from wow_coach.app.watcher import Watcher
 from wow_coach.app_settings import settings_path
 from wow_coach.companion import LiveCoach, build_sign_in, build_usage_log
-from wow_coach.engine.model import choose_small_model
 from wow_coach.importers.claude_code import claude_projects_dir
 
 SNAP_HINT = "If your browser shows an error or does not open, paste the link above into it."
@@ -96,22 +94,5 @@ def build_core(wow_dir: Path, environ: Mapping[str, str]) -> AppCore:
         settings_file=settings_file,
         wow_dir=wow_dir,
         usage=usage,
-        triage_provider=plan,
-        small_model=_small_model_finder(plan),
         claude_projects_dir=claude_projects_dir(environ),
     )
-
-
-def _small_model_finder(plan: ChatGPTPlan) -> Callable[[], str | None]:
-    """A function giving the small model for triage; the plan's list is fetched only once."""
-    cache: list[str | None] = []
-
-    def find() -> str | None:
-        if not cache:
-            try:
-                cache.append(choose_small_model([m.slug for m in plan.list_models()]))
-            except AIError:
-                return None  # not signed in, or offline: skip triage this time, try again later
-        return cache[0]
-
-    return find

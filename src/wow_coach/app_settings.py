@@ -51,7 +51,7 @@ class AppSettings:
     save_notes: bool = True
     # Show what the coach looked up under its answers (and live while it works).
     show_lookups: bool = True
-    # When the coach speaks up by itself (deaths, level-ups, a timer...). Manual by default.
+    # "When the game saves": what the coach tells you after a save (notes, optionally advice).
     triggers: TriggerSettings = field(default_factory=TriggerSettings)
 
 

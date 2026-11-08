@@ -15,7 +15,6 @@ from pathlib import Path
 
 from wow_coach.advice.contract import AdviceAnswer, AdviceFile, CharacterAdvice
 from wow_coach.advice.serialize import advice_to_lua
-from wow_coach.ai.base import Provider
 from wow_coach.ai.chatgpt_plan import PlanModel
 from wow_coach.app.core import AppCore
 from wow_coach.app.events import Mailbox
@@ -192,8 +191,6 @@ def make_rig(
     tmp_path: Path,
     *,
     signed_in: bool = True,
-    triage_provider: Provider | None = None,
-    small_model: str | None = "model-luna",
     claude_projects_dir: Path | None = None,
 ) -> Rig:
     wow_dir = tmp_path / "wow"
@@ -211,8 +208,6 @@ def make_rig(
         settings_file=settings_file,
         wow_dir=wow_dir,
         usage=FakeUsage(),
-        triage_provider=triage_provider,
-        small_model=lambda: small_model,
         claude_projects_dir=claude_projects_dir,
     )
     return Rig(core, coach, signin, alerts, wow_dir, settings_file)

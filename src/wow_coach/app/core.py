@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Protocol
 
 from wow_coach.advice.contract import MAX_TITLE_CHARS, AdviceAnswer
-from wow_coach.ai.base import AIError, PlanLimitReached, Provider
+from wow_coach.ai.base import AIError, PlanLimitReached
 from wow_coach.app.baseline import AdviceBaseline
 from wow_coach.app.contract import Alerts, SignIn
 from wow_coach.app.events import EventBus
@@ -45,7 +45,6 @@ from wow_coach.engine.conversation import (
 )
 from wow_coach.errors import WowCoachError
 from wow_coach.importers.claude_code import import_claude_chats
-from wow_coach.triggers.state import STATE_FILE_NAME
 
 _log = logging.getLogger(__name__)
 
@@ -91,9 +90,6 @@ class AppCore:
         settings_file: Path,
         wow_dir: Path,
         usage: CallCounter,
-        triage_provider: Provider | None = None,
-        small_model: Callable[[], str | None] | None = None,
-        trigger_state_file: Path | None = None,
         claude_projects_dir: Path | None = None,
     ) -> None:
         """Create the core.
@@ -106,9 +102,6 @@ class AppCore:
             settings_file: Where ``settings.json`` is saved.
             wow_dir: The game folder.
             usage: Counts recent AI calls (``UsageLog``).
-            triage_provider: The AI used for the optional triage step (None = no triage).
-            small_model: Gives the small model's name for triage (None = no triage).
-            trigger_state_file: Where cooldowns are remembered (default: next to settings).
             claude_projects_dir: Claude Code's ``projects`` folder, where the player's Claude
                 coach chats are read from (None = do not import them).
         """
@@ -127,10 +120,7 @@ class AppCore:
         self._settings = load_settings(settings_file)
         self._settings_lock = threading.Lock()
         self._usage = usage
-        self.triage_provider = triage_provider
         self._welcome_file = settings_file.with_name(WELCOME_FILE_NAME)
-        self._small_model = small_model
-        self.trigger_state_file = trigger_state_file or settings_file.with_name(STATE_FILE_NAME)
         self._signin_busy = threading.Lock()
         # (character, question id) pairs already answered: a question is never answered twice.
         self._answered: set[tuple[str, str]] = set()
@@ -415,10 +405,6 @@ class AppCore:
                 "question",
                 {"character": character_key, "questions": [question_to_json(q) for q in found]},
             )
-
-    def small_model(self) -> str | None:
-        """The small model's name for triage, or None when unknown."""
-        return None if self._small_model is None else self._small_model()
 
     def notify_text(self, text: str) -> None:
         """A desktop notification for something the coach noticed (if notifications are on)."""
