@@ -481,7 +481,9 @@ def _collect_item(item: object, result: StreamResult, sources: dict[str, None]) 
             result.tool_calls.append(_tool_call_from(item))
     elif kind == "web_search_call":
         if len(result.web_searches) < MAX_OUTPUT_ITEMS:
-            result.web_searches.append(WebSearch(queries=_queries_from(item)))
+            result.web_searches.append(
+                WebSearch(queries=_queries_from(item), sources=_opened_page(item, result))
+            )
     elif kind == "message":
         # The final message repeats its citations; the annotation events may be missing.
         content = item.get("content")
@@ -522,6 +524,22 @@ def _queries_from(item: Mapping[str, Any]) -> tuple[str, ...]:
     return tuple(found)
 
 
+def _opened_page(item: Mapping[str, Any], result: StreamResult) -> tuple[str, ...]:
+    """The page a ``web_search_call`` step opened or searched in, if it is a new web address.
+
+    With JSON answers the text carries no citations, so these steps are the only record of
+    which pages the search actually read (seen on the plan route, 2026-11-08).
+    """
+    action = item.get("action")
+    if not isinstance(action, dict) or action.get("type") not in ("open_page", "find_in_page"):
+        return ()
+    url = action.get("url")
+    if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+        return ()
+    already = {seen for search in result.web_searches for seen in search.sources}
+    return () if url in already else (url,)
+
+
 def _remember_source(annotation: object, sources: dict[str, None]) -> None:
     if isinstance(annotation, dict) and annotation.get("type") == "url_citation":
         url = annotation.get("url")
@@ -533,12 +551,12 @@ def _attach_sources(result: StreamResult, sources: dict[str, None]) -> None:
     """Put the cited addresses on the last search (the citations don't say which one)."""
     if not sources:
         return
-    cited = tuple(sources)
     if result.web_searches:
         last = result.web_searches[-1]
-        result.web_searches[-1] = WebSearch(last.queries, cited)
+        cited = tuple(url for url in sources if url not in last.sources)
+        result.web_searches[-1] = WebSearch(last.queries, (*last.sources, *cited))
     else:
-        result.web_searches.append(WebSearch(sources=cited))
+        result.web_searches.append(WebSearch(sources=tuple(sources)))
 
 
 def _events(lines: Iterator[str]) -> Iterator[dict[str, Any]]:

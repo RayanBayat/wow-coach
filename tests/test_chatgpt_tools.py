@@ -204,6 +204,30 @@ def test_citations_in_the_final_message_item_count_too() -> None:
     assert found.queries == () and found.sources == ("https://example.test/b",)
 
 
+def test_pages_the_web_search_opened_are_sources() -> None:
+    # Seen on the real plan route (2026-11-08): with JSON answers there are no citations in
+    # the text, but each page the search opens arrives as an "open_page" step with its URL.
+    search = {
+        "type": "web_search_call",
+        "action": {"type": "search", "queries": ["wow forever mage spells"]},
+    }
+    opened = {
+        "type": "web_search_call",
+        "action": {"type": "open_page", "url": "https://forever.example.test/mage"},
+    }
+    looked = {
+        "type": "web_search_call",
+        "action": {"type": "find_in_page", "url": "https://forever.example.test/mage"},
+    }
+    sneaky = {"type": "web_search_call", "action": {"type": "open_page", "url": "javascript:x"}}
+    result = read(
+        item_done(search), item_done(opened), item_done(looked), item_done(sneaky), completed()
+    )
+    sources = [url for found in result.web_searches for url in found.sources]
+    assert sources == ["https://forever.example.test/mage"]
+    assert result.web_searches[0].queries == ("wow forever mage spells",)
+
+
 def test_odd_items_do_not_break_a_finished_answer() -> None:
     result = read(item_done({"type": "something_new"}), item_done("nope"), delta("ok"), completed())  # type: ignore[arg-type]
     assert result.text == "ok" and result.replay == [] and result.tool_calls == []
