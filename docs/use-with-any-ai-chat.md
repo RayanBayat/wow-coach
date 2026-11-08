@@ -16,8 +16,8 @@ everything in your bags, gear, spells, action bars, reputations and more. It is 
 data, with no instructions for the AI, so you decide what to ask.
 
 **To include your bank, mail and recipes:** the game only shows these while their window is
-open. Open your bank, a mailbox and each profession window once (and type `/played` for your
-play time); the addon remembers what it saw and includes it from then on.
+open. Open your bank, a mailbox and each profession window once; the addon remembers what it
+saw and includes it from then on. Your play time is included by itself.
 
 **If it didn't work:** if `/coach copy` says nothing, the addon isn't loaded (see
 [the install guide, step 6](install-the-addon.md)). If the text isn't selected, click inside

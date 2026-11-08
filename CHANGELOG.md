@@ -6,6 +6,12 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Play time stays up to date without typing `/played`: the addon asks the game for it after
+  you log in, after a `/reload` and after a level-up, and keeps the answer out of your chat
+  window ([#9](https://github.com/RayanBayat/wow-coach/issues/9)).
+
 ### Fixed
 
 - Logging out or quitting no longer replaces your last good snapshot with an almost empty one

@@ -414,6 +414,20 @@ local function installFakeGame()
     -- hooksecurefunc runs a function right after one of the game's own.
     Logout = function() end
     Quit = function() end
+    -- Timers: C_Timer.After only queues the function; runTimers() runs the queue,
+    -- like the game does a moment later.
+    pendingTimers = {}
+    C_Timer = { After = function(_, callback) table.insert(pendingTimers, callback) end }
+    -- /played: the game answers with TIME_PLAYED_MSG, which every chat window shows.
+    playedRequests = 0
+    RequestTimePlayed = function() playedRequests = playedRequests + 1 end
+    Constants.ChatFrameConstants = { MaxChatWindows = 2 }
+    local chatEvents = { TIME_PLAYED_MSG = true }
+    ChatFrame1 = {
+        IsEventRegistered = function(_, eventName) return chatEvents[eventName] == true end,
+        RegisterEvent = function(_, eventName) chatEvents[eventName] = true end,
+        UnregisterEvent = function(_, eventName) chatEvents[eventName] = nil end,
+    }
     hooksecurefunc = function(name, hook)
         local original = _G[name]
         _G[name] = function(...)
@@ -434,6 +448,15 @@ local function unloadCharacter()
     C_Container.GetContainerNumSlots = function() return 0 end
     C_Container.GetContainerNumFreeSlots = function() return 0 end
     C_SpellBook.GetSpellBookSkillLineInfo = function() return nil end
+end
+
+-- Run every queued timer (timers queued while running wait for the next call).
+local function runTimers()
+    local due = pendingTimers
+    pendingTimers = {}
+    for _, callback in ipairs(due) do
+        callback()
+    end
 end
 
 local function fire(eventName, ...)
@@ -832,7 +855,59 @@ check(partial[1].questsDone == nil, "unknown quests are nil, not zero")
 
 
 -------------------------------------------------------------------------------
--- Test 5: a real logout, when the game has already unloaded the character
+-- Test 5: play time without typing /played
+-------------------------------------------------------------------------------
+
+installFakeGame()
+loadAddon()
+now = FAKE_NOW
+time = function() return now end
+fire("PLAYER_ENTERING_WORLD", true, false)   -- logging in
+check(playedRequests == 0, "play time is not asked for during the loading screen")
+runTimers()
+check(playedRequests == 1, "play time is asked for a moment after logging in")
+check(not ChatFrame1:IsEventRegistered("TIME_PLAYED_MSG"), "the chat window won't show the answer")
+fire("TIME_PLAYED_MSG", 7200, 1800)
+runTimers()
+check(ChatFrame1:IsEventRegistered("TIME_PLAYED_MSG"), "after the answer, /played shows in chat again")
+
+now = FAKE_NOW + 600                         -- 10 minutes of play later
+SlashCmdList.COACHLINK("")
+local played = CoachLinkDB.characters["Testchar-Testrealm"].snapshot.timePlayed
+check(played.total == 7800 and played.thisLevel == 2400 and played.seenAt == FAKE_NOW + 600,
+    "play time from this session is moved forward to the save time")
+
+loadAddon()                                  -- after the reload
+fire("PLAYER_ENTERING_WORLD", false, true)
+runTimers()
+check(playedRequests == 2, "play time is asked for again after a reload")
+fire("PLAYER_ENTERING_WORLD", false, false)  -- a dungeon portal's loading screen
+runTimers()
+check(playedRequests == 2, "a loading screen inside the game does not ask again")
+fire("TIME_PLAYED_MSG", 7800, 2400)
+now = FAKE_NOW + 900
+fire("PLAYER_LEVEL_UP", 8)                   -- 5 minutes later: level 8
+runTimers()
+check(playedRequests == 3, "a level-up asks again, since the time at this level restarts")
+now = FAKE_NOW + 960
+SlashCmdList.COACHLINK("")
+played = CoachLinkDB.characters["Testchar-Testrealm"].snapshot.timePlayed
+check(played.total == 8160 and played.thisLevel == 60, "after a level-up the level time restarts at 0")
+
+-- No answer at all: the chat window must not stay quiet forever.
+installFakeGame()
+loadAddon()
+fire("PLAYER_ENTERING_WORLD", true, false)
+runTimers()                                  -- asks
+runTimers()                                  -- the wait for the answer runs out
+check(ChatFrame1:IsEventRegistered("TIME_PLAYED_MSG"), "without an answer, chat shows /played again")
+-- The player types /played themselves: the answer is saved and shows in chat as usual.
+fire("TIME_PLAYED_MSG", 100, 50)
+check(ChatFrame1:IsEventRegistered("TIME_PLAYED_MSG"), "the player's own /played is not hidden")
+
+
+-------------------------------------------------------------------------------
+-- Test 6: a real logout, when the game has already unloaded the character
 -------------------------------------------------------------------------------
 
 local function savedCharacter() return CoachLinkDB.characters["Testchar-Testrealm"] end

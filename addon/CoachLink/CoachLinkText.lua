@@ -216,7 +216,7 @@ local function characterLines(snapshot, now)
     local played = snapshot.timePlayed
     if played and played.total then
         table.insert(lines, "Time played: " .. durationText(played.total) .. " (this level "
-            .. durationText(played.thisLevel or 0) .. "; from /played " .. agoText(played.seenAt, now) .. ")")
+            .. durationText(played.thisLevel or 0) .. "; as of " .. agoText(played.seenAt, now) .. ")")
     end
     if snapshot.achievementPoints then
         table.insert(lines, "Achievement points: " .. snapshot.achievementPoints)

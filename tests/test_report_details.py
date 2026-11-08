@@ -45,7 +45,7 @@ def test_character_section() -> None:
         "**Faction:** Horde",
         "**Guild:** Brill Knitting Club (rank Member)",
         "**Resting:** yes (in an inn or a city, rested XP builds up)",
-        "**Time played:** 2 h 0 min (this level 30 min, from /played 10 min ago)",
+        "**Time played:** 2 h 0 min (this level 30 min, as of 10 min ago)",
         "**Achievement points:** 10",
     ]
 

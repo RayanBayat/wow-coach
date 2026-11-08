@@ -41,7 +41,7 @@ def character_section(snapshot: Table, now: float) -> str:
     if total is not None:
         level = as_number(played.get("thisLevel")) or 0
         seen_at = as_number(played.get("seenAt"))
-        when = f", from /played {format_age(now - seen_at)}" if seen_at is not None else ""
+        when = f", as of {format_age(now - seen_at)}" if seen_at is not None else ""
         parts.append(
             f"**Time played:** {format_time_span(total)} "
             f"(this level {format_time_span(level)}{when})"

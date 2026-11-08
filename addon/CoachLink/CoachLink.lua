@@ -16,8 +16,9 @@ How it works, in plain words:
   * A few things can only be read while a window is open: the bank, the
     mailbox and each profession's recipe list. The addon reads them when you
     open that window and keeps the last thing it saw (with the time) in every
-    snapshot. The same goes for your play time, which the game only tells
-    addons when you type /played.
+    snapshot. Play time is only told to addons as the answer to /played, so
+    the addon asks for it itself (after login, /reload and level-ups) and
+    keeps that answer out of the chat window.
   * /coach saves a snapshot right now by reloading the UI (takes a few seconds).
   * /coach copy shows the character as plain text in a window, to paste into
     any AI chat. It reads the game right now, so it needs no reload. The
@@ -91,6 +92,10 @@ local MAX_ACTION_SLOTS = 180     -- every action bar slot the game has
 local MAX_AURAS = 40             -- buffs or debuffs read per kind
 local MAX_MAIL_ATTACHMENTS = 16  -- attachments per letter (ATTACHMENTS_MAX_RECEIVE)
 local MAX_LEVEL = 60             -- Forever's level cap: below it, every level needs XP
+-- Asking the game for the play time: wait this long after a loading screen or a
+-- level-up first, and show /played answers in chat again if none came this long after.
+local PLAYED_ASK_DELAY_SECONDS = 3
+local PLAYED_ANSWER_WAIT_SECONDS = 10
 
 -- Why the next snapshot is taken. /coach sets this to "coach" before reloading.
 local pendingReason = "logout"
@@ -846,12 +851,78 @@ local function readRecipes()
     rememberRecipes(profession)
 end
 
+-- The play time right now. Play time runs while you are logged in, so an answer
+-- from this session is moved forward to now. One from the saved snapshot is not:
+-- we can't know how long you were offline since.
+local function currentTimePlayed()
+    local played = seen.timePlayed
+    if not played then
+        return lastSeen("timePlayed")
+    end
+    local passed = time() - played.seenAt
+    return { total = played.total + passed, thisLevel = played.thisLevel + passed, seenAt = time() }
+end
+
+-- Asking for the play time ourselves (like typing /played), without the answer
+-- showing in chat. Chat windows print every TIME_PLAYED_MSG, so the windows that
+-- listen to it stop listening until our answer has arrived. `playedQuestion` is
+-- that question while it is out: { quietWindows = the windows to turn back on }.
+local playedQuestion = nil
+
+-- The chat windows (ChatFrame1, ChatFrame2...) that exist.
+local function chatWindows()
+    local chatConstants = Constants and Constants.ChatFrameConstants
+    local count = (chatConstants and chatConstants.MaxChatWindows) or NUM_CHAT_WINDOWS or 10
+    local windows = {}
+    for index = 1, count do
+        local window = _G["ChatFrame" .. index]
+        if window and window.IsEventRegistered then
+            table.insert(windows, window)
+        end
+    end
+    return windows
+end
+
+-- Let the chat windows show /played answers again, if `question` is still the open one.
+local function closePlayedQuestion(question)
+    if playedQuestion ~= question then
+        return  -- already closed, or a newer question is out
+    end
+    for _, window in ipairs(question.quietWindows) do
+        window:RegisterEvent("TIME_PLAYED_MSG")
+    end
+    playedQuestion = nil
+end
+
+local function askPlayedQuietly()
+    if playedQuestion or not RequestTimePlayed then
+        return
+    end
+    local question = { quietWindows = {} }
+    for _, window in ipairs(chatWindows()) do
+        if window:IsEventRegistered("TIME_PLAYED_MSG") then
+            window:UnregisterEvent("TIME_PLAYED_MSG")
+            table.insert(question.quietWindows, window)
+        end
+    end
+    playedQuestion = question
+    RequestTimePlayed()
+    -- If no answer comes, don't leave /played silent in chat.
+    C_Timer.After(PLAYED_ANSWER_WAIT_SECONDS, function() closePlayedQuestion(question) end)
+end
+
+-- Ask a moment from now: right after a loading screen or a level-up the game may
+-- not be ready to answer.
+local function askPlayedSoon()
+    C_Timer.After(PLAYED_ASK_DELAY_SECONDS, askPlayedQuietly)
+end
+
 -- Copy everything remembered into the snapshot.
 local function copyRemembered(snapshot)
     snapshot.bank = lastSeen("bank")
     snapshot.mail = lastSeen("mail")
     snapshot.recipes = lastSeen("recipes")
-    snapshot.timePlayed = lastSeen("timePlayed")
+    snapshot.timePlayed = currentTimePlayed()
 end
 
 -- The snapshot section: what was remembered, plus any problems reading it.
@@ -1044,16 +1115,25 @@ local handlers = {}
 -- Note: snapshots are only taken in PLAYER_LOGOUT. WoW writes the file only at
 -- logout or /reload anyway, so a snapshot taken earlier would just be replaced.
 
--- Fires on login and on every loading screen (isInitialLogin is false on /reload).
-function handlers.PLAYER_ENTERING_WORLD(isInitialLogin)
+-- Fires on login, after /reload and on every loading screen (dungeon portals...).
+function handlers.PLAYER_ENTERING_WORLD(isInitialLogin, isReloadingUi)
     if isInitialLogin then
         addHistory("login", "Logged in")
+    end
+    if isInitialLogin or isReloadingUi then
+        askPlayedSoon()  -- so every snapshot has the play time without typing /played
     end
 end
 
 function handlers.PLAYER_LEVEL_UP(newLevel)
     -- While this event runs, UnitLevel still returns the old level.
     addHistory("level", "Reached level " .. tostring(newLevel), { level = newLevel })
+    -- The time at this level starts again at 0.
+    local played = currentTimePlayed()
+    if played and seen.timePlayed then
+        seen.timePlayed = { total = played.total, thisLevel = 0, seenAt = time() }
+    end
+    askPlayedSoon()
 end
 
 function handlers.PLAYER_DEAD()
@@ -1103,9 +1183,15 @@ function handlers.TRADE_SKILL_LIST_UPDATE()
     rememberSafely("recipes", readRecipes)
 end
 
--- The answer to /played: total play time and time at this level, in seconds.
+-- The answer to /played (ours or the player's): total play time and time at this
+-- level, in seconds.
 function handlers.TIME_PLAYED_MSG(totalSeconds, levelSeconds)
     seen.timePlayed = { total = totalSeconds, thisLevel = levelSeconds, seenAt = time() }
+    local question = playedQuestion
+    if question then
+        -- On the next frame: a window turned back on during this event could still show it.
+        C_Timer.After(0, function() closePlayedQuestion(question) end)
+    end
 end
 
 -- Fires right before WoW writes SavedVariables: on logout, /reload and exit.
@@ -1276,7 +1362,7 @@ SlashCmdList.COACHLINK = function(argument)
         say("/coach: save your character for the coach on this PC (reloads the UI, a few seconds).")
         say("/coach copy (or /coach export): show your character as text to copy into any AI chat. No reload.")
         say("/coach help: show this list.")
-        say("The bank, mailbox and recipes are saved when you open them; play time when you type /played.")
+        say("The bank, mailbox and recipes are saved when you open them. Play time is saved by itself.")
         return
     end
     if argument == "copy" or argument == "export" then

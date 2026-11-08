@@ -285,7 +285,7 @@ Otherwise give landmarks ("inside the inn") and the NPC's title.
   collapsed quest-log header are not saved (factions under a collapsed reputation header
   neither). There is no live combat data.
 - The bank, mailbox and recipe lists are only as fresh as the last time the player opened
-  that window, and play time as the last `/played`. The report shows "seen ... ago".
+  that window. The report shows "seen ... ago". Play time updates by itself (addon 0.7.0+).
 - Project and install help: https://github.com/RayanBayat/wow-coach
 
 ## Notes templates

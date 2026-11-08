@@ -106,7 +106,7 @@ CoachLinkDB = {
 | `gear` | list | One item (see below) per worn slot, plus `slot` (`"Chest"`), `durability` and `durabilityMax` |
 | `bank` | table | Remembered. `{ seenAt, containers = list of container }`; a container from the account bank has `account = true` |
 | `mail` | table | Remembered. `{ seenAt, letters = list of { sender, subject, money, cod, daysLeft, items = list of { name, count, quality } } }` |
-| `timePlayed` | table | Remembered from `/played`: `{ total, thisLevel, seenAt }` (seconds) |
+| `timePlayed` | table | Play time: `{ total, thisLevel, seenAt }` (seconds). The addon asks the game for it (see "Remembered fields") |
 | `spells` | list | Names of learned, active spells (strings) |
 | `spellBook` | list | Every learned spellbook entry: `{ tab, name, rank, passive (bool) }` |
 | `reputations` | list | `{ name, group, standing, value, max, atWar }`: `standing` is the game's word (`"Friendly"`), `value`/`max` the progress inside it. A header the player collapsed in the reputation window is `{ name, collapsed = true }`, because the game hides its factions |
@@ -130,9 +130,18 @@ game's words (`"Armor"`/`"Cloth"`, `"Tradeskill"`/`"Cloth"`); `equipSlot` (`"Che
 `sellPrice` is copper for one item; `noValue` means vendors won't buy it.
 
 **Remembered fields.** The bank, the mailbox and the recipe lists can only be read while
-that window is open, and play time only arrives when the player types `/played`. The addon
-reads them at that moment and copies the last thing it saw (with `seenAt`, Unix time) into
-every snapshot, so they can be days old. Missing means "never seen yet".
+that window is open. The addon reads them at that moment and copies the last thing it saw
+(with `seenAt`, Unix time) into every snapshot, so they can be days old. Missing means
+"never seen yet".
+
+Play time only reaches addons as the answer to `/played` (the `TIME_PLAYED_MSG` event). The
+addon asks for it itself with `RequestTimePlayed()` 3 seconds after logging in, after a
+`/reload` and after a level-up. Every chat window prints that answer, so the windows that
+listen to `TIME_PLAYED_MSG` stop listening until the answer has arrived (or 10 seconds have
+passed), then listen again; the player's own `/played` still shows as usual. An answer from
+this session is moved forward to the save time (play time runs while you are logged in), so
+`seenAt` is then the save time. An answer from an earlier session is not, because the
+offline time is unknown.
 
 All fields added in 0.6.0 are additive: `formatVersion` stays 1, older readers ignore them,
 and saves from older addons simply lack them.
@@ -320,8 +329,8 @@ revisited.
 - Quests under a collapsed quest-log header are not saved (`C_QuestLog.GetInfo` only walks
   shown entries). The same goes for factions under a collapsed reputation header; those
   headers are saved with `collapsed = true` so the coach can say so.
-- The bank, mailbox, recipe lists and play time are only as fresh as the last time the
-  player opened that window (or typed `/played`).
+- The bank, mailbox and recipe lists are only as fresh as the last time the player opened
+  that window.
 - The Lua test uses a fake game API, so it proves our logic, not Blizzard's behavior.
 - There is no live combat data.
 
