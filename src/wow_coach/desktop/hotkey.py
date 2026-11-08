@@ -6,8 +6,9 @@ program has the keyboard. Every system does it differently, so this file hides t
 one small class, ``GlobalHotkey``:
 
 * **Linux**: ``PortalHotkey`` asks the desktop's global-shortcuts *portal* (see
-  ``portal_bus.py``). KDE shows its own question the first time. This is the polite, official
-  way, and it works on Wayland, where programs may not grab keys by themselves.
+  ``portal_bus.py``, which uses the ``jeepney`` D-Bus library). KDE shows its own question the
+  first time. This is the polite, official way, and it works on Wayland, where programs may
+  not grab keys by themselves.
 * **Windows**: ``WindowsHotkey`` uses the ``RegisterHotKey`` system call.
 * **macOS** and anything else: ``UnavailableHotkey``. There is no global hotkey there yet; the
   tray menu and the ``wow-coach-app --toggle-overlay`` command still work.
@@ -20,16 +21,24 @@ Each hotkey has a ``status`` (``HotkeyStatus``) that the Setup page shows in pla
 
 import ctypes
 import logging
-import secrets
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Final, Protocol
 
 from PySide6.QtCore import QAbstractNativeEventFilter, QByteArray, QCoreApplication, QObject, Signal
 
-from wow_coach.desktop.portal_bus import LibDBusPortal, PortalConnection, PortalError
+from wow_coach.desktop.portal_types import (
+    PortalActivated,
+    PortalBound,
+    PortalConnection,
+    PortalError,
+    PortalEvent,
+    PortalFailed,
+    PortalFailure,
+    ShortcutRequest,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -247,37 +256,59 @@ PORTAL_NO_DESKTOP_FILE: Final = (
 PORTAL_DECLINED: Final = "The key was not set up (you or the desktop said no)."
 PORTAL_WAITING: Final = "Waiting for your desktop to confirm the key. A question may be showing."
 PORTAL_BAD_KEY: Final = "That key cannot be used as a global hotkey."
+PORTAL_TIMED_OUT: Final = (
+    "Your desktop did not answer in time. Close any question it is showing, then try again."
+)
+
+# What to tell the player for each way the portal can fail.
+_FAILURE_MESSAGES: Final = {
+    PortalFailure.UNAVAILABLE: PORTAL_MISSING,
+    PortalFailure.DECLINED: PORTAL_DECLINED,
+    PortalFailure.REFUSED: PORTAL_NO_DESKTOP_FILE,
+    PortalFailure.TIMED_OUT: PORTAL_TIMED_OUT,
+}
 
 
-def new_token(prefix: str) -> str:
-    """A name only this run knows, safe to use as part of a D-Bus object path."""
-    return f"{prefix}_{secrets.token_hex(6)}"
+def connect_real_portal() -> PortalConnection:
+    """Make the real portal client (jeepney over the session bus).
+
+    The import sits inside the function on purpose: ``portal_bus`` needs ``jeepney``, which is
+    only installed on Linux, so Windows and macOS must never import it.
+    """
+    from wow_coach.desktop.portal_bus import JeepneyPortal  # noqa: PLC0415
+
+    return JeepneyPortal()
 
 
 class PortalHotkey(GlobalHotkey):
     """A hotkey through the freedesktop global-shortcuts portal.
 
-    How the portal talks, step by step (each ``Response`` arrives later, as a message):
+    How the portal talks (``portal_bus.py`` does the steps in a background thread):
 
     1. ``CreateSession``: "I'd like to register shortcuts." The answer holds the session.
     2. ``BindShortcuts``: "Please bind this key to this action." The desktop may ask the
        player; the answer says yes or no.
     3. Whenever the player presses the key the desktop sends ``Activated``.
+
+    The background thread reports what happens; the report is handed over to the Qt thread
+    with a signal, so the status and the ``activated`` signal are only touched from there.
     """
+
+    # (the connection that reported, what it reported). Emitted from the portal's thread,
+    # delivered on the Qt thread.
+    _reported = Signal(object, object)
 
     def __init__(self, connect: Callable[[], PortalConnection]) -> None:
         """Create it.
 
         Args:
-            connect: Opens the connection to the portal (raises ``PortalError``). Tests pass a
+            connect: Makes a new portal connection (raises ``PortalError``). Tests pass a
                 function that returns a fake.
         """
         super().__init__()
         self._connect = connect
         self._connection: PortalConnection | None = None
-        self._session: str | None = None
-        self._create_token = ""
-        self._bind_token = ""
+        self._reported.connect(self._on_reported)
 
     def register(self, sequence: str) -> None:
         self.unregister()
@@ -287,87 +318,42 @@ class PortalHotkey(GlobalHotkey):
             self._set_status(HotkeyState.UNAVAILABLE, PORTAL_BAD_KEY)
             return
         try:
-            connection = self._connection or self._connect()
-            self._connection = connection
-            if connection.portal_version() is None:
-                self._fail(PORTAL_MISSING)
-                return
-            connection.on_response = self._on_response
-            connection.on_activated = self._on_activated
-            self._create_token = new_token("create")
-            self._bind_token = new_token("bind")
-            self._set_status(HotkeyState.STARTING, PORTAL_WAITING)
-            connection.create_session(self._create_token, new_token("session"))
+            connection = self._connect()
         except PortalError as error:
             _log.info("The portal hotkey could not start: %s", error)
             self._fail(PORTAL_MISSING)
+            return
+        self._connection = connection
+        self._set_status(HotkeyState.STARTING, PORTAL_WAITING)
+        request = ShortcutRequest(SHORTCUT_ID, SHORTCUT_DESCRIPTION, trigger)
+        connection.start(request, lambda event: self._reported.emit(connection, event))
 
     def unregister(self) -> None:
-        connection = self._connection
-        session, self._session = self._session, None
-        self._create_token = self._bind_token = ""
-        if connection is not None:
-            if session is not None:
-                connection.close_session(session)
-            connection.on_response = None
-            connection.on_activated = None
-        self._set_status(HotkeyState.OFF)
-
-    def close(self) -> None:
-        """Stop and hang up (the app is closing)."""
-        self.unregister()
         connection, self._connection = self._connection, None
         if connection is not None:
-            connection.close()
+            connection.close()  # gives the shortcut back and hangs up
+        self._set_status(HotkeyState.OFF)
 
     def _fail(self, message: str) -> None:
         self._set_status(HotkeyState.UNAVAILABLE, message)
 
-    def _on_response(self, request_path: str, code: int, results: Mapping[str, object]) -> None:
-        token = request_path.rsplit("/", 1)[-1]
-        if token == self._create_token:
-            self._create_token = ""
-            session = results.get("session_handle")
-            if code != 0 or not isinstance(session, str):
-                self._fail(PORTAL_DECLINED if code == 1 else PORTAL_MISSING)
-                return
-            self._session = session
-            self._bind(session)
-        elif token == self._bind_token:
-            self._bind_token = ""
-            if code == 0:
-                self._set_status(HotkeyState.ACTIVE, _bound_message(results, self._sequence))
-            else:
-                self._fail(PORTAL_DECLINED if code == 1 else PORTAL_NO_DESKTOP_FILE)
-
-    def _bind(self, session: str) -> None:
-        connection = self._connection
-        trigger = portal_trigger(self._sequence)
-        if connection is None or trigger is None:
+    def _on_reported(self, connection: PortalConnection, event: PortalEvent) -> None:
+        """Handle one report on the Qt thread. Reports of an old connection are ignored."""
+        if connection is not self._connection:
             return
-        try:
-            connection.bind_shortcut(
-                session, SHORTCUT_ID, SHORTCUT_DESCRIPTION, trigger, self._bind_token
+        if isinstance(event, PortalBound):
+            self._set_status(
+                HotkeyState.ACTIVE, _bound_message(event.trigger_description, self._sequence)
             )
-        except PortalError as error:
-            _log.info("The portal refused the shortcut: %s", error)
-            self._fail(PORTAL_NO_DESKTOP_FILE)
-
-    def _on_activated(self, session: str, shortcut_id: str) -> None:
-        if session == self._session and shortcut_id == SHORTCUT_ID:
+        elif isinstance(event, PortalFailed):
+            self._fail(_FAILURE_MESSAGES[event.reason])
+        elif isinstance(event, PortalActivated) and self._status.active:
             self.activated.emit()
 
 
-def _bound_message(results: Mapping[str, object], sequence: str) -> str:
+def _bound_message(trigger_description: str, sequence: str) -> str:
     """ "Press X to ..." using the key the desktop says it bound (the player can change it)."""
-    shown = sequence
-    shortcuts = results.get("shortcuts")
-    if isinstance(shortcuts, list) and shortcuts:
-        first = shortcuts[0]
-        if isinstance(first, tuple) and len(first) == 2 and isinstance(first[1], dict):
-            description = first[1].get("trigger_description")
-            if isinstance(description, str) and description:
-                shown = description
+    shown = trigger_description or sequence
     return f"Active. Press {shown} to show or hide the overlay."
 
 
@@ -505,9 +491,7 @@ def create_hotkey(
     ``connect_portal`` and ``windows_api`` are for tests; the real ones are used otherwise.
     """
     if platform.startswith("linux"):
-        if connect_portal is None:
-            connect_portal = LibDBusPortal
-        return PortalHotkey(connect_portal)
+        return PortalHotkey(connect_portal or connect_real_portal)
     if platform == "win32":
         return WindowsHotkey(windows_api)
     if platform == "darwin":

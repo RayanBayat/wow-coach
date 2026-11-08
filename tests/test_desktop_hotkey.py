@@ -4,7 +4,8 @@ Nothing here talks to a real D-Bus, registers a real key or loads a Windows libr
 """
 
 import ctypes
-from collections.abc import Callable, Mapping
+import threading
+from collections.abc import Callable
 
 import pytest
 from pytestqt.qtbot import QtBot
@@ -21,7 +22,15 @@ from wow_coach.desktop.hotkey import (
     portal_trigger,
     windows_key,
 )
-from wow_coach.desktop.portal_bus import PortalError
+from wow_coach.desktop.portal_types import (
+    PortalActivated,
+    PortalBound,
+    PortalError,
+    PortalEvent,
+    PortalFailed,
+    PortalFailure,
+    ShortcutRequest,
+)
 
 # ---- turning key text into what each system wants -----------------------------------------
 
@@ -64,53 +73,28 @@ def test_windows_key_codes() -> None:
     assert windows_key("Ctrl+Shift+Banana") is None
 
 
-# ---- the portal, with a fake D-Bus --------------------------------------------------------
+# ---- the portal, with a fake portal client ------------------------------------------------
 
 
 class FakePortal:
-    """Stands in for the portal: records what we asked, and answers when the test says so."""
+    """Stands in for the portal client: records the request, and reports when the test says so."""
 
-    def __init__(self, *, version: int | None = 2, fail_bind_call: bool = False) -> None:
-        self.version = version
-        self.fail_bind_call = fail_bind_call
-        self.on_response: Callable[[str, int, Mapping[str, object]], None] | None = None
-        self.on_activated: Callable[[str, str], None] | None = None
-        self.calls: list[tuple[str, ...]] = []
+    def __init__(self) -> None:
+        self.request: ShortcutRequest | None = None
+        self.report: Callable[[PortalEvent], None] | None = None
         self.closed = False
 
-    def portal_version(self) -> int | None:
-        return self.version
-
-    def create_session(self, handle_token: str, session_token: str) -> None:
-        self.calls.append(("create", handle_token, session_token))
-
-    def bind_shortcut(
-        self, session: str, shortcut_id: str, description: str, trigger: str, handle_token: str
-    ) -> None:
-        if self.fail_bind_call:
-            raise PortalError("App info not found")
-        self.calls.append(("bind", session, shortcut_id, description, trigger, handle_token))
-
-    def close_session(self, session: str) -> None:
-        self.calls.append(("close", session))
+    def start(self, request: ShortcutRequest, report: Callable[[PortalEvent], None]) -> None:
+        self.request = request
+        self.report = report
 
     def close(self) -> None:
         self.closed = True
 
-    # ---- what the test plays the desktop with ----
-
-    def token_of(self, call: str) -> str:
-        """The handle token of the first ``create`` or ``bind`` call."""
-        index = 1 if call == "create" else 5
-        return next(item[index] for item in self.calls if item[0] == call)
-
-    def answer(self, call: str, code: int, results: Mapping[str, object]) -> None:
-        assert self.on_response is not None
-        path = f"/org/freedesktop/portal/desktop/request/1_2/{self.token_of(call)}"
-        self.on_response(path, code, results)
-
-
-SESSION = "/org/freedesktop/portal/desktop/session/1_2/mine"
+    def say(self, event: PortalEvent) -> None:
+        """Play the portal: report ``event`` to the hotkey."""
+        assert self.report is not None
+        self.report(event)
 
 
 def make_hotkey(portal: FakePortal) -> PortalHotkey:
@@ -118,31 +102,22 @@ def make_hotkey(portal: FakePortal) -> PortalHotkey:
 
 
 def bring_up(portal: FakePortal, key: PortalHotkey) -> None:
-    """Run the whole happy path: session created, shortcut bound."""
+    """Run the happy path: the desktop accepted the shortcut."""
     key.register("Ctrl+Shift+Space")
-    portal.answer("create", 0, {"session_handle": SESSION})
-    portal.answer("bind", 0, {})
+    portal.say(PortalBound())
 
 
 @pytest.mark.usefixtures("qtbot")
-def test_the_portal_steps_create_a_session_then_bind_the_shortcut() -> None:
+def test_registering_asks_the_portal_for_the_shortcut_and_waits() -> None:
     portal = FakePortal()
     key = make_hotkey(portal)
     key.register("Ctrl+Shift+Space")
-    assert key.status.state is HotkeyState.STARTING
-    assert [call[0] for call in portal.calls] == ["create"]
-
-    portal.answer("create", 0, {"session_handle": SESSION})
-    bind = next(call for call in portal.calls if call[0] == "bind")
-    assert bind[1:5] == (
-        SESSION,
-        "toggle-overlay",
-        "Show or hide the WoW Coach overlay",
-        "CTRL+SHIFT+space",
+    assert portal.request == ShortcutRequest(
+        "toggle-overlay", "Show or hide the WoW Coach overlay", "CTRL+SHIFT+space"
     )
     assert key.status.state is HotkeyState.STARTING  # not active until the desktop says yes
 
-    portal.answer("bind", 0, {})
+    portal.say(PortalBound())
     assert key.status.active
     assert "Ctrl+Shift+Space" in key.status.message
 
@@ -152,9 +127,7 @@ def test_the_desktops_own_wording_of_the_key_is_shown() -> None:
     portal = FakePortal()
     key = make_hotkey(portal)
     key.register("Ctrl+Shift+Space")
-    portal.answer("create", 0, {"session_handle": SESSION})
-    shortcuts = [("toggle-overlay", {"trigger_description": "Ctrl+Alt+O"})]
-    portal.answer("bind", 0, {"shortcuts": shortcuts})
+    portal.say(PortalBound("Ctrl+Alt+O"))
     assert "Ctrl+Alt+O" in key.status.message
 
 
@@ -162,72 +135,61 @@ def test_activated_toggles(qtbot: QtBot) -> None:
     portal = FakePortal()
     key = make_hotkey(portal)
     bring_up(portal, key)
-    assert portal.on_activated is not None
     with qtbot.waitSignal(key.activated, timeout=1000):
-        portal.on_activated(SESSION, "toggle-overlay")
+        portal.say(PortalActivated())
 
 
-def test_another_session_or_shortcut_is_ignored(qtbot: QtBot) -> None:
+def test_a_report_from_the_portals_thread_reaches_the_qt_thread(qtbot: QtBot) -> None:
     portal = FakePortal()
     key = make_hotkey(portal)
     bring_up(portal, key)
+    threads: list[threading.Thread] = []
+    key.activated.connect(lambda: threads.append(threading.current_thread()))
+    worker = threading.Thread(target=lambda: portal.say(PortalActivated()))
+    with qtbot.waitSignal(key.activated, timeout=2000):
+        worker.start()
+    worker.join()
+    assert threads == [threading.main_thread()]
+
+
+def test_a_press_before_the_desktop_said_yes_is_ignored(qtbot: QtBot) -> None:
+    portal = FakePortal()
+    key = make_hotkey(portal)
+    key.register("Ctrl+Shift+Space")
     heard: list[bool] = []
     key.activated.connect(lambda: heard.append(True))
-    assert portal.on_activated is not None
-    portal.on_activated("/some/other/session", "toggle-overlay")
-    portal.on_activated(SESSION, "something-else")
+    portal.say(PortalActivated())
     qtbot.wait(20)
     assert heard == []
 
 
+@pytest.mark.parametrize(
+    ("reason", "words"),
+    [
+        (PortalFailure.UNAVAILABLE, "portal"),
+        (PortalFailure.DECLINED, "not set up"),
+        (PortalFailure.REFUSED, "app menu"),
+        (PortalFailure.TIMED_OUT, "did not answer"),
+    ],
+)
 @pytest.mark.usefixtures("qtbot")
-def test_no_portal_falls_back_with_a_reason() -> None:
-    key = make_hotkey(FakePortal(version=None))
+def test_every_failure_becomes_a_plain_status(reason: PortalFailure, words: str) -> None:
+    portal = FakePortal()
+    key = make_hotkey(portal)
     key.register("Ctrl+Shift+Space")
+    portal.say(PortalFailed(reason))
     assert key.status.state is HotkeyState.UNAVAILABLE
-    assert "portal" in key.status.message
+    assert words in key.status.message
 
 
 @pytest.mark.usefixtures("qtbot")
-def test_no_session_bus_falls_back() -> None:
+def test_no_portal_client_falls_back() -> None:
     def refuse() -> FakePortal:
-        raise PortalError("no session bus")
+        raise PortalError("jeepney is missing")
 
     key = PortalHotkey(refuse)
     key.register("Ctrl+Shift+Space")
     assert key.status.state is HotkeyState.UNAVAILABLE
-
-
-@pytest.mark.usefixtures("qtbot")
-def test_the_player_saying_no_falls_back() -> None:
-    portal = FakePortal()
-    key = make_hotkey(portal)
-    key.register("Ctrl+Shift+Space")
-    portal.answer("create", 0, {"session_handle": SESSION})
-    portal.answer("bind", 1, {})  # 1 = the player cancelled
-    assert key.status.state is HotkeyState.UNAVAILABLE
-    assert "not set up" in key.status.message
-
-
-@pytest.mark.usefixtures("qtbot")
-def test_a_desktop_that_does_not_know_the_app_falls_back_and_says_what_to_do() -> None:
-    portal = FakePortal(fail_bind_call=True)
-    key = make_hotkey(portal)
-    key.register("Ctrl+Shift+Space")
-    portal.answer("create", 0, {"session_handle": SESSION})
-    assert key.status.state is HotkeyState.UNAVAILABLE
-    assert "app menu" in key.status.message
-
-
-@pytest.mark.usefixtures("qtbot")
-def test_a_refused_bind_answer_falls_back() -> None:
-    portal = FakePortal()
-    key = make_hotkey(portal)
-    key.register("Ctrl+Shift+Space")
-    portal.answer("create", 0, {"session_handle": SESSION})
-    portal.answer("bind", 2, {})  # 2 = something else went wrong
-    assert key.status.state is HotkeyState.UNAVAILABLE
-    assert "app menu" in key.status.message
 
 
 @pytest.mark.usefixtures("qtbot")
@@ -236,30 +198,32 @@ def test_a_bad_key_is_refused_before_asking_the_desktop() -> None:
     key = make_hotkey(portal)
     key.register("Ctrl+")
     assert key.status.state is HotkeyState.UNAVAILABLE
-    assert portal.calls == []
+    assert portal.request is None
 
 
 @pytest.mark.usefixtures("qtbot")
-def test_changing_the_key_closes_the_old_session_and_opens_a_new_one() -> None:
-    portal = FakePortal()
-    key = make_hotkey(portal)
-    bring_up(portal, key)
-    portal.calls.clear()
-    key.register("Ctrl+Alt+F9")
-    assert portal.calls[0] == ("close", SESSION)
-    assert portal.calls[1][0] == "create"
-
-
-@pytest.mark.usefixtures("qtbot")
-def test_a_late_answer_for_an_old_registration_is_ignored() -> None:
-    portal = FakePortal()
-    key = make_hotkey(portal)
+def test_changing_the_key_closes_the_old_connection_and_starts_a_new_one() -> None:
+    portals = [FakePortal(), FakePortal()]
+    first, second = portals[1], portals[0]  # `pop` hands out the last one first
+    key = PortalHotkey(portals.pop)
     key.register("Ctrl+Shift+Space")
-    old_token = portal.token_of("create")
     key.register("Ctrl+Alt+F9")
-    assert portal.on_response is not None
-    portal.on_response(f"/x/request/1_2/{old_token}", 0, {"session_handle": SESSION})
-    assert [call[0] for call in portal.calls].count("bind") == 0
+    assert first.closed
+    assert second.request is not None
+    assert second.request.trigger == "CTRL+ALT+F9"
+
+
+@pytest.mark.usefixtures("qtbot")
+def test_a_late_report_from_an_old_connection_is_ignored() -> None:
+    portals = [FakePortal(), FakePortal()]
+    key = PortalHotkey(portals.pop)
+    old, new = portals[1], portals[0]
+    key.register("Ctrl+Shift+Space")  # takes `old`
+    key.register("Ctrl+Alt+F9")  # takes `new`
+    old.say(PortalBound())
+    assert key.status.state is HotkeyState.STARTING
+    new.say(PortalBound())
+    assert key.status.active
 
 
 @pytest.mark.usefixtures("qtbot")
@@ -268,7 +232,6 @@ def test_unregister_and_close_hang_up() -> None:
     key = make_hotkey(portal)
     bring_up(portal, key)
     key.close()
-    assert ("close", SESSION) in portal.calls
     assert portal.closed
     assert key.status.state is HotkeyState.OFF
 
