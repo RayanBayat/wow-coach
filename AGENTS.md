@@ -11,9 +11,9 @@ facts. Users' docs start at `README.md`.
 
 | Path | What |
 |---|---|
-| `addon/CoachLink/` | The WoW addon (Lua 5.1): `CoachLink.toc`, `CoachLink.lua` |
-| `addon/tests/run_addon_test.lua` | Runs the addon against a fake WoW API |
-| `src/wow_coach/` | Python package: Lua-table parser, saved-file finder and loader, report (`report*.py`, incl. `report_gear_hints`), `cli`, `watch`, `notes`, saved settings (`config`, `datafolder`), `setup` (the `wow-coach setup` command), packaged-file reader (`assets`), MCP `server`; game lookups: `web` (polite fetcher), `wiki` (search, read and find-quest tools), `wikitext` (wiki markup to plain text) |
+| `addon/CoachLink/` | The WoW addon (Lua 5.1): `CoachLink.toc`, `CoachLink.lua` (snapshot, history, questions), `CoachLinkText.lua` (`/coach copy` text), `CoachLinkPanel.lua` and `Bindings.xml` (the Coach panel) |
+| `addon/tests/run_addon_test.lua`, `run_panel_test.lua` | Run the addon and the Coach panel against a fake WoW API |
+| `src/wow_coach/` | Python package: Lua-table parser, saved-file finder and loader, report (`report*.py`, incl. `report_gear_hints`), `cli`, `watch`, `notes`, saved settings (`config`, `datafolder`), `setup` (the `wow-coach setup` command), packaged-file reader (`assets`), MCP `server`; the Coach panel's questions and answers: `advice/` (contract, safe Lua writer, reader, tools); wow-coach's own AI connection: `ai/` (contract, `FakeProvider`); game lookups: `web` (polite fetcher), `wiki` (search, read and find-quest tools), `wikitext` (wiki markup to plain text) |
 | `tests/` | pytest. `test_addon_contract.py` runs the Lua test and reads its output with the Python code. `tests/fixtures/wiki/` holds real wiki responses; tests never use the network |
 | `src/wow_coach/assets/` | Claude files shipped inside the package so `wow-coach setup` can copy them: `skills/wow-coach/SKILL.md` (the Agent Skill; folder name must equal `name`) and `agents/wow-coach.md` (the Claude Code agent) |
 | `docs/` | User guides, `design.md` (how it works), `troubleshooting.md`, `glossary.md` |

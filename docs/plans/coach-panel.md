@@ -310,7 +310,7 @@ class Answer:
 | `ai/chatgpt_signin.py` | Sign in with ChatGPT: OAuth PKCE with a 127.0.0.1 loopback and a fixed port; the access token in memory, the refresh token in the keychain; sign out revokes |
 | `ai/chatgpt_plan.py` | The `ChatGPTPlan` provider: the Responses API on `api.openai.com` with the plan token, through the existing `httpx2`. Lists the models on the plan |
 | `usage.py` | A usage log (`usage.jsonl`: time, model, tokens) and the player's caps (calls per hour and per day). Stops politely at the plan's limit (HTTP 429) and says when it resets. No money is involved: it all comes out of the ChatGPT plan |
-| `secrets.py` | Keychain access (C4) with redaction helpers |
+| `keychain.py` | Keychain access (C4) with redaction helpers |
 | `coach_engine.py` | Build the prompt: coaching rules from SKILL.md, the status report, history, journal, player notes and the question. Redact other players' names. Ask for a JSON answer (steps, text, warnings). Store the conversation (`conversations/<Name-Realm>.jsonl`). Write the advice |
 | `triggers/` | Snapshot diff into events (C6), rules, cooldowns, quiet hours, timer; triage through the `Provider` interface (the smallest model on the ChatGPT plan) |
 | `app/` | `wow-coach app`: a local web page (section 7) |
@@ -418,7 +418,7 @@ class Answer:
 | 0 | Contracts, dependency pins, .toc lines, CI job for the panel test, `FakeProvider`, compliance test skeleton | shared files, `ai/base.py`, `advice/contract.py`, `triggers/contract.py`, `tests/test_compliance.py` | Opus (lead) | 0 |
 | A | Coach panel (Lua) | `addon/CoachLink/CoachLinkPanel.lua`, `addon/CoachLink/Bindings.xml`, `addon/tests/run_panel_test.lua` | Sonnet | 1 |
 | B | Advice serializer, writer, data addon install, questions reader | `src/wow_coach/advice/*` except `contract.py`, `tests/test_advice_*.py` | Sonnet | 1 |
-| D | Sign in with ChatGPT, the `ChatGPTPlan` provider, keychain, usage caps | `ai/chatgpt_signin.py`, `ai/chatgpt_plan.py`, `secrets.py`, `usage.py`, their tests | Sonnet, then an Opus security review | 1 (built during 0.8.0 as a spike, shipped in 0.9.0) |
+| D | Sign in with ChatGPT, the `ChatGPTPlan` provider, keychain, usage caps | `ai/chatgpt_signin.py`, `ai/chatgpt_plan.py`, `keychain.py`, `usage.py`, their tests | Sonnet, then an Opus security review | 1 (built during 0.8.0 as a spike, shipped in 0.9.0) |
 | F | Coach engine (prompt, redaction, JSON answers, conversations) | `coach_engine.py`, `tests/test_coach_engine.py` | Sonnet | 2 |
 | G | App window | `src/wow_coach/app/*`, `tests/test_app_*.py` | Sonnet, then an Opus security review | 2 (after F's API is merged) |
 | E | Triggers, rules, triage | `src/wow_coach/triggers/*` except `contract.py`, their tests | Sonnet | 3 (0.10.0) |

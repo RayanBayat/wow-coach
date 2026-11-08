@@ -4,6 +4,24 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **The Coach panel**: a window inside the game with your coach's next steps and answers,
+  and a box to ask your coach a question ([guide](docs/coach-panel.md)).
+  - Open it with `/coach panel`, from the minimap's addon list, or with a key binding
+    (Options, then Keybindings, then CoachLink).
+  - `/coach ask <question>` asks without opening it.
+  - It hides in combat.
+  - Restart the game once after updating: the addon has new files.
+- Two new tools for your coach (MCP): `questions_from_game` reads the questions you asked in
+  the panel, and `send_advice_to_game` shows the coach's answer and next steps in the panel.
+- `wow-coach setup` creates `Interface/AddOns/CoachLink_Advice`. That is a small data-only
+  addon where wow-coach writes the coach's answers safely; addon managers never overwrite it.
+- `wow-coach watch` says how many questions are waiting when you asked one
+  (`reason: ask; 1 open question`).
+
 ## [0.7.0] - 2026-11-08
 
 Fixes and additions from the first evenings of real play: logging out no longer empties your

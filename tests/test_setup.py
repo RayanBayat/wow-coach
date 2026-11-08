@@ -84,6 +84,10 @@ class Session:
     def addon(self) -> Path:
         return self.game / "Interface" / "AddOns" / "CoachLink"
 
+    @property
+    def advice(self) -> Path:
+        return self.game / "Interface" / "AddOns" / "CoachLink_Advice"
+
 
 @pytest.fixture
 def session(tmp_path: Path) -> Session:
@@ -130,7 +134,7 @@ def test_older_addon_is_replaced_and_the_old_copy_removed(session: Session) -> N
     assert "Version: 9.9.9" in (session.addon / "CoachLink.toc").read_text("utf-8")
     assert not (session.addon / "stale.lua").exists()
     leftovers = [item.name for item in session.addon.parent.iterdir()]
-    assert leftovers == ["CoachLink"]
+    assert sorted(leftovers) == ["CoachLink", "CoachLink_Advice"]  # no staging folders left
 
 
 def test_a_linked_addon_is_left_alone(session: Session, tmp_path: Path) -> None:
@@ -202,10 +206,35 @@ def test_failed_swap_keeps_the_old_addon_working(
     assert "Version: 0.1.0" in (session.addon / "CoachLink.toc").read_text("utf-8")
 
 
+def test_setup_creates_the_folder_for_the_coach_panel(session: Session) -> None:
+    code, text = session.run()
+    assert code == 0
+    toc = (session.advice / "CoachLink_Advice.toc").read_text("utf-8")
+    assert "## Interface:" in toc
+    assert "Advice.lua" in toc
+    assert "Coach panel" in text
+    assert "full restart" in text
+
+
+def test_second_run_keeps_the_coach_panel_folder(session: Session) -> None:
+    _, first = session.run()
+    _, both = session.run()
+    second_step_2 = both[len(first) :].split("Step 2")[1].split("Step 3")[0]
+    assert "is ready" in second_step_2
+    assert "created" not in second_step_2
+
+
+def test_no_coach_panel_folder_when_the_addon_install_failed(session: Session) -> None:
+    session.download_error = LookupFailed("network error")
+    session.run()
+    assert not session.advice.exists()
+
+
 def test_skip_addon_installs_no_addon(session: Session) -> None:
     code, text = session.run(replace(NO_CHOICES, skip_addon=True))
     assert code == 0
     assert not session.addon.exists()
+    assert not session.advice.exists()
     assert "--skip-addon" in text
 
 

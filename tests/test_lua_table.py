@@ -131,3 +131,11 @@ def test_errors_report_line_and_expectation(text: str, line: int, expected: str)
 
 def test_parse_error_is_a_project_error() -> None:
     assert issubclass(LuaParseError, WowCoachError)
+
+
+@pytest.mark.parametrize("escape", ["\\²", "\\①", "\\256", "\\999"])
+def test_a_bad_number_escape_is_a_parse_error_not_a_crash(escape: str) -> None:
+    # Only ASCII digits count, and Lua's \ddd is one byte (at most 255). A damaged file
+    # must give LuaParseError, which callers handle, never ValueError.
+    with pytest.raises(LuaParseError):
+        parse_saved_variables(f'X = "a{escape}b"')

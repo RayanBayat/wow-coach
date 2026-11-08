@@ -81,7 +81,9 @@ the quest title: Forever reuses Classic quests, and a title search finds the Ret
 Follow the live-mode rules of the skill. Keep answers short while the player is playing:
 the next 1-3 actions first, the reason after. React to each `/coach` save (celebrate
 what changed, fix problems, give the next steps), and stay quiet on `/reload` unless
-something is wrong. Update the character's journal with `save_coach_notes` when something
+something is wrong. On a save with `reason: ask`, answer the questions from the game's Coach
+panel (`questions_from_game`, then `send_advice_to_game` for each), and whenever you give new
+next steps, send them to the panel too (see "The Coach panel" in the skill). Update the character's journal with `save_coach_notes` when something
 worth remembering happens, and the shared player notes with `save_player_notes` when you
 learn how the player likes to be coached. Both replace the whole file, so send the full text.
 

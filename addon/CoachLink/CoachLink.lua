@@ -1804,13 +1804,21 @@ local function myAdvice()
     return type(mine) == "table" and mine or nil
 end
 
--- The ids of this character's questions that wow-coach has answered.
+-- The ids of this character's questions that wow-coach has answered: the list
+-- `answeredIds` (kept even after an old answer is dropped from the file), plus the
+-- questionId of every answer still in it.
 local function answeredQuestionIds()
     local ids = {}
     local mine = myAdvice()
+    local answered = mine and type(mine.answeredIds) == "table" and mine.answeredIds or {}
+    for _, id in ipairs(answered) do
+        if type(id) == "string" then
+            ids[id] = true
+        end
+    end
     local answers = mine and type(mine.answers) == "table" and mine.answers or {}
     for _, answer in ipairs(answers) do
-        if type(answer) == "table" and answer.questionId then
+        if type(answer) == "table" and type(answer.questionId) == "string" then
             ids[answer.questionId] = true
         end
     end
@@ -1884,6 +1892,7 @@ SlashCmdList.COACHLINK = function(argument)
     if command == "help" then
         say("/coach: save your character for the coach on this PC (reloads the UI, a few seconds).")
         say("/coach panel: open the Coach panel with your coach's advice; you can ask there too.")
+        say("A key for the panel: Options > Keybindings > CoachLink.")
         say("/coach ask <question>: ask your coach (saves and reloads the UI).")
         say("/coach copy (or /coach export): show your character as text to copy into any AI chat. No reload.")
         say("/coach help: show this list.")

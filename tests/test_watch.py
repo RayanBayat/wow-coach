@@ -86,6 +86,18 @@ def test_an_unloaded_save_is_called_almost_empty(tmp_path: Path) -> None:
     assert lines[0].endswith("Testchar level 6 (reason: logout; almost empty, type /coach)")
 
 
+def test_a_question_from_the_coach_panel_is_counted(tmp_path: Path) -> None:
+    file = account_file(tmp_path)
+    write(file, snapshot_file("Testchar", 7, 100), 1000)
+    asked = snapshot_file("Testchar", 7, 200, "ask").replace(
+        '["snapshot"] = {',
+        '["questions"] = {\n{\n["id"] = "200-1",\n["text"] = "Where?",\n'
+        '["askedAt"] = 200,\n},\n},\n["snapshot"] = {',
+    )
+    lines = run_watch(tmp_path, Script(lambda: write(file, asked, 2000)))
+    assert lines[0].endswith("Testchar level 7 (reason: ask; 1 open question)")
+
+
 def test_polls_every_two_seconds_and_waits_one_second_after_a_change(tmp_path: Path) -> None:
     file = account_file(tmp_path)
     write(file, snapshot_file("Testchar", 7, 100), 1000)

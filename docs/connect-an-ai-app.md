@@ -10,6 +10,9 @@ on your computer. The helper here is `wow-coach`. It gives the AI these tools:
 - `progress_summary`: how a character progressed lately (play sessions, levels, XP, gold, quests, deaths).
 - `read_coach_notes`: the coach's memory, your **player notes** (shared by all characters) and one character's **journal**.
 - `save_coach_notes`: saves one character's journal. `save_player_notes`: saves the player notes.
+- `questions_from_game`, `send_advice_to_game`: the in-game [Coach panel](coach-panel.md). The
+  first reads the questions you asked there; the second shows the coach's answer and next
+  steps inside the game (after your next `/reload`).
 - `search_wiki`, `read_wiki_page`, `find_quest`: game lookups on the [Warcraft Wiki](https://warcraft.wiki.gg).
   Use `read_wiki_page` for NPC locations, vendor stock, quest givers and rewards. It marks
   text that is Classic-only, Retail-only or Forever-only, and always gives the page link. Use

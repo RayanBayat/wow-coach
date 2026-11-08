@@ -37,6 +37,15 @@ MAX_TEXT_CHARS: Final = 4000
 MAX_WARNINGS: Final = 5
 MAX_SOURCE_CHARS: Final = 80
 MAX_FILE_BYTES: Final = 200_000
+# Question ids already answered, kept apart from the answers: answers are pushed out after
+# MAX_ANSWERS_PER_CHARACTER, but the addon keeps up to MAX_QUESTIONS_KEPT questions, and a
+# question must never look "open" again just because its answer was pushed out.
+MAX_ANSWERED_IDS: Final = 2 * MAX_QUESTIONS_KEPT
+# At most this many characters in the file; the one written to longest ago is dropped first.
+MAX_CHARACTERS: Final = 20
+# Ids and keys are compared as they are in the game, so they are checked, never changed.
+QUESTION_ID_PATTERN: Final = r"^[0-9]{1,12}-[0-9]{1,6}$"  # "<askedAt>-<counter>"
+MAX_CHARACTER_KEY_CHARS: Final = 100  # "Name-Realm"; no "|" and no control characters
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +88,8 @@ class CharacterAdvice:
     based_on_save: int | None  # savedAt of the snapshot the coach read
     answers: tuple[AdviceAnswer, ...] = ()  # oldest first, at most MAX_ANSWERS_PER_CHARACTER
     plan: CoachPlan | None = None
+    # Every question id answered so far, newest last, at most MAX_ANSWERED_IDS.
+    answered_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

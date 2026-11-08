@@ -273,8 +273,9 @@ question and does nothing in combat (`InCombatLockdown()`).
 
 - At most 20 are kept, the newest. The text is at most 500 bytes, cut on a whole letter.
 - `id` is "time-counter", unique per character.
-- A question whose `id` appears as a `questionId` in the advice file counts as answered and
-  is dropped the next time the player asks.
+- A question whose `id` is in the advice file's `answeredIds` (or is the `questionId` of an
+  answer there) counts as answered, and is dropped the next time the player asks.
+  `answeredIds` is kept separately because old answers are pushed out of the file.
 - Python: `Character.questions`.
 
 **Advice (wow-coach to game).** wow-coach writes a small data-only addon of its own into the
@@ -299,6 +300,7 @@ CoachLinkAdvice = {
           ["askedAt"] = 1794100000 },
       },
       ["plan"] = { ["goal"] = "Level 20 by Sunday", ["steps"] = { "..." }, ["updatedAt"] = 1794100090 },
+      ["answeredIds"] = { "1794100000-1" },  -- every answered question id, newest last, at most 40
     },
   },
 }
@@ -319,6 +321,42 @@ CoachLinkAdvice = {
 `CoachLinkAdvice` entry, or nil), `ns.characterKey` and `ns.say`, and sets
 `ns.togglePanel`, which `/coach panel` calls. The `.toc` names
 `CoachLink_OnAddonCompartmentClick` for the minimap's addon list.
+
+**The panel** (`CoachLinkPanel.lua`, `Bindings.xml`):
+- **Opening it:** `/coach panel`, the minimap's addon list, or a key binding (Options, then
+  Keybindings, then CoachLink).
+- **What it shows:** the newest answer's steps (or the plan's), its text and warnings, the
+  open questions, and a footer. The footer gives who wrote it, when, and the save it was based
+  on, and ends with "AI can be wrong".
+- **Combat:** it hides in combat and comes back after. Ask is disabled in combat.
+- **Advice text:** it type-checks and cuts every advice field again. It removes any single
+  `|` (doubled `||` from wow-coach stay, and WoW draws them as a plain `|`).
+- **Settings:** remembered in `CoachLinkDB.settings.panel`: `point`, `relPoint`, `x`, `y`,
+  `width`, `height`, `fontSize`, `open` and `lastSeenAnswerAt`. After a reload, a single chat
+  line says when there is advice the player hasn't opened yet.
+
+**Writing the advice** (`src/wow_coach/advice/`):
+- **Where:** `writer.py` writes only inside `<AddOns>/CoachLink_Advice/`.
+  - It refuses symlinks and junctions for the folder, the `.toc` and `Advice.lua`.
+  - It never creates the game's own folders.
+  - It replaces `Advice.lua` atomically, through a temp file in the same folder
+    (`.tmp-*.part`).
+- **The `.toc`:** `## Interface:` (copied from `CoachLink.toc` each time, else 16001),
+  `## Title`, `## Notes`, `## Version` (wow-coach's), then `Advice.lua`. No SavedVariables.
+- **Limits** (`limits.py`) are enforced by cutting:
+  - Blank steps are dropped, and the first 5 steps and 5 warnings are kept, in the order to
+    act in.
+  - The newest 10 answers are kept, and a new answer to the same `questionId` replaces the
+    old one.
+  - The file is refused above 200,000 bytes.
+- **Reading back:** the reader turns `||` back into `|`.
+- **The coach's tools:** `questions_from_game` and `send_advice_to_game` (`advice/tools.py`)
+  are the MCP tools. `wow-coach setup` creates the folder after installing the addon. The
+  watcher adds "N open question(s)" to a save with `reason: ask`.
+- **Tests:**
+  - `tests/test_advice_luajit.py` loads written files in LuaJIT.
+  - `tests/test_panel_end_to_end.py` writes an answer with the tool and has the real panel
+    code show it.
 
 ## Logging out
 

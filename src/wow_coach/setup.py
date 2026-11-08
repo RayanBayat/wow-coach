@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import TextIO
 
+from wow_coach.advice.contract import ADVICE_ADDON_NAME
+from wow_coach.advice.writer import install_advice_addon, interface_from_coachlink
 from wow_coach.assets import AGENT_PATH, SKILL_PATH, notebook_template, read_asset
 from wow_coach.check import run_check
 from wow_coach.config import config_path, save_wow_dir
@@ -33,6 +35,7 @@ from wow_coach.errors import (
     GameFolderNotFound,
     LookupFailed,
     SetupFailed,
+    WowCoachError,
 )
 from wow_coach.gamedir import resolve_game_folder
 from wow_coach.notes import notes_path
@@ -249,6 +252,25 @@ def _setup_addon(game: Path, world: SetupWorld, say: Say) -> bool:
     return True
 
 
+def _setup_advice_folder(game: Path, say: Say) -> bool:
+    """Create or refresh CoachLink_Advice, the folder where the coach's answers for the
+    in-game Coach panel go (a tiny data-only addon that wow-coach writes, see advice/)."""
+    addons = game / "Interface" / "AddOns"
+    folder = addons / ADVICE_ADDON_NAME
+    existed = folder.is_dir()
+    try:
+        install_advice_addon(addons, interface=interface_from_coachlink(addons))
+    except (WowCoachError, OSError, ValueError) as error:
+        say(f"  PROBLEM: could not prepare {folder} for the Coach panel: {error}")
+        return False
+    if existed:
+        say(f"  OK: {folder} (where the coach's answers for the Coach panel go) is ready.")
+    else:
+        say(f"  OK: created {folder}, where the coach's answers for the Coach panel go.")
+        say("  The game notices a new folder only after a full restart (Exit Game, start again).")
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Step 3: the player notes
 # ---------------------------------------------------------------------------
@@ -346,7 +368,7 @@ def run_setup(choices: SetupChoices, world: SetupWorld) -> int:
     say("Step 2 of 5: the CoachLink addon")
     if choices.skip_addon:
         say("  Skipped (--skip-addon).")
-    elif not _setup_addon(game, world, say):
+    elif not _setup_addon(game, world, say) or not _setup_advice_folder(game, say):
         problems += 1
 
     say()

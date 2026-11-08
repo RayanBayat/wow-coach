@@ -1204,6 +1204,9 @@ CoachLinkAdvice = { formatVersion = 1, characters = { ["Testchar-Testrealm"] = {
 local open = coach.openQuestions()
 check(#open == 19 and open[19].text == "Question 24", "answered questions are not open any more")
 check(coach.myAdvice().answers[1].steps[1] == "Go to Brill", "the panel can read this character's advice")
+CoachLinkAdvice.characters["Testchar-Testrealm"].answers = {}   -- the answer was pushed out...
+CoachLinkAdvice.characters["Testchar-Testrealm"].answeredIds = { questions[20].id, 42 }
+check(#coach.openQuestions() == 19, "...but answeredIds still marks the question answered")
 coach.askCoach("One more")
 check(#savedCharacter().questions == 20 and savedCharacter().questions[20].text == "One more",
     "asking again drops the answered question")
