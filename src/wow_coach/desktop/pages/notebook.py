@@ -20,8 +20,10 @@ from typing import Final
 from PySide6.QtCore import Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices, QHideEvent, QShowEvent
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QScrollArea,
     QSizePolicy,
     QVBoxLayout,
@@ -30,14 +32,17 @@ from PySide6.QtWidgets import (
 
 from wow_coach.desktop.bridge import CoreBridge, Runner, run_in_thread
 from wow_coach.desktop.forms import Card, make_button, make_label, page_header, scrollable
+from wow_coach.desktop.notebook_summary import summarize
 from wow_coach.desktop.notes_reader import NotebookData, NoteFile, NotesReader
 from wow_coach.desktop.pages.base import Page
 from wow_coach.desktop.state import StateView
 from wow_coach.desktop.theme import RADIUS, SPACE, SPACE_LARGE, SPACE_SMALL, Colors, current_colors
+from wow_coach.desktop.widgets.notebook_glance import NotebookGlance
 from wow_coach.engine.notes_digest import Section, is_private, split_sections
 
 POLL_MS: Final = 3000  # how often the files' change times are checked while the page is open
 PRIVATE_NOTE: Final = "Stays on this computer: never sent to the AI"
+PREVIEW_LIMIT: Final = 90  # characters of a section shown under its closed heading
 
 INTRO: Final = (
     "This is what your coach remembers about you and your character. "
@@ -130,7 +135,7 @@ def _note_section(section: Section) -> NoteSection:
 
 
 def _style(c: Colors) -> str:
-    """This page's extra look: parchment note cards with dark ink (the Coach page's paper)."""
+    """This page's extra look: parchment section rows with dark ink (the Coach page's paper)."""
     return f"""
 QFrame#noteCard {{
     background: {c.parchment}; border: 1px solid {c.parchment_edge}; border-radius: {RADIUS}px;
@@ -140,7 +145,13 @@ QFrame#noteCard QLabel[role="marker"] {{ color: {c.parchment_muted}; font-weight
 QFrame#noteCard QLabel[role="private"] {{
     color: {c.parchment_muted}; font-size: 9pt; font-style: italic;
 }}
+QFrame#noteCard QLabel[role="preview"] {{ color: {c.parchment_muted}; font-size: 9pt; }}
 QFrame#noteCard QLabel[role="minor"] {{ font-weight: 700; }}
+QFrame#noteCard QPushButton {{
+    background: transparent; border: none; color: {c.on_parchment}; font-weight: 700;
+    text-align: left; padding: 2px 0px;
+}}
+QFrame#noteCard QPushButton:hover {{ color: {c.parchment_muted}; }}
 QFrame#noteEmpty {{
     background: {c.surface}; border: 1px dashed {c.border}; border-radius: {RADIUS}px;
 }}
@@ -170,24 +181,15 @@ def _bullet_row(block: Block) -> QWidget:
     return row
 
 
-def section_card(section: NoteSection) -> Card:
-    """One section as a parchment card: heading, a privacy note if needed, then its blocks."""
-    card = Card()
-    card.setObjectName("noteCard")
-    card.setProperty("role", "")  # drop the plain card look; the page styles this one
-    card.body.setSpacing(SPACE_SMALL + 2)
-    if section.title:
-        card.body.addWidget(_text_label(section.title, "subtitle"))
+def preview_of(section: NoteSection) -> str:
+    """The one line shown under a closed section's heading: its first line, shortened."""
     if section.private:
-        card.body.addWidget(_text_label(PRIVATE_NOTE, "private"))
+        return PRIVATE_NOTE
     for block in section.blocks:
-        if block.kind is BlockKind.BULLET:
-            card.body.addWidget(_bullet_row(block))
-        elif block.kind is BlockKind.SMALL_HEADING:
-            card.body.addWidget(_text_label(block.text, "minor"))
-        else:
-            card.body.addWidget(_text_label(block.text))
-    return card
+        if block.kind is not BlockKind.SMALL_HEADING:
+            text = block.text
+            return text if len(text) <= PREVIEW_LIMIT else text[:PREVIEW_LIMIT].rstrip() + "…"
+    return ""
 
 
 def empty_card(message: str) -> Card:
@@ -199,19 +201,108 @@ def empty_card(message: str) -> Card:
     return card
 
 
+class SectionRow(QFrame):
+    """One section as a collapsed row: a clickable heading with a chevron and a preview line.
+
+    Opening the row builds its body for the first time (lazy); closing it only hides the body,
+    so opening it again is instant. The body is built again only when the text changed.
+    """
+
+    def __init__(self, section: NoteSection) -> None:
+        super().__init__()
+        self.setObjectName("noteCard")
+        self.section = section
+        self.body: QWidget | None = None  # None until the row is first opened
+        self._open = False
+        self._column = QVBoxLayout(self)
+        self._column.setContentsMargins(SPACE, SPACE_SMALL + 2, SPACE, SPACE_SMALL + 2)
+        self._column.setSpacing(SPACE_SMALL)
+        self.header = QPushButton()
+        self.header.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.header.setToolTip("Show or hide this part of the notebook.")
+        self.header.clicked.connect(self.toggle)
+        self.preview = _text_label("", "preview")
+        self._column.addWidget(self.header)
+        self._column.addWidget(self.preview)
+        self._refresh_header()
+
+    @property
+    def is_open(self) -> bool:
+        """True while the body is showing."""
+        return self._open
+
+    def set_open(self, open_it: bool) -> None:
+        """Open (building the body if needed) or close the row."""
+        self._open = open_it
+        if open_it and self.body is None:
+            self.body = self._build_body()
+            self._column.addWidget(self.body)
+        if self.body is not None:
+            self.body.setVisible(open_it)
+        self._refresh_header()
+
+    def toggle(self) -> None:
+        """Open a closed row, close an open one."""
+        self.set_open(not self._open)
+
+    def update_section(self, section: NoteSection) -> None:
+        """Take new text. An open row rebuilds its body now; a closed one forgets it."""
+        if section == self.section:
+            return
+        self.section = section
+        if self.body is not None:
+            self._column.removeWidget(self.body)
+            self.body.setParent(None)
+            self.body.deleteLater()
+            self.body = None
+        if self._open:
+            self.set_open(True)
+        self._refresh_header()
+
+    def _refresh_header(self) -> None:
+        chevron = "▾" if self._open else "▸"
+        self.header.setText(f"{chevron}  {self.section.title or 'Notes'}")
+        self.preview.setText(preview_of(self.section))
+        self.preview.setVisible(not self._open and bool(self.preview.text()))
+
+    def _build_body(self) -> QWidget:
+        """The labels of this section: a privacy note if needed, then its blocks."""
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(SPACE_SMALL + 2)
+        if self.section.private:
+            layout.addWidget(_text_label(PRIVATE_NOTE, "private"))
+        for block in self.section.blocks:
+            if block.kind is BlockKind.BULLET:
+                layout.addWidget(_bullet_row(block))
+            elif block.kind is BlockKind.SMALL_HEADING:
+                layout.addWidget(_text_label(block.text, "minor"))
+            else:
+                layout.addWidget(_text_label(block.text))
+        return body
+
+
 class NotePart(QWidget):
-    """One of the two parts of the page: a heading row, then the cards of one file."""
+    """One of the two parts of the page: a heading row, then the section rows of one file."""
 
     def __init__(self, title: str, open_tip: str) -> None:
         super().__init__()
         self.path: Path | None = None  # the file "Open in editor" opens; None = no file yet
+        self.rows: list[SectionRow] = []
         self.heading = make_label(title, "subtitle")
         self.open_button = make_button("Open in editor", "secondary", open_tip)
         self.open_button.setEnabled(False)
         self.open_button.clicked.connect(self._open)
+        self.expand_button = make_button("Expand all", "ghost", "Open every section.")
+        self.expand_button.clicked.connect(lambda: self.set_all_open(True))
+        self.collapse_button = make_button("Collapse all", "ghost", "Close every section.")
+        self.collapse_button.clicked.connect(lambda: self.set_all_open(False))
         top = QHBoxLayout()
         top.setContentsMargins(0, 0, 0, 0)
         top.addWidget(self.heading, 1)
+        top.addWidget(self.expand_button)
+        top.addWidget(self.collapse_button)
         top.addWidget(self.open_button)
         self._column = QVBoxLayout(self)
         self._column.setContentsMargins(0, 0, 0, 0)
@@ -229,20 +320,41 @@ class NotePart(QWidget):
         problem = file.problem if file is not None else None
         self._fill(problem or (None if sections else empty_message), sections)
 
+    def set_all_open(self, open_them: bool) -> None:
+        """Open or close every section (opening builds them all, only on this request)."""
+        for row in self.rows:
+            row.set_open(open_them)
+
     def _fill(self, message: str | None, sections: list[NoteSection]) -> None:
-        """Replace the cards. The new ones are built first so the scroll position survives."""
+        """Show the new sections; rows whose heading is unchanged are kept and updated.
+
+        Keeping a row keeps its open state and (if its text is the same) its built body, so a
+        small edit in the file does not collapse the sections the player is reading.
+        """
+        titles = [row.section.title for row in self.rows]
+        if message is None and titles == [s.title for s in sections]:
+            for row, section in zip(self.rows, sections, strict=True):
+                row.update_section(section)
+            return
+        was_open = {row.section.title for row in self.rows if row.is_open}
         fresh = QWidget()
         layout = QVBoxLayout(fresh)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(SPACE)
+        layout.setSpacing(SPACE_SMALL + 2)
         if message is not None:
             layout.addWidget(empty_card(message))
-        for section in sections:
-            layout.addWidget(section_card(section))
+        rows = [SectionRow(section) for section in sections]
+        for row in rows:
+            layout.addWidget(row)
+            if row.section.title in was_open:
+                row.set_open(True)
+        self.rows = rows
         self._column.replaceWidget(self.cards, fresh)
         self.cards.setParent(None)  # leave the page at once; Qt frees it when it is idle
         self.cards.deleteLater()
         self.cards = fresh
+        self.expand_button.setEnabled(bool(rows))
+        self.collapse_button.setEnabled(bool(rows))
 
     def _open(self) -> None:
         if self.path is not None:
@@ -282,6 +394,8 @@ class NotebookPage(Page):
         header.addWidget(self.reload_button, 0, Qt.AlignmentFlag.AlignTop)
         column.addLayout(header)
 
+        self.glance = NotebookGlance(compact=False)
+        column.addWidget(self.glance)
         self.character_part = NotePart(
             "Your character", "Open this character's journal in your text editor."
         )
@@ -344,6 +458,7 @@ class NotebookPage(Page):
         no_journal = NO_JOURNAL if data.character_key else NO_CHARACTER
         self.character_part.show_file(data.character, no_journal)
         self.player_part.show_file(data.player, NO_PLAYER_NOTES)
+        self.glance.show_summary(summarize(data.character_text, data.player_text))
         # Put the page back where the player was reading, once the new cards have a size.
         bar.setValue(position)
         QTimer.singleShot(0, self, lambda: bar.setValue(position))
