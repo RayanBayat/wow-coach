@@ -6,6 +6,7 @@ the reply as text.
 """
 
 import json
+import re
 from typing import Final
 
 from wow_coach.advice.contract import (
@@ -19,6 +20,18 @@ from wow_coach.advice.contract import (
 from wow_coach.advice.limits import limit_answer
 
 FALLBACK_TITLE: Final = "Coach"
+
+# Web search makes the AI add Markdown citations to its text, like "([site](https://...))".
+# The answer is plain text and the Sources list already holds the real links, so a citation in
+# brackets is dropped and any other Markdown link keeps only its words.
+_CITATION: Final = re.compile(r"\s*\(\s*\[[^\]\n]{0,200}\]\(\s*https?://[^)\s]{1,2000}\)\s*\)")
+_MARKDOWN_LINK: Final = re.compile(r"\[([^\]\n]{0,200})\]\(\s*https?://[^)\s]{1,2000}\)")
+
+
+def without_inline_links(text: str) -> str:
+    """The text without Markdown links: citations removed, other links reduced to their words."""
+    return _MARKDOWN_LINK.sub(r"\1", _CITATION.sub("", text))
+
 
 ANSWER_SCHEMA: Final[dict[str, object]] = {
     "type": "object",
@@ -103,9 +116,9 @@ def parse_answer(reply: str, *, answered_at: int, source: str) -> AdviceAnswer:
         AdviceAnswer(
             answered_at=answered_at,
             source=source,
-            title=title,
-            steps=tuple(step[:MAX_STEP_CHARS] for step in steps[:MAX_STEPS]),
-            text=text,
-            warnings=warnings[:MAX_WARNINGS],
+            title=without_inline_links(title),
+            steps=tuple(without_inline_links(step)[:MAX_STEP_CHARS] for step in steps[:MAX_STEPS]),
+            text=without_inline_links(text),
+            warnings=tuple(without_inline_links(w) for w in warnings[:MAX_WARNINGS]),
         )
     )

@@ -23,28 +23,6 @@ const STORAGE_KEY = "wow-coach-session";
 const MAX_EVENT_FAILURES = 10;
 const SESSION_GONE = "Press Enter in the wow-coach terminal for a new link, then open it.";
 const CLOSED = "wow-coach was closed. Start it again from the terminal.";
-const recentDecisions = []; // newest first, kept only while the window is open
-const MAX_DECISIONS = 8;
-
-// The rules the player can set, in the order shown. "asked" is not here: questions you
-// type are always answered.
-const TRIGGER_KINDS = [
-  ["died", "You die"],
-  ["died_again_soon", "You die again soon after coming back"],
-  ["level_up", "You level up"],
-  ["quest_done", "A quest is ready to turn in"],
-  ["bags_nearly_full", "Your bags are nearly full"],
-  ["new_zone", "You enter a new zone"],
-  ["talent_points", "You have unspent talent points"],
-  ["gear_hint", "The coach spots a possible gear upgrade"],
-  ["durability_low", "Your gear needs repair"],
-  ["timer", "The timer goes off"],
-];
-const MODE_LABELS = [
-  ["off", "Off"],
-  ["notify", "Notify me"],
-  ["coach", "Ask the coach"],
-]; // "Name-Realm" shown on the Coach screen
 
 const $ = (id) => document.getElementById(id);
 
@@ -252,8 +230,8 @@ function renderChatGpt() {
   }
   const usage = state.usage;
   $("usage-text").textContent =
-    "Calls in the last hour: " + usage.last_hour + " of " + usage.hour_cap +
-    ". Calls in the last day: " + usage.last_day + " of " + usage.day_cap + ".";
+    "Questions in the last hour: " + usage.last_hour +
+    ". Questions in the last day: " + usage.last_day + ".";
 }
 
 function renderSettings() {
@@ -268,52 +246,12 @@ function renderSettings() {
     }
   }
   $("notify-warning").hidden = state.alerts.notify;
-  $("speak-warning").hidden = state.alerts.speak;
-}
-
-function buildTriggerRules() {
-  const container = $("trigger-rules");
-  container.replaceChildren();
-  for (const [kind, label] of TRIGGER_KINDS) {
-    const row = make("div", "", "row");
-    const id = "mode-" + kind;
-    const labelElement = make("label", label);
-    labelElement.htmlFor = id;
-    const select = make("select");
-    select.id = id;
-    select.dataset.kind = kind;
-    for (const [mode, text] of MODE_LABELS) {
-      const option = make("option", text);
-      option.value = mode;
-      select.append(option);
-    }
-    row.append(labelElement, select);
-    container.append(row);
-  }
 }
 
 function renderTriggers() {
   const rules = state.settings.triggers;
-  for (const select of document.querySelectorAll("#trigger-rules select")) {
-    select.value = rules.modes[select.dataset.kind] || "off";
-  }
-  $("every-minutes").value = rules.every_minutes;
-  $("cooldown").value = rules.cooldown_minutes;
+  $("on-save").value = rules.on_save;
   $("quiet-instances").checked = rules.quiet_in_instances;
-  $("quiet-from").value = rules.quiet_from_hour === null ? "" : rules.quiet_from_hour;
-  $("quiet-to").value = rules.quiet_to_hour === null ? "" : rules.quiet_to_hour;
-  $("use-triage").checked = rules.use_triage;
-  $("rules-text").value = rules.rules_text;
-}
-
-function renderDecisions() {
-  const list = $("decisions");
-  list.replaceChildren();
-  for (const decision of recentDecisions) {
-    const text = decision.summary + " (" + decision.action + ": " + decision.reason + ")";
-    list.append(make("li", text));
-  }
-  $("decisions-box").hidden = recentDecisions.length === 0;
 }
 
 function render() {
@@ -324,7 +262,6 @@ function render() {
   renderChatGpt();
   renderSettings();
   renderTriggers();
-  renderDecisions();
 }
 
 // ---- loading ------------------------------------------------------------------------
@@ -415,25 +352,11 @@ async function saveSettings(event) {
   await loadState();
 }
 
-function hourOrNull(text) {
-  return text.trim() === "" ? null : Number(text);
-}
-
 async function saveTriggers(event) {
   event.preventDefault();
-  const modes = {};
-  for (const select of document.querySelectorAll("#trigger-rules select")) {
-    modes[select.dataset.kind] = select.value;
-  }
   const triggers = {
-    modes,
-    every_minutes: Number($("every-minutes").value),
-    cooldown_minutes: Number($("cooldown").value),
+    on_save: $("on-save").value,
     quiet_in_instances: $("quiet-instances").checked,
-    quiet_from_hour: hourOrNull($("quiet-from").value),
-    quiet_to_hour: hourOrNull($("quiet-to").value),
-    use_triage: $("use-triage").checked,
-    rules_text: $("rules-text").value,
   };
   const result = await api("/api/settings", "POST", { changes: { triggers } });
   if (!result.ok) {
@@ -504,13 +427,6 @@ function onInfo(event) {
   showBanner(data.text || "", false);
 }
 
-function onDecision(event) {
-  const data = readEvent(event);
-  recentDecisions.unshift(data);
-  recentDecisions.length = Math.min(recentDecisions.length, MAX_DECISIONS);
-  renderDecisions();
-}
-
 function onSignIn(event) {
   const data = readEvent(event);
   if (data.state === "waiting") {
@@ -543,7 +459,6 @@ function handleEventBlock(block) {
     save: loadState,
     error: onError,
     signin: onSignIn,
-    decision: onDecision,
     info: onInfo,
   };
   if (handlers[name]) {
@@ -648,7 +563,6 @@ function wireUp() {
   $("answer-now").addEventListener("click", answerNow);
   $("settings-form").addEventListener("submit", saveSettings);
   $("triggers-form").addEventListener("submit", saveTriggers);
-  buildTriggerRules();
   $("signin-button").addEventListener("click", signIn);
   $("welcome-ok").addEventListener("click", dismissWelcome);
   $("signout-button").addEventListener("click", signOut);

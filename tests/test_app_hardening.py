@@ -96,7 +96,7 @@ def test_a_question_is_not_answered_again_even_if_the_reply_has_no_id(tmp_path: 
 
 def test_the_watcher_answers_a_save_only_once(tmp_path: Path) -> None:
     rig = make_rig(tmp_path)
-    watcher = Watcher(rig.core, rig.wow_dir, clock=lambda: 2_100, local_hour=lambda: 12)
+    watcher = Watcher(rig.core, rig.wow_dir, clock=lambda: 2_100)
     write_save(rig.wow_dir, ("1-1", "How?"), mtime=2_000)
     watcher.check_once()
     watcher.check_once()
@@ -114,7 +114,7 @@ def test_a_locked_keychain_means_not_signed_in_for_the_watcher(tmp_path: Path) -
 
     rig = make_rig(tmp_path)
     rig.core.signin = Locked()  # type: ignore[assignment]
-    watcher = Watcher(rig.core, rig.wow_dir, clock=lambda: 2_100, local_hour=lambda: 12)
+    watcher = Watcher(rig.core, rig.wow_dir, clock=lambda: 2_100)
     write_save(rig.wow_dir, ("1-1", "How?"), mtime=2_000)
     watcher.check_once()
     assert rig.coach.answered_calls == []

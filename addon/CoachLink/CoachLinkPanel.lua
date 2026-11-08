@@ -52,11 +52,13 @@ local TEXT = {
     panelError = "Coach panel error in %s: %s",
     bindingHeader = "CoachLink",
     bindingToggle = "Show or hide the Coach panel",
+    bindingSave = "Save for the coach (reloads the interface)",
 }
 
 -- The key binding names the game looks up (see Bindings.xml).
 BINDING_HEADER_COACHLINK = TEXT.bindingHeader
 BINDING_NAME_COACHLINK_TOGGLE = TEXT.bindingToggle
+BINDING_NAME_COACHLINK_SAVE = TEXT.bindingSave
 
 
 -------------------------------------------------------------------------------

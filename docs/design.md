@@ -371,13 +371,51 @@ ChatGPT plan. The pieces (the plan, the rules and the reasons: `docs/plans/coach
 | Piece | Code | Job |
 |---|---|---|
 | Sign-in | `ai/chatgpt_signin.py`, `keychain.py` | Sign in with ChatGPT: OAuth with PKCE, a one-shot loopback server on 127.0.0.1:1455, the refresh token in the system keychain (never a file), a refresh lock file, revoke on sign-out. Details and what a real sign-in showed: `docs/plans/chatgpt-signin-notes.md` |
-| The plan | `ai/chatgpt_plan.py`, `usage.py` | The Responses API with the plan token (`store: false`, streamed, JSON schema answers). Every attempt is counted in `usage.jsonl` before it is sent, against the player's caps |
-| The engine | `engine/` | The prompt (coaching rules from the skill, then fenced data blocks: status, history, journal, player notes, conversation, question). Other players' names are replaced with "a player". The answer is JSON (title, steps, text, warnings), written to the Coach panel's file. The conversation is kept per character |
+| The plan | `ai/chatgpt_plan.py`, `usage.py` | The Responses API with the plan token (`store: false`, streamed, JSON schema answers). Every attempt is counted in `usage.jsonl` before it is sent (only counted: wow-coach sets no limit of its own, the plan's own limit applies) |
+| The engine | `engine/` | The prompt (coaching rules from the skill, then fenced data blocks: status, history, journal, player notes, conversation, question; about 12 000 tokens at most). The notes are sent section by section, most useful first, and sections about the player's computer never (`engine/notes_digest.py`). Other players' names are replaced with "a player". The answer is JSON (title, steps, text, warnings), written to the Coach panel's file. The conversation is one shared chat history per character, for any AI (see "The data folder: shared storage") |
+| The tools | `tools/`, `engine/agent.py`, `engine/sources.py` | The built-in coach uses tools while answering, like the Claude coach does. See "The tool loop" below |
 | Putting it together | `companion.py` | One builder for the CLI and the window: the same keychain entry, usage log and refresh lock. `LiveCoach` reads `settings.json` before every answer |
 | Settings | `app_settings.py` | `settings.json` in the data folder, no secrets. Every value is checked; a damaged file gives the defaults |
-| When to speak | `triggers/` | Two saves give events (death, level-up, quest ready, bags...). The player's rules per event (off, notify, coach), quiet hours, quiet in instances, a cooldown, a timer, and an optional triage step with the smallest plan model. One save never costs more than one unasked AI call |
-| The window | `app/` | A page on 127.0.0.1 (see below), and a watcher that answers the Coach panel's questions and runs the triggers |
-| Alerts | `alerts.py` | Desktop notifications and read-aloud through the system's own programs (`notify-send`, `spd-say` or `espeak-ng`, `osascript` and `say`, PowerShell) |
+| When to speak | `triggers/` | Two saves give events (death, level-up, quest ready, bags...). One setting, `on_save`: `off`, `notify` (default: one free notification listing what is worth knowing, no AI) or `advice` (the same plus one coach answer), and one switch, quiet in instances. The game only hands data out when it saves, so there is no timer, no quiet hours, no cooldown (a save with nothing new gives no events) and no triage. One save never costs more than one unasked AI call |
+| The window | `app/` | A page on 127.0.0.1 (see below), and a watcher that answers the Coach panel's questions and runs "when the game saves" |
+| Alerts | `alerts.py` | Desktop notifications through the system's own programs (`notify-send`, `osascript`, PowerShell) |
+
+**The tool loop** (`engine/agent.py`, the loop documented in `ai/base.py`). The engine builds
+the tools for the character (`tools/registry.py`: status, history, progress, read and save the
+notes, search and read the Warcraft Wiki, find a quest by id; the same abilities as the MCP
+server) and asks the AI with the tool list and, if allowed, the provider's own web search.
+While the answer asks for tools, each one is run (`CoachTool.run`, which never raises: an
+unknown tool name or unreadable arguments become a plain sentence the AI can act on) and the
+results are sent back. At most 8 rounds, then one last ask without tools, so there is always an
+answer. Failures degrade like this:
+- the provider refuses the web search: the same round is asked again without it, and search
+  stays off for the rest of that question;
+- any other failure while tools are on: the whole question is asked once more the old way (no
+  tools, no search), and logged. "Not signed in" and the plan limit are raised at once, because
+  asking again cannot fix them;
+- every tool output goes through the same hiding of other players' names as the prompt, and the
+  notes tools never show or lose the notes' sections about the player's computer (they are left
+  out of what is read and kept when the notes are saved).
+
+Progress is reported through a callback, one plain sentence per lookup ("Searched the Warcraft
+Wiki for ...", "Read your character journal", "Saved your character journal"). The app core
+turns each into an `activity` event, which the Coach page shows in its typing bubble.
+
+**Sources, always.** Under each answer the window lists the pages it came from. The list is
+built by our own code and never from links the AI wrote (`engine/sources.py`): the web
+search's own citations, plus the Warcraft Wiki pages a tool actually read (`read_wiki_page`).
+Pages that a search or `find_quest` only *listed* count only when nothing was read. No repeats,
+in the order used, at most 8, and only `http` and `https` links (so no `javascript:` or `file:`).
+The same rule is applied again when the window reads them, whoever stored them. They are shown
+as buttons with the page title (or the site) and the whole link as tooltip, and opened only on
+a click. The CLI `ask` prints them as a "Sources:" list. The game's `Advice.lua` is unchanged.
+
+**The settings that control it** (`app_settings.py`, all on by default): `use_tools` ("Let the
+coach look things up"), `web_search` ("Let the coach search the web too"), `save_notes` ("Let
+the coach update your notebook"; off leaves out the two save tools) and `show_lookups` ("Show
+what the coach looked up"). With "send the coach's notes" off, the notes tools are left out
+too. Every time the coach saves a notes file, the version it replaces goes to a `.history`
+folder next to it, and the last 20 versions are kept.
 
 **The window's safety rules** (`app/server.py`):
 - **Where it listens:** 127.0.0.1 only, on a random port. The Host header must be exactly
@@ -416,6 +454,148 @@ compliance test fails on `shell=True`, `os.system` and `os.popen`.
   plan" and "Manage usage".
 - Plan use is free in wow-coach, and security problems are also reported to OpenAI
   (`SECURITY.md`).
+
+## The desktop app (0.10.0)
+
+`wow-coach app` opens a Qt window (`src/wow_coach/desktop/`, PySide6 from the optional
+`desktop` extra). It is a second face for the same brain as the browser window: it builds the
+same `AppCore` (`app/run.py` `build_core`) and the same `Watcher`, so answering, "when the game saves",
+limits and alerts work exactly as above. There is no web server in the desktop app.
+
+| Piece | Code | Job |
+|---|---|---|
+| The bridge | `desktop/bridge.py` | The only object the windows talk to. It reads `AppCore.state()` in a background thread (the save file may be on a slow disk), one read at a time with a "read again" flag, and turns the core's event mailbox into Qt signals. Network calls (models, sign-out) also run in the background |
+| Typed state | `desktop/state.py` | `AppCore.state()`'s dict as small frozen dataclasses; anything missing or of the wrong type becomes a safe default |
+| Look | `desktop/theme.py`, `desktop/assets/` | Every color as a named token, light and dark, one stylesheet; small SVG pictures for arrows and check marks |
+| Pages | `desktop/pages/` | Coach (chat), Settings, ChatGPT, Setup, Privacy. Each redraws from the newest state and reacts to single events |
+| Keep on top | `desktop/compact.py` | A frameless tool window that stays on top without taking focus. On Linux with Wayland the app runs through XWayland (`run.py` `platform_arguments`), because Wayland doesn't let apps keep their own window on top |
+| Shell | `desktop/tray.py`, `desktop/single_instance.py` | Closing hides to the tray (or quits without one). A per-user local socket keeps one copy running; a second start sends the first one short message and exits: `show` (bring the window to the front) or `toggle-overlay` (`wow-coach-app --toggle-overlay`: show or hide the overlay; if no copy runs, the new copy starts in the tray and shows the overlay). Any other message is ignored. The socket stays in a folder only this user can use |
+| Overlay | `desktop/overlay.py` | `OverlayPanel` is a frameless, translucent, always-on-top tool window (`Qt.Tool \| FramelessWindowHint \| WindowStaysOnTopHint`, `setWindowOpacity` from the `overlay_opacity` setting, 60-100). It **borrows** the one `CoachPage`: `OverlayController.show_overlay` calls `MainWindow.take_page` (a note takes the page's place in the stack), puts the page in the panel, and `_on_panel_hidden` gives it back with `return_page`, so there is one chat and one set of logic. The panel takes the keyboard only when shown by the player (`activateWindow` + focus on the question box); Esc, the Hide button or the hotkey hide it and the window manager returns focus to the game. Size and position are kept in `QSettings("wow-coach", "desktop")` (`overlay/size`, `overlay/position`). Moving and resizing use the window system (`startSystemMove`, `startSystemResize`). It is only our own window: nothing is sent to, read from or injected into the game |
+| Hotkey | `desktop/hotkey.py`, `desktop/portal_bus.py`, `desktop/portal_types.py` | `GlobalHotkey` (`register`, `unregister`, `activated`, `status`) with one class per system. **Linux**: `PortalHotkey` follows the `org.freedesktop.portal.GlobalShortcuts` flow: `CreateSession`, wait for `Response`, `BindShortcuts` (`CTRL+SHIFT+space` style trigger), wait for `Response`, then `Activated` toggles the overlay. `portal_bus.py` (`JeepneyPortal`) talks to the portal with `jeepney`, a pure-Python D-Bus library (Linux-only dependency of the `desktop` extra), not `QtDBus`: `BindShortcuts` needs the D-Bus type `a(sa{sv})` and Qt for Python cannot build structures. The whole conversation runs in one background thread that owns the connection; it reports `PortalBound`, `PortalFailed` (unavailable, declined, refused or timed out) and `PortalActivated` events, which `PortalHotkey` hands to the Qt thread with a signal. Waits: 10 s for the `CreateSession` answer, 60 s for the `BindShortcuts` answer (the player may have to confirm KDE's dialog). On quit it closes the session and the connection. The module is imported lazily, only on Linux. The portal needs the app's `wow-coach.desktop` file, so a refusal shows "add it to your app menu first". **Windows**: `RegisterHotKey` (`WindowsHotkey`) with a `QAbstractNativeEventFilter` for `WM_HOTKEY`; the ctypes calls load only on Windows. **macOS** and others: `UnavailableHotkey`. A hotkey that cannot start never raises: its `status` says why and Setup shows the manual way |
+| Setup | `desktop/setup_checks.py`, `desktop/shortcuts.py` | The same addon install code as `wow-coach setup`. App-menu and log-in shortcuts (`.desktop` files on Linux, `.lnk` through PowerShell with paths only in environment variables on Windows). A shortcut is never written when the program lives in a temporary uv cache |
+
+**The chat.** The Coach page draws the character's chat history (`conversations/<key>.jsonl`,
+the newest 200 messages that `AppCore.state()` sends as `conversation`), oldest at the top. An
+answer with a structured `answer` keeps the parchment layout (title, numbered steps, warnings).
+A plain-text reply (from the Claude coach) is a parchment bubble with the text, folded after 700
+characters behind "Show more". Messages are tagged "from the game", "from your Claude coach" or
+"from another app". Every message is drawn once: by `id`, and by answer time and title for an
+answer that arrived both as a live event and as a stored message. Answers that only the game's
+answer file has are placed among the messages by time. If older chats arrive later (the
+importer finished after the first draw), the chat is drawn again in time order.
+
+**Refreshing the game data.** Only the game can save the character, and only at a reload or a
+logout. An outside program pressing keys in the game would break Blizzard's rules, so the app
+never does. The addon has a "Save for the coach" key binding (the same as `/coach`). The app
+has no refresh button: the watcher notices every save by itself and publishes a `save` event;
+the window then re-reads the state, updates the freshness pill and shows a calm "Got your
+latest game data" note for about 3 seconds. A question is never held back for a save: it is
+asked right away with the data from the last one.
+
+**What we tested and ruled out (2026-11-08):** the game's chat log (`/chatlog`,
+`Logs/WoWChatLog.txt`) is not written while playing: it stayed empty through 30 minutes of
+play, a `/reload` and turning logging off. WoW writes it at logout, so it can't carry live
+questions or status. Showing answers inside the game without a reload (loading pre-made
+"slot" addons on a timer) is possible but a gray area, and is not built.
+
+**Safety:** AI and game text are shown as plain text only (never rich text, Markdown or
+links). The only links opened are fixed ones in the code, plus OpenAI's sign-in page.
+
+## The data folder: shared storage
+
+wow-coach keeps everything it remembers in plain files in one folder, the **data folder**
+(`~/.local/share/wow-coach` on Linux, `~/Library/Application Support/wow-coach` on macOS,
+`%LOCALAPPDATA%\wow-coach` on Windows, or the folder in `WOW_COACH_DATA_DIR`). The files are
+plain JSON, JSON Lines or Markdown on purpose: any AI provider added later (Gemini, the
+Claude API...) and any other tool can read and write the same files, so a change of AI never
+loses what the coach knows. Readers must ignore fields they don't know, treat a damaged file
+as empty, and write by saving a temp file and renaming it over the old one. Files that two
+programs may change are locked with `<file>.lock` (`filelock.py`).
+
+| File | Format | What it holds |
+|---|---|---|
+| `settings.json` | JSON object | The choices made in the app (`app_settings.py`): `model`, `answer_questions_from_game`, `notify`, `share_other_player_names`, `send_coach_notes`, `use_claude_chats`, `triggers` (`on_save` and `quiet_in_instances`; the older per-event format is still read and mapped). Missing or wrong values mean the defaults |
+| `config.json` | JSON object | `wow_dir`: the game folder saved by `wow-coach setup` (the `WOW_COACH_CONFIG_FILE` variable points to another file) |
+| `coach-notes.md` | Markdown | The player notes (how the player likes to be coached). The `WOW_COACH_NOTES_FILE` variable points to another file |
+| `characters/<Name-Realm>.md` | Markdown | The coach's journal of one character: goals, plans, decisions |
+| `conversations/<Name-Realm>.jsonl` | JSON Lines, format v1 below | The chat history of one character, from every AI and every place |
+| `import-state.json` | JSON object | How far each Claude Code transcript was read: `{"v": 1, "claude-code": {"<project>/<session>.jsonl": {"offset": bytes, "coach": true, "character": "Name"}}}` |
+| `answered-questions.json` | JSON object | `{"Name-Realm": ["question id", ...]}`: game questions already answered, so none is answered (and paid for) twice |
+| `hidden-names-v2.json` | JSON object | `{"Name-Realm": ["name", ...]}`: other players' names seen in earlier saves, kept hidden |
+| `usage.jsonl` | JSON Lines | One line per AI call: `{"at": ISO time, "model", "input_tokens", "output_tokens"}` and `"tokens_only": true` for numbers that belong to an earlier counted call. No text |
+| `welcome-seen.flag` | Text | Exists once the welcome message was dismissed |
+| `instance.lock` | Lock file | Held by the running desktop app, so only one copy runs |
+| `chatgpt-refresh.lock` | Lock file | Held while a ChatGPT sign-in renewal runs, shared by the app and the command line |
+| `*.lock`, `.*.part` | Temporary | A lock, or a file being written; both disappear by themselves (a lock older than 30 s counts as left behind by a crash) |
+
+The ChatGPT sign-in is not in this folder: it lives in the system password store.
+
+### The chat history (`conversations/<Name-Realm>.jsonl`, format v1)
+
+One message per line, oldest first:
+
+```json
+{"v": 1, "id": "app:3f2a9c0e...", "at": "2026-11-07T22:14:07.767Z", "role": "assistant",
+ "content": "Next steps. Go to Brill; Train spells. You are level 7.",
+ "source": "game", "provider": "chatgpt", "model": "gpt-...",
+ "answer": {"title": "Next steps", "steps": ["Go to Brill", "Train spells"],
+            "text": "You are level 7.", "warnings": []}}
+```
+
+| Field | Meaning |
+|---|---|
+| `v` | The format version, `1` |
+| `id` | Unique and stable. The same message is never stored twice (`app:<random>`, `game:<question id>` for a question typed in the game, `claude-code:<line uuid>`, `outside:<hash>`) |
+| `at` | ISO 8601 time in UTC. The file is kept in time order |
+| `role` | `"user"` (the player) or `"assistant"` (a coach) |
+| `content` | The message as plain text, always present. This is what any AI is given as the conversation, so it is the provider-neutral part. For a structured answer it is `title. step; step. text` |
+| `source` | Where it happened: `"app"` (the window or `wow-coach ask`), `"game"` (the game's Coach panel), `"claude-code"` (imported from the player's Claude Code coach), `"outside"` (an answer another app wrote into `Advice.lua`) |
+| `provider` | Who answered: `"chatgpt"`, `"claude-code"`, or a short id of a future provider; `null` for the player |
+| `model` | The model id the provider reported, or `null` |
+| `answer` | The structured coach answer (`title`, `steps`, `text`, `warnings`, and optionally `sources` and `lookups`), only for display; `null` otherwise |
+
+The optional parts of `answer` (left out when empty; an older line simply lacks them):
+`"sources": [{"title": "Abigail Shiel", "url": "https://warcraft.wiki.gg/wiki/Abigail_Shiel"}]`
+(the pages the answer came from; `title` may be empty; a reader drops anything that is not an
+`http` or `https` link) and `"lookups": [{"kind": "web", "text": "Read the Warcraft Wiki page
+\"Abigail Shiel\""}]` (what the coach looked up or saved, as plain sentences; `kind` is `read`,
+`write` or `web`).
+
+Rules for every reader and writer:
+
+- A line from an older wow-coach has only `role` and `content`. It reads with the defaults
+  `source: "app"` and no provider, model or answer. Unknown fields are ignored; a damaged line
+  is skipped and disappears at the next write.
+- Append by reading the file, adding the messages whose `id` is new, sorting by `at`, keeping
+  the newest 2 000 messages (and at most about 6 MB), and writing the whole file in one step
+  while holding the lock. `engine/conversation.py` does this (`ChatMessage`, `read_messages`,
+  `append_messages`).
+- A message keeps at most 6 000 characters of `content`.
+- The coach's prompt takes the newest messages from every source that fit its size cap and
+  names the speaker: `Player:`, `Coach:`, `Coach (Claude Code):`, `Coach (another app):`.
+  Other players' names are hidden there like everywhere else.
+
+### Importing the Claude Code coach chats
+
+`importers/claude_code.py` copies what the player said to their Claude coach
+(`claude --agent wow-coach`) into the chat history. Claude Code writes every session as
+`<config dir>/projects/<project>/<session>.jsonl` (`~/.claude`, or `CLAUDE_CONFIG_DIR`). The
+format is Claude Code's own and not documented, so the importer trusts nothing:
+
+- A session counts only if it has a line `{"type": "agent-setting", "agentSetting": "wow-coach"}`.
+- From `user` lines it takes text the player typed (a string, or text blocks) and skips
+  `isMeta` and `isSidechain` lines, tool results, notifications from other agents, and wrappers
+  such as `<command-...>`, `<local-command...>`, `<system-reminder>` and interruption marks.
+- From `assistant` lines it takes the text blocks only (never thinking or tool calls) and
+  joins the blocks of one reply (they share `message.id`). A reply that may still be growing is
+  kept for the next pass, unless Claude Code wrote its `turn_duration` end-of-turn line.
+- The character comes from the session's tool calls (a tool name containing `wow-coach` with an
+  input `character`), matched with `pick_character`; otherwise the most recently saved
+  character.
+- Each pass reads only new bytes (`import-state.json`) and ids are `claude-code:<line uuid>`,
+  so importing is incremental and repeating it changes nothing. The desktop app runs it once at
+  the start and then every 60 seconds in the watcher thread, unless the player turned off
+  "Use my Claude coach chats" (`use_claude_chats`).
 
 ## Logging out
 

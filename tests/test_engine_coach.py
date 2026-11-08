@@ -10,7 +10,12 @@ from wow_coach.advice.reader import read_advice_file
 from wow_coach.ai.base import AIError, FakeProvider
 from wow_coach.app_settings import AppSettings
 from wow_coach.engine.coach import ChatCoach
-from wow_coach.engine.conversation import Turn, conversation_path
+from wow_coach.engine.conversation import (
+    ChatMessage,
+    append_messages,
+    conversation_path,
+    read_messages,
+)
 from wow_coach.engine.prompt import (
     MAX_PROMPT_CHARS,
     PromptData,
@@ -52,12 +57,37 @@ def test_instructions_come_first_and_data_is_fenced() -> None:
     )
 
 
-def test_system_message_has_skill_sections_and_is_small() -> None:
+def test_system_message_has_the_coaching_playbook_and_stays_small() -> None:
     text = system_message()
     assert "Lead with the next 1-3 concrete actions" in text  # Teaching style
     assert "bots, memory readers" in text  # Hard rules
-    assert "Limits to remember" not in text
-    assert len(text) < 4000
+    assert "Frostbolt" in text  # Forever facts: the mage spell table
+    assert "Make it concrete" in text  # Goals and plans
+    assert "Unspent points" in text  # What to check in every snapshot
+    assert "Live mode" not in text  # tool-only parts of the skill stay out
+    assert len(text) < 14_000  # about 3 500 tokens
+
+
+def test_without_tools_the_prompt_says_the_coach_cannot_look_things_up() -> None:
+    text = system_message()
+    assert "cannot look things up or save notes" in text
+    assert "Looking things up" not in text
+
+
+def test_with_tools_the_prompt_teaches_how_to_use_them() -> None:
+    text = system_message(tools=True)
+    assert "cannot look things up" not in text
+    assert "Forever changed talents" in text  # the skill's "Looking things up" section
+    assert "read_coach_notes" in text and "WHOLE updated text" in text
+    assert "## This computer" in text and "absolute dates" in text
+    assert "only for real decisions" in text
+    assert len(text) < 20_000
+
+
+def test_with_tools_but_notes_read_only_the_prompt_does_not_offer_saving() -> None:
+    text = system_message(tools=True, save_notes=False)
+    assert "save_coach_notes" not in text and "WHOLE updated text" not in text
+    assert "cannot save notes" in text
 
 
 def test_fake_closing_tags_in_data_are_neutralised() -> None:
@@ -72,7 +102,7 @@ def test_every_block_is_capped_and_the_total_too() -> None:
     big = "z" * 50_000
     data = PromptData(
         status=big, history=big, journal=big, player_notes=big, question=big,
-        turns=[],
+        messages=[],
     )  # fmt: skip
     message = user_message(data, hidden_names=set())
     assert len(message) <= MAX_PROMPT_CHARS
@@ -81,13 +111,15 @@ def test_every_block_is_capped_and_the_total_too() -> None:
 
 
 def test_least_important_blocks_are_cut_first() -> None:
-    turns = [Turn("user", "c" * 1_300), Turn("assistant", "c" * 1_300), Turn("user", "c" * 1_300)]
-    data = PromptData(status="s" * 12_000, history="h" * 3_000, journal="j" * 4_000,
-                      player_notes="n" * 3_000, turns=turns, question="Q")  # fmt: skip
+    turns = [
+        ChatMessage("user" if n % 2 == 0 else "assistant", "c" * 1_150, f"m{n}") for n in range(8)
+    ]
+    data = PromptData(status="s" * 16_000, history="h" * 3_000, journal="j" * 16_000,
+                      player_notes="n" * 6_000, messages=turns, question="Q" * 2_000)  # fmt: skip
     message = user_message(data, hidden_names=set())
     assert len(message) <= MAX_PROMPT_CHARS
-    assert "s" * 12_000 in message  # the status survived whole
-    assert "j" * 4_000 in message and "n" * 3_000 in message  # more important blocks whole
+    assert "s" * 16_000 in message  # the status survived whole
+    assert "j" * 16_000 in message and "n" * 6_000 in message  # more important blocks whole
     history = message.split("<recent_history>")[1].split("</recent_history>")[0]
     assert "[cut: too long]" in history  # the history was cut first
 
@@ -174,21 +206,96 @@ def test_names_are_sent_when_the_player_allows_it(tmp_path: Path) -> None:
 # ---- conversation -------------------------------------------------------------------
 
 
-def test_follow_up_sees_earlier_turns_and_old_ones_are_trimmed(tmp_path: Path) -> None:
+def test_follow_up_sees_earlier_messages_and_old_ones_fall_out_of_the_block(
+    tmp_path: Path,
+) -> None:
     world = make_world(tmp_path)
-    provider = FakeProvider([GOOD_REPLY] * 5)
+    provider = FakeProvider([GOOD_REPLY] * 7)
     coach = coach_for(world, provider)
-    for number in range(5):
-        coach.ask(f"question number {number}")
+    for number in range(7):
+        coach.ask(f"question number {number} " + "x" * 1500)
     assert "<conversation>\n" not in prompt_text(provider, 0)
     second = prompt_text(provider, 1)
     assert "Player: question number 0" in second
     assert "Coach: Next steps." in second
-    last = prompt_text(provider, 4)
-    assert "question number 1" in last and "question number 0" not in last  # 6 messages kept
-    stored = conversation_path(KEY, environ=world.environ).read_text(encoding="utf-8")
-    assert len(stored.splitlines()) == 10
-    assert "token" not in stored.lower()
+    last = prompt_text(provider, 6)
+    assert "question number 5" in last and "question number 0" not in last  # size cap
+    stored = read_messages(conversation_path(KEY, environ=world.environ))
+    assert len(stored) == 14  # the file keeps everything; only the prompt is limited
+    assert "token" not in conversation_path(KEY, environ=world.environ).read_text("utf-8").lower()
+
+
+def test_ask_stores_the_answer_with_source_provider_model_and_structure(tmp_path: Path) -> None:
+    world = make_world(tmp_path)
+    provider = FakeProvider([GOOD_REPLY], name="ChatGPT (your plan)")
+    coach_for(world, provider).ask("What now?")
+    question, answer = read_messages(conversation_path(KEY, environ=world.environ))
+    assert (question.role, question.content, question.source) == ("user", "What now?", "app")
+    assert (answer.role, answer.source, answer.provider, answer.model) == (
+        "assistant",
+        "app",
+        "chatgpt",
+        "test-luna",
+    )
+    assert answer.answer is not None and answer.answer.steps == ("Go to Brill", "Train spells")
+    assert answer.content.startswith("Next steps.")
+    assert question.id != answer.id and question.at.endswith("Z")
+
+
+def test_game_questions_are_stored_with_source_game_and_a_stable_id(tmp_path: Path) -> None:
+    world = make_world(tmp_path)
+    coach_for(world, FakeProvider([GOOD_REPLY] * 2)).answer_open_questions()
+    stored = read_messages(conversation_path(KEY, environ=world.environ))
+    users = [m for m in stored if m.role == "user"]
+    assert {m.source for m in stored} == {"game"}
+    assert {m.id for m in users} == {"game:1793899900-1", "game:1793899950-2"}
+
+
+def test_prompt_shows_every_source_with_a_label(tmp_path: Path) -> None:
+    world = make_world(tmp_path)
+    path = conversation_path(KEY, environ=world.environ)
+    append_messages(
+        path,
+        [
+            ChatMessage("user", "I am stuck", "c1", "2026-11-07T10:00:00Z", "claude-code"),
+            ChatMessage(
+                "assistant", "Try the cave", "c2", "2026-11-07T10:01:00Z", "claude-code",
+                provider="claude-code",
+            ),
+            ChatMessage("assistant", "Outside tip", "c3", "2026-11-07T10:02:00Z", "outside"),
+        ],
+    )  # fmt: skip
+    provider = FakeProvider([GOOD_REPLY])
+    coach_for(world, provider).ask("hello")
+    text = prompt_text(provider)
+    assert "Player: I am stuck" in text
+    assert "Coach (Claude Code): Try the cave" in text
+    assert "Coach (another app): Outside tip" in text
+
+
+def test_claude_chats_are_left_out_when_the_player_turned_them_off(tmp_path: Path) -> None:
+    world = make_world(tmp_path)
+    path = conversation_path(KEY, environ=world.environ)
+    append_messages(
+        path,
+        [
+            ChatMessage("user", "private claude talk", "c1", "2026-11-07T10:00:00Z", "claude-code"),
+            ChatMessage("user", "app talk", "c2", "2026-11-07T10:01:00Z", "app"),
+        ],
+    )
+    provider = FakeProvider([GOOD_REPLY])
+    coach_for(world, provider, AppSettings(use_claude_chats=False)).ask("hello")
+    text = prompt_text(provider)
+    assert "private claude talk" not in text and "app talk" in text
+
+
+def test_other_players_names_are_hidden_in_imported_chats_too(tmp_path: Path) -> None:
+    world = make_world(tmp_path)
+    path = conversation_path(KEY, environ=world.environ)
+    append_messages(path, [ChatMessage("user", "Bobby is in my group", "c1", "", "claude-code")])
+    provider = FakeProvider([GOOD_REPLY])
+    coach_for(world, provider).ask("hello")
+    assert "Bobby" not in prompt_text(provider)
 
 
 def test_damaged_conversation_file_does_not_stop_asking(tmp_path: Path) -> None:

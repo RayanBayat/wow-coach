@@ -6,6 +6,7 @@ import pytest
 
 from wow_coach.errors import NotesTooLarge
 from wow_coach.notes import (
+    MAX_BACKUPS,
     MAX_NOTES_BYTES,
     journal_goal,
     journal_path,
@@ -168,3 +169,67 @@ def test_goal_ignores_other_sections_and_templates(tmp_path: Path) -> None:
 
 def test_goal_of_a_missing_file_is_none(tmp_path: Path) -> None:
     assert journal_goal(tmp_path / "none.md") is None
+
+
+# ---- backups: a bad save can always be undone -----------------------------------------
+
+
+def _backups(target: Path) -> list[Path]:
+    return sorted((target.parent / ".history").glob("*"))
+
+
+def test_overwriting_keeps_the_previous_version_in_history(tmp_path: Path) -> None:
+    target = tmp_path / "characters" / "Gorbo-Realm.md"
+    save_notes(target, "first")
+    assert not (target.parent / ".history").exists()  # nothing to back up yet
+    save_notes(target, "second", now=1_700_000_000.0)
+    [backup] = _backups(target)
+    assert backup.read_text(encoding="utf-8") == "first"
+    assert backup.name.startswith("Gorbo-Realm-20231114-221320")
+    assert backup.suffix == ".md"
+    assert target.read_text(encoding="utf-8") == "second"
+
+
+def test_saving_the_same_text_again_makes_no_backup(tmp_path: Path) -> None:
+    target = tmp_path / "n.md"
+    save_notes(target, "same")
+    save_notes(target, "same")
+    assert _backups(target) == []
+
+
+def test_only_the_newest_twenty_versions_are_kept(tmp_path: Path) -> None:
+    target = tmp_path / "n.md"
+    for number in range(30):
+        save_notes(target, f"version {number}", now=1_700_000_000.0 + number)
+    backups = _backups(target)
+    assert len(backups) == MAX_BACKUPS == 20
+    # versions 0..28 were replaced; the newest 20 of them are 9..28
+    assert backups[0].read_text(encoding="utf-8") == "version 9"
+    assert backups[-1].read_text(encoding="utf-8") == "version 28"
+
+
+def test_two_saves_in_the_same_instant_do_not_overwrite_each_others_backup(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "n.md"
+    save_notes(target, "a")
+    save_notes(target, "b", now=1_700_000_000.0)
+    save_notes(target, "c", now=1_700_000_000.0)
+    assert sorted(p.read_text(encoding="utf-8") for p in _backups(target)) == ["a", "b"]
+
+
+def test_backups_of_different_files_do_not_prune_each_other(tmp_path: Path) -> None:
+    for name in ("a.md", "b.md"):
+        for number in range(25):
+            save_notes(tmp_path / name, f"{number}", now=1_700_000_000.0 + number)
+    assert len(list((tmp_path / ".history").glob("a-*"))) == 20
+    assert len(list((tmp_path / ".history").glob("b-*"))) == 20
+
+
+def test_a_refused_save_leaves_no_backup(tmp_path: Path) -> None:
+    target = tmp_path / "n.md"
+    save_notes(target, "keep me")
+    with pytest.raises(NotesTooLarge):
+        save_notes(target, "x" * (MAX_NOTES_BYTES + 1))
+    assert _backups(target) == []
+    assert target.read_text(encoding="utf-8") == "keep me"

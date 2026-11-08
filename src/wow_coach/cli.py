@@ -8,6 +8,7 @@ Without it we use the ``WOW_COACH_WOW_DIR`` variable, then the folder saved by
 import argparse
 import contextlib
 import importlib.metadata
+import importlib.util
 import os
 import sys
 import time
@@ -31,6 +32,7 @@ from wow_coach.config import config_path
 from wow_coach.engine.contract import CoachReply
 from wow_coach.errors import WowCoachError
 from wow_coach.gamedir import resolve_game_folder
+from wow_coach.install_hint import install_command
 from wow_coach.report import format_history, format_progress, format_status
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
 from wow_coach.server import format_character_list
@@ -124,9 +126,25 @@ def _build_parser() -> argparse.ArgumentParser:
     app = commands.add_parser(
         "app",
         parents=[shared],
-        help="open the coach window: answers, notifications and read-aloud while you play",
+        help="open the coach window: answers and notifications while you play",
     )
-    app.add_argument("--port", type=int, default=0, help="the port to use (default: a free one)")
+    app.add_argument(
+        "--browser",
+        action="store_true",
+        help="use the window in your browser, even when the desktop app is installed "
+        "(--port and --no-browser also choose the browser window)",
+    )
+    app.add_argument(
+        "--hidden",
+        action="store_true",
+        help="start in the tray without showing the window (the login shortcut uses it)",
+    )
+    app.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="browser window: the port to use (default: a free one)",
+    )
     app.add_argument(
         "--no-browser",
         action="store_true",
@@ -262,6 +280,12 @@ def _reply_text(reply: CoachReply) -> str:
     if answer.text:
         lines += ["", answer.text]
     lines += [f"Watch out: {warning}" for warning in answer.warnings]
+    if reply.sources:
+        lines += ["", "Sources:"]
+        lines += [
+            f"- {source.title}: {source.url}" if source.title else f"- {source.url}"
+            for source in reply.sources
+        ]
     lines += ["", f"From {answer.source}. AI can be wrong.", reply.note]
     return "\n".join(lines)
 
@@ -279,10 +303,34 @@ def _ask(wow_dir_flag: Path | None, words: Sequence[str], character: str | None)
     return 0
 
 
-def _app(wow_dir_flag: Path | None, port: int, open_in_browser: bool) -> int:
-    folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
-    run_app(wow_dir=folder, port=port, open_in_browser=open_in_browser)
-    return 0
+DESKTOP_MISSING = (
+    f"The desktop app needs the desktop extra: {install_command()}. "
+    "Opening the browser window instead."
+)
+
+
+def _desktop_installed() -> bool:
+    """True when PySide6 (Qt for Python, the desktop app's toolkit) can be imported."""
+    return importlib.util.find_spec("PySide6") is not None
+
+
+def _app(arguments: argparse.Namespace, wow_dir_flag: Path | None) -> int:
+    """Open the desktop app, or the browser window when asked or when Qt is not installed."""
+    wants_browser = arguments.browser or arguments.no_browser or arguments.port != 0
+    if not wants_browser and not _desktop_installed():
+        print(DESKTOP_MISSING)
+        wants_browser = True
+    if wants_browser:
+        folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
+        run_app(wow_dir=folder, port=arguments.port, open_in_browser=not arguments.no_browser)
+        return 0
+    # Imported only here, not at the top of the file: Qt is an optional extra, and people
+    # without it must still be able to use every other command (and the browser window).
+    from wow_coach.desktop.run import run_desktop  # noqa: PLC0415 - optional extra, see above
+
+    # The desktop app looks for the game folder itself: when it is missing it shows a window
+    # that helps, instead of failing here where the player would see nothing.
+    return run_desktop(wow_dir_flag=wow_dir_flag, start_hidden=arguments.hidden)
 
 
 def _mcp(wow_dir_flag: Path | None) -> int:
@@ -319,7 +367,7 @@ def main(
         "signin": _signin,
         "signout": _signout,
         "ask": lambda: _ask(flag, arguments.question, arguments.character),
-        "app": lambda: _app(flag, arguments.port, not arguments.no_browser),
+        "app": lambda: _app(arguments, flag),
     }
     try:
         return commands[arguments.command]()

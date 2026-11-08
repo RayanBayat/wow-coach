@@ -10,6 +10,7 @@ from wow_coach.advice.contract import AdviceAnswer
 from wow_coach.ai.base import AIError
 from wow_coach.cli import main
 from wow_coach.engine.contract import CoachReply
+from wow_coach.engine.sources import SourceLink
 
 
 @dataclass
@@ -128,3 +129,36 @@ def test_app_opens_the_window_for_the_game_folder(
     monkeypatch.setattr(cli, "run_app", fake_run_app)
     assert main(["app", "--wow-dir", str(tmp_path), "--port", "8765", "--no-browser"]) == 0
     assert started == [(tmp_path, 8765, False)]
+
+
+def test_ask_prints_a_sources_list_when_there_are_sources(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class Sourced(FakeCoach):
+        def ask(self, question: str, *, character: str | None = None) -> CoachReply:
+            plain = super().ask(question, character=character)
+            return CoachReply(
+                plain.character_key,
+                plain.answer,
+                plain.written_to_game,
+                plain.note,
+                sources=(
+                    SourceLink("Abigail Shiel", "https://warcraft.wiki.gg/wiki/Abigail_Shiel"),
+                    SourceLink("", "https://news.example/a"),
+                ),
+            )
+
+    monkeypatch.setattr(cli, "build_coach", lambda **_: Sourced())
+    assert main(["ask", "hi"]) == 0
+    out = capsys.readouterr().out
+    assert "Sources:" in out
+    assert "- Abigail Shiel: https://warcraft.wiki.gg/wiki/Abigail_Shiel" in out
+    assert "- https://news.example/a" in out
+
+
+def test_ask_prints_no_sources_heading_without_sources(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cli, "build_coach", lambda **_: FakeCoach())
+    assert main(["ask", "hi"]) == 0
+    assert "Sources:" not in capsys.readouterr().out

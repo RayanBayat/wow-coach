@@ -1,38 +1,105 @@
 # wow-coach
 
-wow-coach lets an AI of your choice see your World of Warcraft: Forever character, so it can
-coach you with your real character: level, quests, talents, gear, every item in your bags,
-bank and mail, spells, stats and more. A small addon called
-CoachLink saves your character as text. You give that text to the AI by pasting it, or by
-connecting an AI app that can read it.
+wow-coach is a coach for World of Warcraft: Forever. It reads your real character (level,
+quests, talents, gear, every item in your bags, bank and mail, spells, stats and more) and
+helps you decide what to do next.
 
-It works with ChatGPT, Claude, Gemini, Copilot and any other AI. You do not need to know how
-to code.
+## How it works: one addon, many ways in
 
-## What you need
+The heart of wow-coach is a small in-game addon, **CoachLink**. It is the gateway between the
+game and any AI:
 
-- WoW Forever installed with the Battle.net app (Windows, macOS, or Linux with Wine).
-- An AI chat or app you already use.
-- About 10 minutes.
+- **Out of the game:** CoachLink saves your character, and the questions you type in its
+  Coach panel, to a file on your computer each time the game saves (a `/reload`, `/coach`,
+  your "Save for the coach" key, or logging out).
+- **Into the game:** answers written for you show up in the in-game Coach panel after your next
+  `/reload` (the game only reads new files when it loads the interface).
 
-## Pick your way
+Everything else plugs into that gateway. Pick the way that fits you:
 
-| | Way 1: paste | Way 2: connect an AI app | Way 3: skill and live mode | Way 4: the Claude Code agent | Way 5: the coach window |
+```
+World of Warcraft
+  └─ CoachLink addon (the gateway: saves your character, shows answers in the Coach panel)
+       ├─ WoW Coach app ......... everyone with a ChatGPT plan
+       ├─ MCP server ............ your own AI agent (Claude Code, Codex, Cursor...)
+       ├─ wow-coach command ..... the terminal and scripts
+       └─ /coach copy ........... paste into any AI chat, nothing to install
+```
+
+- **Players (no technical knowledge needed):** use the **WoW Coach app**. It is a normal
+  window with a chat, quick buttons and a card on top of your game, and it answers with your
+  own ChatGPT plan (Plus or Pro). It installs the addon for you. [Start here](#start-here-the-wow-coach-app-windows-and-linux-macos-works-with-fewer-extras).
+- **Technical people (bring your own AI):** connect the AI agent you already use to the
+  gateway. The **MCP server** gives any MCP-capable agent (Claude Code, Claude Desktop, Codex,
+  Cursor and others) tools to read your character, its history and notes, look things up on
+  the Warcraft Wiki, and answer the questions you type in the game's Coach panel. The
+  **`wow-coach` command** does the same from a terminal (`status`, `watch`, `ask`...).
+  [Bring your own AI](#bring-your-own-ai-agent).
+- **Anyone, with any AI chat:** type `/coach copy` in the game and paste the text into the
+  chat. [Quick start](#quick-start-way-2-paste-into-any-ai-chat).
+
+All of them read the same saved files, so you can mix them: for example the app on your
+desktop and your own agent in a terminal, sharing the same notes about you and your character.
+
+## Start here: the WoW Coach app (Windows and Linux; macOS works with fewer extras)
+
+The easiest way is the WoW Coach app. It is a normal window on your computer with a chat, quick
+buttons ("What next?", "Check my gear"...) and a small card that can stay on top of your game.
+It answers with your own ChatGPT plan (Plus or Pro). It also installs the addon for you.
+
+You need:
+
+- A ChatGPT Plus or Pro plan.
+- WoW Forever, installed with the Battle.net app.
+- About 10 minutes. There is nothing else to buy.
+
+Then follow the step-by-step guide for your system. Every step says what you should see:
+
+- [Install and use the app on Windows](docs/desktop-app.md#windows)
+- [Install and use the app on Linux](docs/desktop-app.md#linux)
+- [macOS](docs/desktop-app.md#macos)
+
+The guide starts from zero: it even shows how to open the window where you type the install
+line (a "terminal") and how to install the one free helper tool (uv) the app needs.
+
+## Bring your own AI agent
+
+For people who already use an AI agent or an MCP-capable app. You need the CoachLink addon
+([install it](docs/install-the-addon.md), or let `wow-coach setup` do it) and
+[uv](https://docs.astral.sh/uv/getting-started/installation/).
+
+- **MCP server** (any MCP client): [Connect an AI app](docs/connect-an-ai-app.md). Your agent
+  gets the same tools wow-coach's own coach uses: your character's status, recent history and
+  progress, the coach's notes (read and save), Warcraft Wiki lookups, quest lookups, and the
+  in-game Coach panel (read the questions you typed in the game, send answers back).
+- **Claude Code agent:** [a ready-made coach](docs/claude-code-agent.md) (`claude --agent
+  wow-coach`) that sets everything up, takes your goal and plans how to reach it.
+- **Skill and live mode:** [the coaching skill](docs/coach-skill-and-live-mode.md) for agents
+  that use Agent Skills, and `wow-coach watch` to react the moment the game saves.
+- **The terminal:** `wow-coach status`, `wow-coach watch`, `wow-coach ask "what next?"` (with
+  your ChatGPT sign-in), and `wow-coach --help` for the rest.
+- **Build your own:** the files CoachLink writes, the answer file it reads, and everything
+  wow-coach keeps in its data folder are documented in [How it works](docs/design.md), so any
+  tool or AI can read and write them.
+
+## All the ways, side by side
+
+Start with any one of them and add the others later. They all share the same addon and notes.
+
+| | Way 1: the WoW Coach app (recommended) | Way 2: paste | Way 3: connect an AI app | Way 4: skill and live mode | Way 5: the Claude Code agent |
 |---|---|---|---|---|---|
-| For | Anyone, with any AI chat | People who use an AI app that supports MCP | People who use an AI agent such as Claude Code | People who use Claude Code (the easiest) | People with a ChatGPT plan (Plus or Pro) |
-| Effort | Lowest: install the addon only | Medium: also install uv and edit one settings file | Medium: also copy one folder; live mode needs Claude Code | One setup command, then one start command | Install uv, sign in with ChatGPT once, then one start command |
-| What you get | You type `/coach copy`, paste the text into the chat | The AI reads your character itself and remembers each character | The AI answers on its own each time you type `/coach` | A coach that sets everything up, lets you pick which character to continue, takes your goal and plans how to reach it | Your own coach in a small window: answers your questions from the game by itself, notifies you or reads answers aloud, and speaks up when you die, level up or need repairs, if you want |
-| Guide | [Use with any AI chat](docs/use-with-any-ai-chat.md) | [Connect an AI app](docs/connect-an-ai-app.md) | [Skill and live mode](docs/coach-skill-and-live-mode.md) | [The Claude Code agent](docs/claude-code-agent.md) | [The coach window](docs/coach-window.md) |
+| For | People with a ChatGPT plan (Plus or Pro) | Anyone, with any AI chat | People who use an AI app that supports MCP | People who use an AI agent such as Claude Code | People who use Claude Code |
+| Effort | Install uv, then one install line; the app sets up the rest and signs you in with ChatGPT | Lowest: install the addon only | Medium: also install uv and edit one settings file | Medium: also copy one folder; live mode needs Claude Code | One setup command, then one start command |
+| What you get | Your own coach app: chat and quick buttons, a card that stays on top of the game, answers your questions from the game by itself, notifies you, and tells you what changed after each save (a level-up, a death, full bags...), with advice if you want | You type `/coach copy`, paste the text into the chat | The AI reads your character itself and remembers each character | The AI answers on its own each time you type `/coach` | A coach that sets everything up, lets you pick which character to continue, takes your goal and plans how to reach it |
+| Guide | [The WoW Coach app](docs/desktop-app.md) | [Use with any AI chat](docs/use-with-any-ai-chat.md) | [Connect an AI app](docs/connect-an-ai-app.md) | [Skill and live mode](docs/coach-skill-and-live-mode.md) | [The Claude Code agent](docs/claude-code-agent.md) |
 
-You can start with Way 1 and add the others later.
-
-## Quick start (Way 1)
+## Quick start (Way 2: paste into any AI chat)
 
 Shortcut: if you have [uv](https://docs.astral.sh/uv/getting-started/installation/), this line
 does steps 1 to 3 for you:
-`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach setup`
+`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup`
 
-1. Download `CoachLink-0.9.0.zip` from the
+1. Download `CoachLink-0.10.0.zip` from the
    [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest).
 2. Unzip it into the game's `Interface\AddOns` folder, so this file exists:
    `World of Warcraft\_forever_\Interface\AddOns\CoachLink\CoachLink.toc`.
@@ -49,7 +116,7 @@ does steps 1 to 3 for you:
 In game, `/coach` saves your character (the screen reloads for a few seconds) and `/coach help`
 lists the commands.
 
-## Way 4: the Claude Code agent (the easiest if you use Claude Code)
+## Way 5: the Claude Code agent (the easiest alternative if you use Claude Code)
 
 1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) (the
    [Connect an AI app](docs/connect-an-ai-app.md) guide, step 1, shows how).
@@ -57,7 +124,7 @@ lists the commands.
    player notes file and installs the coach into Claude Code:
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach setup --claude-code
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup --claude-code
    ```
 
 3. Restart the game completely if the setup told you to, then start your coach:
@@ -71,7 +138,7 @@ Tell it your goal ("level 20 by Sunday", "100 gold for the mount") and it makes 
 
 ## Game lookups
 
-With Way 2, the AI can also look up game facts quickly instead of searching the web: where an
+With Way 3, the AI can also look up game facts quickly instead of searching the web: where an
 NPC stands, what a vendor sells, who gives a quest and what it rewards. It reads the
 [Warcraft Wiki](https://warcraft.wiki.gg) (text under
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)), tells you which parts are
@@ -93,6 +160,7 @@ wow-coach wiki --quest 365
 - [Use with any AI chat](docs/use-with-any-ai-chat.md)
 - [Connect an AI app](docs/connect-an-ai-app.md)
 - [Skill and live mode](docs/coach-skill-and-live-mode.md)
+- [The WoW Coach app](docs/desktop-app.md) and the older [browser window](docs/coach-window.md)
 - [The Claude Code agent](docs/claude-code-agent.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Glossary](docs/glossary.md)
@@ -127,7 +195,7 @@ In a terminal, `wow-coach characters` and `wow-coach progress` show the same lis
   mail (with the mail's subject) or attacked you just before you died. It does not contain your account name, password or email.
 - The addon only uses the normal addon interface. It does not read game memory, inject code or
   automate play. Addons that use the normal interface are allowed under Blizzard's rules.
-- With the coach window (Way 5), wow-coach's own coach sends your character's data, your
+- With the WoW Coach app or the coach window (Way 1), wow-coach's own coach sends your character's data, your
   questions, the recent conversation and the coach's notes (you can turn the notes off) to OpenAI through your own Sign in with ChatGPT, using your ChatGPT plan. Other
   players' names are replaced with "a player" first, unless you allow them. Details:
   [privacy notice](docs/privacy.md).

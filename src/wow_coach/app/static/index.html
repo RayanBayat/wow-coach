@@ -72,12 +72,6 @@
         </div>
       </form>
 
-      <section id="decisions-box" class="card" hidden>
-        <h2>Recent decisions</h2>
-        <p class="muted">Why the coach did or did not speak up by itself.</p>
-        <ul id="decisions" class="plain-list"></ul>
-      </section>
-
       <article id="newest" class="card answer" hidden></article>
       <section id="older-box" hidden>
         <h2>Older answers</h2>
@@ -142,11 +136,6 @@
           <span id="notify-warning" class="muted" hidden>(this computer can't show them)</span>
         </label>
         <label class="check">
-          <input type="checkbox" data-setting="speak">
-          Read answers aloud
-          <span id="speak-warning" class="muted" hidden>(this computer can't read aloud)</span>
-        </label>
-        <label class="check">
           <input type="checkbox" data-setting="share_other_player_names">
           Share other players' names with the AI
         </label>
@@ -163,12 +152,6 @@
           before anything leaves this computer.
         </p>
 
-        <h3>Limits that protect your plan</h3>
-        <label for="max-hour">Most AI calls per hour</label>
-        <input type="number" id="max-hour" data-setting="max_calls_per_hour" min="0" max="200">
-        <label for="max-day">Most AI calls per day</label>
-        <input type="number" id="max-day" data-setting="max_calls_per_day" min="0" max="2000">
-
         <h3>Model</h3>
         <label for="model">Which model to use</label>
         <select id="model" data-setting="model"></select>
@@ -179,37 +162,28 @@
       </form>
 
       <form id="triggers-form" class="card">
-        <h2>When should the coach speak up?</h2>
+        <h2>Coach on its own</h2>
         <p class="muted">
-          Every rule starts as "Off": the coach only answers when you ask. "Notify me" shows
-          a short note and uses nothing from your plan. "Ask the coach" gives you advice and
-          uses one call.
+          The game only shares your character when it saves (a /reload, logging out, or the
+          "Save for the coach" key), so this happens right after a save, never live. What is
+          worth knowing is worked out here from what changed since the last save, for free:
+          a level-up, nearly full bags, a finished quest, a death, unspent talent points,
+          worn gear, a new zone.
         </p>
-        <div id="trigger-rules"></div>
-
-        <label for="every-minutes">Ask the coach every ... minutes (0 = never, otherwise 5 to 240)</label>
-        <input type="number" id="every-minutes" min="0" max="240">
-        <label for="cooldown">At least ... minutes between answers the coach starts by itself</label>
-        <input type="number" id="cooldown" min="0" max="240">
+        <label for="on-save">When the game saves</label>
+        <select id="on-save">
+          <option value="off">Off</option>
+          <option value="notify">Tell me what's worth knowing</option>
+          <option value="advice">Tell me and update my next steps</option>
+        </select>
+        <p class="muted">
+          The advice choice uses one call of your plan per save, at most.
+        </p>
         <label class="check">
           <input type="checkbox" id="quiet-instances">
           Stay quiet in dungeons and raids
         </label>
-        <div class="row">
-          <label for="quiet-from">Quiet hours from</label>
-          <input type="number" id="quiet-from" min="0" max="23" placeholder="never">
-          <label for="quiet-to">to</label>
-          <input type="number" id="quiet-to" min="0" max="23" placeholder="never">
-          <span class="muted">(hour of the day, 0 to 23; leave empty for no quiet hours)</span>
-        </div>
-        <label class="check">
-          <input type="checkbox" id="use-triage">
-          Use a small AI to decide whether an event is worth waking the coach
-        </label>
-        <label for="rules-text">In your own words: when should the coach speak up?</label>
-        <textarea id="rules-text" rows="3" maxlength="500"
-                  placeholder="For example: only if I die twice in 10 minutes"></textarea>
-        <button type="submit" class="primary">Save rules</button>
+        <button type="submit" class="primary">Save</button>
         <span id="triggers-saved" class="muted" hidden>Saved.</span>
       </form>
     </section>

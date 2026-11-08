@@ -974,6 +974,27 @@ local function isSecret(value)
     return issecretvalue ~= nil and issecretvalue(value)
 end
 
+-- A secret value may be kept, but never turned into text (the copy window fails on it with
+-- "invalid value (secret) ... for 'concat'"). So every secret value in what we read is
+-- replaced by a plain note before anything formats or saves it.
+local HIDDEN_BY_GAME = "(hidden by the game)"
+local MAX_SCRUB_DEPTH = 10  -- our tables are only a few levels deep; this is a safety stop
+
+local function scrubSecrets(value, depth)
+    if type(value) ~= "table" or depth > MAX_SCRUB_DEPTH then
+        return
+    end
+    for key, item in pairs(value) do
+        if isSecret(key) then
+            value[key] = nil  -- a hidden key can't be stored or shown: drop the entry
+        elseif isSecret(item) then
+            value[key] = HIDDEN_BY_GAME
+        elseif type(item) == "table" then
+            scrubSecrets(item, depth + 1)
+        end
+    end
+end
+
 -- Remember `unit` if it is an enemy that is attacking you right now.
 local function noteIfAttacking(unit, now)
     if not UnitExists(unit) or not UnitCanAttack("player", unit) then
@@ -1135,6 +1156,7 @@ local function buildSnapshot(reason)
     readSection(snapshot, "mounts", readMounts)
     readSection(snapshot, "remembered", readRemembered)
 
+    scrubSecrets(snapshot, 0)
     return snapshot
 end
 
@@ -1748,7 +1770,9 @@ local function copyCommand()
     end
     local ok, err = pcall(function()
         local snapshot = buildSnapshot("copy")
-        local text = ns.formatSnapshotText(snapshot, savedHistory(), time())
+        local history = savedHistory()
+        scrubSecrets(history, 0)  -- older events may hold hidden names from a fight
+        local text = ns.formatSnapshotText(snapshot, history, time())
         showCopyWindow(text)
     end)
     if not ok then
@@ -1892,7 +1916,7 @@ SlashCmdList.COACHLINK = function(argument)
     if command == "help" then
         say("/coach: save your character for the coach on this PC (reloads the UI, a few seconds).")
         say("/coach panel: open the Coach panel with your coach's advice; you can ask there too.")
-        say("A key for the panel: Options > Keybindings > CoachLink.")
+        say("Keys for the panel and for saving: Options > Keybindings > CoachLink.")
         say("/coach ask <question>: ask your coach (saves and reloads the UI).")
         say("/coach copy (or /coach export): show your character as text to copy into any AI chat. No reload.")
         say("/coach help: show this list.")
@@ -1917,6 +1941,11 @@ SlashCmdList.COACHLINK = function(argument)
         else
             say("please restart the game once to finish updating CoachLink, then try /coach panel again.")
         end
+        return
+    end
+    -- ReloadUI() is not allowed in a fight, and the "Save for the coach" key ends up here too.
+    if InCombatLockdown() then
+        say("Can't save during a fight. Press it again when the fight is over.")
         return
     end
     say("saving your character for the coach...")

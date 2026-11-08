@@ -1,7 +1,7 @@
 """Put wow-coach's own coach together from its real parts (0.9.0+).
 
 Shared by ``wow-coach signin``, ``signout``, ``ask`` and the coach window, so all of them
-use the same sign-in (the system keychain), the same usage caps and the same settings.
+use the same sign-in (the system keychain), the same usage log and the same settings.
 """
 
 from collections.abc import Callable, Mapping
@@ -14,8 +14,9 @@ from wow_coach.ai.chatgpt_signin import ChatGPTSignIn
 from wow_coach.app_settings import AppSettings, load_settings, settings_path
 from wow_coach.config import config_path
 from wow_coach.datafolder import data_folder
-from wow_coach.engine.coach import ChatCoach
+from wow_coach.engine.coach import ActivityListener, ChatCoach
 from wow_coach.engine.contract import CoachReply
+from wow_coach.engine.conversation import Source
 from wow_coach.engine.model import choose_model
 from wow_coach.gamedir import resolve_game_folder
 from wow_coach.keychain import Keychain
@@ -44,20 +45,14 @@ def build_sign_in(environ: Mapping[str, str], keychain: Keychain | None = None) 
     return ChatGPTSignIn(keychain or Keychain(), lock_path=lock)
 
 
-def build_usage_log(settings: AppSettings, environ: Mapping[str, str]) -> UsageLog:
-    """The usage log with the player's caps (calls per hour and per day)."""
-    return UsageLog(
-        usage_log_path(data_folder(environ=environ)),
-        max_calls_per_hour=settings.max_calls_per_hour,
-        max_calls_per_day=settings.max_calls_per_day,
-    )
+def build_usage_log(environ: Mapping[str, str]) -> UsageLog:
+    """The log that counts the AI calls."""
+    return UsageLog(usage_log_path(data_folder(environ=environ)))
 
 
-def build_plan(
-    sign_in: ChatGPTSignIn, settings: AppSettings, environ: Mapping[str, str]
-) -> ChatGPTPlan:
-    """The player's ChatGPT plan as an AI provider, with the player's usage caps."""
-    return ChatGPTPlan(sign_in, usage_log=build_usage_log(settings, environ))
+def build_plan(sign_in: ChatGPTSignIn, environ: Mapping[str, str]) -> ChatGPTPlan:
+    """The player's ChatGPT plan as an AI provider, counting its calls."""
+    return ChatGPTPlan(sign_in, usage_log=build_usage_log(environ))
 
 
 def pick_plan_model(plan: ChatGPTPlan, settings: AppSettings) -> str:
@@ -77,7 +72,7 @@ def build_coach(*, wow_dir_flag: Path | None, environ: Mapping[str, str]) -> Cha
             "You're not signed in to ChatGPT yet. Run `wow-coach signin` first, "
             "or sign in from the coach window (`wow-coach app`)."
         )
-    plan = build_plan(sign_in, settings, environ)
+    plan = build_plan(sign_in, environ)
     model = pick_plan_model(plan, settings)
     wow_dir = resolve_game_folder(
         wow_dir_flag, environ=environ, config_file=config_path(environ=environ)
@@ -112,6 +107,11 @@ class LiveCoach:
         self._settings_file = settings_file
         self._make_coach = make_coach
         self._model_for: tuple[str | None, str] | None = None  # (the player's choice, model)
+        self._on_activity: ActivityListener | None = None
+
+    def set_activity_listener(self, listener: ActivityListener) -> None:
+        """Where to report what the coach looks up while it answers (the app core sets it)."""
+        self._on_activity = listener
 
     def _model(self, settings: AppSettings) -> str:
         if self._model_for is None or self._model_for[0] != settings.model:
@@ -126,11 +126,14 @@ class LiveCoach:
             wow_dir=self._wow_dir,
             environ=self._environ,
             settings=settings,
+            on_activity=self._on_activity,
         )
 
-    def ask(self, question: str, *, character: str | None = None) -> CoachReply:
-        """Answer a question typed outside the game."""
-        return self._coach().ask(question, character=character)
+    def ask(
+        self, question: str, *, character: str | None = None, source: Source = "app"
+    ) -> CoachReply:
+        """Answer a question typed outside the game (or sent after a save)."""
+        return self._coach().ask(question, character=character, source=source)
 
     def answer_open_questions(self, *, character: str | None = None) -> list[CoachReply]:
         """Answer the questions waiting in the game's Coach panel."""

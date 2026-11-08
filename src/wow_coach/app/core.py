@@ -5,14 +5,15 @@ call at a time". The web server (``server.py``) and the save-file watcher (``wat
 are thin layers on top of it, so the rules live in exactly one place.
 """
 
+import hashlib
 import logging
 import threading
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from wow_coach.advice.contract import AdviceAnswer
-from wow_coach.ai.base import AIError, PlanLimitReached, Provider
+from wow_coach.advice.contract import MAX_TITLE_CHARS, AdviceAnswer
+from wow_coach.ai.base import AIError, PlanLimitReached
 from wow_coach.app.baseline import AdviceBaseline
 from wow_coach.app.contract import Alerts, SignIn
 from wow_coach.app.events import EventBus
@@ -32,15 +33,24 @@ from wow_coach.app_settings import (
     save_settings,
     update_settings,
 )
+from wow_coach.engine.agent import Activity
 from wow_coach.engine.contract import Coach, CoachReply
+from wow_coach.engine.conversation import (
+    ChatAnswer,
+    ChatMessage,
+    append_messages,
+    conversation_file,
+    now_iso,
+    read_messages,
+)
 from wow_coach.errors import WowCoachError
-from wow_coach.triggers.state import STATE_FILE_NAME
+from wow_coach.importers.claude_code import import_claude_chats
 
 _log = logging.getLogger(__name__)
 
+SHOWN_MESSAGES = 200  # the newest chat messages sent to the window
 ALERT_TITLE = "Your coach answered"
 NOTICE_TITLE = "wow-coach"
-MAX_SPOKEN_CHARS = 400
 UNEXPECTED_ERROR = (
     "Something unexpected went wrong inside wow-coach. Nothing was changed. "
     "Please try again, and if it keeps happening, report it on the wow-coach GitHub page."
@@ -80,26 +90,20 @@ class AppCore:
         settings_file: Path,
         wow_dir: Path,
         usage: CallCounter,
-        on_settings_changed: Callable[[AppSettings], None] | None = None,
-        triage_provider: Provider | None = None,
-        small_model: Callable[[], str | None] | None = None,
-        trigger_state_file: Path | None = None,
+        claude_projects_dir: Path | None = None,
     ) -> None:
         """Create the core.
 
         Args:
             coach: The coach engine (a fake in tests).
             signin: The ChatGPT sign-in (a fake in tests).
-            alerts: Desktop notifications and read-aloud (a fake in tests).
+            alerts: Desktop notifications (a fake in tests).
             list_models: Gives the models the player's plan can use.
             settings_file: Where ``settings.json`` is saved.
             wow_dir: The game folder.
             usage: Counts recent AI calls (``UsageLog``).
-            triage_provider: The AI used for the optional triage step (None = no triage).
-            small_model: Gives the small model's name for triage (None = no triage).
-            trigger_state_file: Where cooldowns are remembered (default: next to settings).
-            on_settings_changed: Called with the new settings after each save, so objects
-                that copied a setting (such as the usage caps) can follow.
+            claude_projects_dir: Claude Code's ``projects`` folder, where the player's Claude
+                coach chats are read from (None = do not import them).
         """
         self.coach = coach
         self.signin = signin
@@ -111,17 +115,19 @@ class AppCore:
         self.ai_lock = threading.Lock()
         self._list_models = list_models
         self._settings_file = settings_file
+        self._claude_projects_dir = claude_projects_dir
+        self._data_dir = settings_file.parent  # where conversations/ and the other files live
         self._settings = load_settings(settings_file)
         self._settings_lock = threading.Lock()
-        self._on_settings_changed = on_settings_changed
         self._usage = usage
-        self.triage_provider = triage_provider
         self._welcome_file = settings_file.with_name(WELCOME_FILE_NAME)
-        self._small_model = small_model
-        self.trigger_state_file = trigger_state_file or settings_file.with_name(STATE_FILE_NAME)
         self._signin_busy = threading.Lock()
         # (character, question id) pairs already answered: a question is never answered twice.
         self._answered: set[tuple[str, str]] = set()
+        # Let the engine tell the windows what it is looking up while it works.
+        listen = getattr(coach, "set_activity_listener", None)
+        if callable(listen):
+            listen(self.publish_activity)
 
     # ---- settings ---------------------------------------------------------------------
 
@@ -137,8 +143,6 @@ class AppCore:
             new = update_settings(self._settings, changes)
             save_settings(self._settings_file, new)
             self._settings = new
-        if self._on_settings_changed is not None:
-            self._on_settings_changed(new)
         return new
 
     # ---- reading ----------------------------------------------------------------------
@@ -157,6 +161,7 @@ class AppCore:
             settings=self.settings,
             counter=self._usage,
             alerts_available=self.alerts_available(),
+            conversation_of=self.conversation,
         )
         state["welcome_pending"] = signed_in and not self._welcome_file.exists()
         if keychain_problem is not None:
@@ -164,6 +169,35 @@ class AppCore:
                 filter(None, [str(state["problem"] or ""), keychain_problem])
             )
         return state
+
+    def conversation(self, character_key: str) -> list[ChatMessage]:
+        """The newest chat messages with this character, oldest first.
+
+        Claude coach chats are left out when the player turned "Use my Claude coach chats" off.
+        """
+        found = read_messages(
+            conversation_file(self._data_dir, character_key), limit=SHOWN_MESSAGES
+        )
+        if self.settings.use_claude_chats:
+            return found
+        return [item for item in found if item.source != "claude-code"]
+
+    def import_claude_chats(self) -> int:
+        """Add new Claude coach chats to the chat history; returns how many messages were new.
+
+        Does nothing when the player turned "Use my Claude coach chats" off. It reads files,
+        so call it from a background thread, never from the window's thread.
+        """
+        if self._claude_projects_dir is None or not self.settings.use_claude_chats:
+            return 0
+        result = import_claude_chats(
+            projects_dir=self._claude_projects_dir,
+            data_dir=self._data_dir,
+            characters=self.game().characters,
+        )
+        if result.imported:
+            self.bus.publish("history", {"characters": list(result.character_keys)})
+        return result.imported
 
     def _read_signed_in(self) -> tuple[bool, str | None]:
         """(signed in?, a sentence when the keychain could not be read, e.g. it is locked)."""
@@ -192,13 +226,10 @@ class AppCore:
         self._welcome_file.write_text("seen\n", encoding="utf-8")
 
     def alerts_available(self) -> dict[str, bool]:
-        """What this computer can do outside the window (notify, read aloud)."""
+        """What this computer can do outside the window (notify)."""
         ask = getattr(self.alerts, "available", None)
         found = ask() if callable(ask) else {}
-        return {
-            "notify": bool(found.get("notify", True)),
-            "speak": bool(found.get("speak", True)),
-        }
+        return {"notify": bool(found.get("notify", True))}
 
     def models(self) -> list[dict[str, str]]:
         """The models the plan can use, as ``{slug, name}`` dicts."""
@@ -253,7 +284,7 @@ class AppCore:
         for reply in replies:
             self.publish_reply(reply)
             if alert:
-                self.alert(reply.answer, allow_speak=True)
+                self.alert(reply.answer)
 
     def _open_ids(self, character: str | None) -> list[tuple[str, str]]:
         """(character, question id) of every open question of this character, oldest first."""
@@ -293,6 +324,13 @@ class AppCore:
         """
         self.bus.publish("error", {"message": message, "kind": kind})
 
+    def publish_activity(self, character_key: str, activity: Activity) -> None:
+        """Tell every open window what the coach is doing now ("Searched the web for ...")."""
+        self.bus.publish(
+            "activity",
+            {"character": character_key, "text": activity.text, "kind": activity.kind},
+        )
+
     def publish_reply(self, reply: CoachReply) -> None:
         """Send a finished answer to the window (and remember its question as answered).
 
@@ -309,11 +347,14 @@ class AppCore:
                 "answer": answer_to_json(reply.answer),
                 "note": reply.note,
                 "written_to_game": reply.written_to_game,
+                "sources": [{"title": s.title, "url": s.url} for s in reply.sources],
+                "lookups": [{"kind": item.kind, "text": item.text} for item in reply.lookups],
             },
         )
 
     def publish_outside_answer(self, character_key: str, answer: AdviceAnswer) -> None:
-        """Send an answer that someone else wrote into ``Advice.lua``."""
+        """Send an answer that someone else wrote into ``Advice.lua``, and keep it in the chat."""
+        self._remember_outside_answer(character_key, answer)
         self.bus.publish(
             "answer",
             {
@@ -324,6 +365,38 @@ class AppCore:
             },
         )
 
+    def _remember_outside_answer(self, character_key: str, answer: AdviceAnswer) -> None:
+        """Add an answer written by another app (for example the Claude coach) to the chat.
+
+        The id comes from the answer itself, so seeing the same answer twice stores it once.
+        """
+        digest = hashlib.sha1(
+            f"{character_key}|{answer.answered_at}|{answer.title[:MAX_TITLE_CHARS]}".encode(),
+            usedforsecurity=False,
+        ).hexdigest()[:16]
+        at = now_iso(float(answer.answered_at))
+        steps = "; ".join(answer.steps)
+        text = " ".join(part for part in (answer.title + ".", steps, answer.text) if part)
+        messages = [
+            ChatMessage(
+                "assistant",
+                text,
+                f"outside:{digest}",
+                at,
+                "outside",
+                provider=None,
+                answer=ChatAnswer(answer.title, answer.steps, answer.text, answer.warnings),
+            )
+        ]
+        if answer.question:
+            messages.insert(
+                0, ChatMessage("user", answer.question, f"outside-q:{digest}", at, "outside")
+            )
+        try:
+            append_messages(conversation_file(self._data_dir, character_key), messages)
+        except OSError:
+            _log.exception("Could not keep an outside answer in the chat history")
+
     def publish_questions(self, character_key: str, game: GameView) -> None:
         """Tell the window which questions from the game are still open."""
         found = open_questions_for(game, select_character(game, character_key))
@@ -333,22 +406,15 @@ class AppCore:
                 {"character": character_key, "questions": [question_to_json(q) for q in found]},
             )
 
-    def small_model(self) -> str | None:
-        """The small model's name for triage, or None when unknown."""
-        return None if self._small_model is None else self._small_model()
-
     def notify_text(self, text: str) -> None:
         """A desktop notification for something the coach noticed (if notifications are on)."""
         if self.settings.notify:
             self._safely(lambda: self.alerts.notify(NOTICE_TITLE, text))
 
-    def alert(self, answer: AdviceAnswer, *, allow_speak: bool) -> None:
-        """Notify (and maybe read aloud) according to the settings. Never raises."""
-        settings = self.settings
-        if settings.notify:
+    def alert(self, answer: AdviceAnswer) -> None:
+        """Notify according to the settings. Never raises."""
+        if self.settings.notify:
             self._safely(lambda: self.alerts.notify(ALERT_TITLE, answer.title))
-        if allow_speak and settings.speak:
-            self._safely(lambda: self.alerts.speak(spoken_text(answer)))
 
     @staticmethod
     def _safely(action: Callable[[], object]) -> None:
@@ -385,9 +451,3 @@ class AppCore:
         confirmed = self.signin.sign_out()
         self.bus.publish("signin", {"state": "signed_out"})
         return confirmed
-
-
-def spoken_text(answer: AdviceAnswer) -> str:
-    """What to read aloud: the title and the steps, kept short."""
-    parts = [answer.title, *answer.steps]
-    return ". ".join(part.rstrip(".") for part in parts)[:MAX_SPOKEN_CHARS]

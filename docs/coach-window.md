@@ -1,9 +1,13 @@
 # The coach window: answers while you play, with your ChatGPT plan
 
+> **New:** the [WoW Coach app](desktop-app.md) does everything this page does, in its own
+> window, with quick buttons and a card that stays on top of the game. This browser window
+> still works: start it with `wow-coach app --browser`.
+
 The coach window is a small page that wow-coach opens in your web browser. It is your own
 coach, answering with your ChatGPT plan. It shows the coach's answers the moment they are
 ready, so you don't need to `/reload` the game to read them. It can also pop up a
-notification or read the answer aloud.
+notification.
 
 It runs only on your computer. Only you can open it, and it never talks to other players.
 
@@ -21,7 +25,7 @@ It runs only on your computer. Only you can open it, and it never talks to other
    **wow-coach** there; wow-coach never sees your password.
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach signin
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach signin
    ```
 
    **You should see:** "Signed in as <your email>" and "You're using your ChatGPT plan."
@@ -30,7 +34,7 @@ It runs only on your computer. Only you can open it, and it never talks to other
 2. Open the coach window:
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach app
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach app
    ```
 
    Your browser opens the window. Keep the terminal open while you play; press Ctrl+C there
@@ -44,47 +48,59 @@ It runs only on your computer. Only you can open it, and it never talks to other
   answer shows at once, with numbered steps. It is also put in the game's Coach panel for your
   next `/reload`.
 - **Ask in the game:** type your question in the Coach panel and click **Ask**. The window
-  answers it by itself within a few seconds, and shows it, notifies you or reads it aloud.
+  answers it by itself within a few seconds, and shows it or notifies you.
   You can keep playing.
-- **Notifications and read-aloud:** turn them on in **Settings**. Read-aloud is off at first.
-  If your computer can't do one of them, the window says so.
+- **Notifications:** turn them on or off in **Settings**. If your computer can't show
+  them, the window says so.
 - **ChatGPT:** shows that you are signed in, how many questions you asked in the last hour and
   day, a **Manage usage** link to your ChatGPT settings, and **Sign out**.
 
-## When the coach speaks up by itself
+## When the game saves
 
-At first the coach only answers when you ask. In **Settings**, under **When should the coach
-speak up?**, you can choose what happens for each kind of event the game reports:
+The game only hands your character to wow-coach when it **saves**: when you type `/coach` or
+`/reload`, log out, press the "Save for the coach" key, or ask in the game. So the coach can
+never be "live", but right after each save it can tell you what changed since the save before.
 
-| Event | Example |
+In **Settings**, under **Coach on its own**, **When the game saves** has three choices:
+
+- **Off:** nothing happens. The coach only answers when you ask.
+- **Tell me what's worth knowing** (the default): one desktop notification that lists what is
+  worth knowing, in one short text. It is worked out by wow-coach itself from what changed
+  between the two saves, so it is free and uses nothing from your plan. When nothing
+  happened, you get nothing.
+- **Tell me and update my next steps:** the same notification, and after every save the coach
+  gets "Status updated: what should I do next?". Its answer shows in the chat and on the small
+  keep-on-top card, so your next steps are always fresh. It uses one call of your plan per
+  save (every `/reload`, `/coach`, save key or logout); a save made by asking in the game only
+  answers your question.
+
+What counts as worth knowing:
+
+| Thing | Example |
 |---|---|
 | You died, or died again soon after coming back | "Died in Brill. Attacked by 2 enemies..." |
 | You levelled up | "Reached level 12." |
 | A quest is ready to turn in | "Ready to turn in: Fields of Grief." |
-| Your bags are nearly full | "2 free slots left." |
+| Your bags are nearly full | "Bags are nearly full: 2 free slots left." |
 | A new zone | "Now in Silverpine Forest." |
 | Unspent talent points, a gear upgrade in your bags, gear that needs repair | |
-| A timer, every N minutes | |
 
-For each one you choose **Off**, **Notify me** (just a notification, no AI) or **Ask the
-coach** (the coach looks at it and gives advice, using your plan).
+One more switch, **Stay quiet in dungeons and raids** (on at first): while you are in an
+instance, nothing is told or asked.
 
-- **The game only reports events when it saves:** at `/coach`, `/reload`, logout, or the
-  Coach panel's Ask.
-- **The coach stays quiet in dungeons and raids**, unless you turn that off, and in the quiet
-  hours you set.
-- **The cooldown:** after an answer it didn't ask for, the coach waits at least the cooldown
-  minutes before the next one. In between, you only get notifications.
-- **Optional "use a small AI to decide":** a small, cheap model on your plan reads the events
-  and your own words, for example "only wake the coach if I die twice in 10 minutes", and
-  decides whether it is worth asking the bigger model.
-- **Why it did or didn't speak:** the window shows each decision and its reason.
+There is no timer, no quiet hours and no waiting time between answers. One save gives at
+most one notification and at most one unasked answer, and a save where nothing changed gives
+nothing, so repeated `/reload`s cost nothing.
 
-## Limits that protect your plan
+Settings files from older versions still work: if any event was set to "Ask the coach" you
+get the advice choice, otherwise if any was on "Notify me" you get the notify choice, and
+when everything was off you get the new default. The old timer, quiet hours, waiting time
+and small-AI settings are dropped.
 
-- In **Settings** you set the most questions per hour and per day (20 and 100 at first).
-- When a limit is reached, or your plan's own limit is, the coach stops and says when it can
-  answer again.
+## Your plan's limits
+
+- wow-coach sets no limits of its own. Only your ChatGPT plan's limits apply.
+- When your plan's limit is reached, the coach stops and says when it can answer again.
 - One game save never costs more than one answer it didn't ask for.
 
 ## Privacy
@@ -106,8 +122,8 @@ coach** (the coach looks at it and gives advice, using your plan).
 | "You're not signed in to ChatGPT yet" | Run `wow-coach signin` |
 | "Your password keychain could not be used. It may be locked" | Unlock your password store (for example KDE Wallet) and try again |
 | "You signed in, but did not allow wow-coach to use your ChatGPT plan" | Sign in again and accept the plan permission |
-| A limit message | Wait until the time it says, or raise the limits in Settings |
-| No notifications on Linux | Install `libnotify` (the `notify-send` program); for read-aloud, `speech-dispatcher` (`spd-say`) or `espeak-ng` |
+| A limit message | Wait until the time it says (it is your ChatGPT plan's own limit) |
+| No notifications on Linux | Install `libnotify` (the `notify-send` program) |
 | The window says no saved game data | In the game, type `/coach` once |
 | "Press Enter in the wow-coach terminal for a new link" | The window's session ended (for example a new tab). Press Enter in the terminal and open the new link |
 | "wow-coach was closed" | Start `wow-coach app` again |

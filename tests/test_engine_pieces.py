@@ -1,4 +1,4 @@
-"""Tests for the engine's small parts: model choice, answer parsing, redaction, conversation."""
+"""Tests for the engine's small parts: model choice, answer parsing, redaction."""
 
 import json
 import os
@@ -11,16 +11,8 @@ from test_engine_support import KEY, SAVE, make_world
 from wow_coach.advice.contract import MAX_STEP_CHARS, MAX_STEPS, MAX_TEXT_CHARS
 from wow_coach.engine import memory as memory_module
 from wow_coach.engine.answer import ANSWER_SCHEMA, parse_answer
-from wow_coach.engine.conversation import (
-    MAX_FILE_BYTES,
-    MAX_STORED_MESSAGES,
-    Turn,
-    append_turns,
-    conversation_path,
-    load_turns,
-)
 from wow_coach.engine.memory import LocalMemory
-from wow_coach.engine.model import choose_model, choose_small_model
+from wow_coach.engine.model import choose_model
 from wow_coach.engine.redact import looks_like_player_name, other_player_names, redact_names
 from wow_coach.savedvars import find_saved_variables, load_characters
 
@@ -39,12 +31,6 @@ def test_answers_use_a_balanced_model_by_default() -> None:
     assert choose_model(plan, "gone") == "gpt-6.1-terra"
     assert choose_model(["big-sol", "x-luna"], None) == "big-sol"
     assert choose_model(["big", "x-luna"], None) == "x-luna"
-
-
-def test_the_small_model_is_for_quick_yes_or_no_checks() -> None:
-    assert choose_small_model(["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna"]) == "gpt-6-luna"
-    assert choose_small_model(["big-sol", "mid-terra"]) == "mid-terra"
-    assert choose_small_model([]) is None
 
 
 def test_first_listed_model_when_no_known_size() -> None:
@@ -146,55 +132,6 @@ def test_player_like_names() -> None:
     assert not looks_like_player_name("Auction House")
     assert not looks_like_player_name("Bob2")
     assert not looks_like_player_name("")
-
-
-# ---- conversation -------------------------------------------------------------------
-
-
-def test_conversation_path_is_file_safe(tmp_path: Path) -> None:
-    path = conversation_path("A/b:c-Realm", environ={"WOW_COACH_DATA_DIR": str(tmp_path)})
-    assert path.parent.name == "conversations"
-    assert path.name == "A_b_c-Realm.jsonl"
-
-
-def test_turns_are_saved_and_reloaded_oldest_first(tmp_path: Path) -> None:
-    path = tmp_path / "c" / "x.jsonl"
-    append_turns(path, [Turn("user", "q1"), Turn("assistant", "a1")])
-    append_turns(path, [Turn("user", "q2"), Turn("assistant", "a2")])
-    assert [t.content for t in load_turns(path)] == ["q1", "a1", "q2", "a2"]
-    assert [t.content for t in load_turns(path, limit=2)] == ["q2", "a2"]
-
-
-def test_only_the_newest_messages_are_stored(tmp_path: Path) -> None:
-    path = tmp_path / "x.jsonl"
-    for number in range(MAX_STORED_MESSAGES + 10):
-        append_turns(path, [Turn("user", f"q{number}")])
-    lines = path.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == MAX_STORED_MESSAGES
-    assert json.loads(lines[-1])["content"] == f"q{MAX_STORED_MESSAGES + 9}"
-
-
-def test_file_size_is_capped(tmp_path: Path) -> None:
-    path = tmp_path / "x.jsonl"
-    for _ in range(60):
-        append_turns(path, [Turn("assistant", "w" * 5000)])
-    assert path.stat().st_size <= MAX_FILE_BYTES + 3000
-
-
-def test_damaged_file_is_tolerated(tmp_path: Path) -> None:
-    path = tmp_path / "x.jsonl"
-    good = json.dumps({"role": "user", "content": "kept"})
-    path.write_bytes(
-        good.encode() + b'\nnot json\n{"role":"boss","content":"x"}\n[1]\n\xff\xfe\n'
-        b'{"role":"user","content":5}\n'
-    )
-    assert [t.content for t in load_turns(path)] == ["kept"]
-    append_turns(path, [Turn("assistant", "new")])  # rewrites the file cleanly
-    assert [t.content for t in load_turns(path)] == ["kept", "new"]
-
-
-def test_missing_file_gives_no_turns(tmp_path: Path) -> None:
-    assert load_turns(tmp_path / "nope.jsonl") == []
 
 
 def test_names_of_four_letters_or_more_match_in_any_case() -> None:
@@ -314,3 +251,22 @@ def test_memory_files_are_capped_atomic_and_tolerate_damage(tmp_path: Path) -> N
     assert memory.seen_names("b") == {"ok"}
     memory.add_answered(KEY, "2-1")  # a damaged file is simply replaced
     assert memory.answered_ids(KEY) == {"2-1"}
+
+
+def test_markdown_links_in_an_answer_become_plain_words() -> None:
+    reply = json.dumps(
+        {
+            "title": "Level-15 [quest](https://x.test/a)",
+            "steps": [
+                "Visit Anastasia ([theforeverera.com](https://theforeverera.com/q?utm_source=openai))."
+            ],
+            "text": (
+                "Sources list it ([1mw.io](https://1mw.io/m)). See [the wiki](http://w.test/b) too."
+            ),
+            "warnings": [],
+        }
+    )
+    answer = parse_answer(reply, answered_at=1, source="t")
+    assert answer.title == "Level-15 quest"
+    assert answer.steps == ("Visit Anastasia.",)
+    assert answer.text == "Sources list it. See the wiki too."

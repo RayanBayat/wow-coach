@@ -44,14 +44,13 @@ def test_nothing_happens_without_a_change(tmp_path: Path) -> None:
 
 
 def test_a_new_save_with_a_question_is_answered_once(tmp_path: Path) -> None:
-    rig, watcher, mailbox = start(tmp_path, notify=True, speak=True)
+    rig, watcher, mailbox = start(tmp_path, notify=True)
     write_save(rig.wow_dir, ("1-1", "How?"), mtime=2_000)
     watcher.check_once()
     events = drain(mailbox)
     assert kinds(events) == ["save", "question", "answer"]
     assert rig.coach.answered_calls == [KEY]
     assert rig.alerts.notified == [("Your coach answered", "Open answer")]
-    assert rig.alerts.spoken == ["Open answer. Do this. Then that"]
     # The same question, even in a later save, is never answered a second time.
     write_save(rig.wow_dir, ("1-1", "How?"), mtime=3_000)
     watcher.check_once()
@@ -70,10 +69,10 @@ def test_the_watchers_own_answer_is_not_an_outside_change(tmp_path: Path) -> Non
 
 
 def test_notifications_follow_the_settings(tmp_path: Path) -> None:
-    rig, watcher, _ = start(tmp_path, notify=False, speak=False)
+    rig, watcher, _ = start(tmp_path, notify=False)
     write_save(rig.wow_dir, ("1-1", "How?"), mtime=2_000)
     watcher.check_once()
-    assert rig.alerts.notified == [] and rig.alerts.spoken == []
+    assert rig.alerts.notified == []
 
 
 def test_questions_are_left_alone_when_the_setting_is_off(tmp_path: Path) -> None:
@@ -114,15 +113,14 @@ def test_an_ai_error_is_reported_and_the_question_is_tried_again_next_save(tmp_p
     assert "answer" in kinds(drain(mailbox))
 
 
-def test_an_outside_change_notifies_without_the_ai_or_speech(tmp_path: Path) -> None:
-    rig, watcher, mailbox = start(tmp_path, notify=True, speak=True)
+def test_an_outside_change_notifies_without_the_ai(tmp_path: Path) -> None:
+    rig, watcher, mailbox = start(tmp_path, notify=True)
     write_advice_file(rig.wow_dir, [make_answer("From Claude Code", 50)], mtime=4_000)
     watcher.check_once()
     events = drain(mailbox)
     assert kinds(events) == ["answer"]
     assert events[0].data["answer"]["title"] == "From Claude Code"  # type: ignore[index]
     assert rig.alerts.notified == [("Your coach answered", "From Claude Code")]
-    assert rig.alerts.spoken == []
     assert rig.coach.answered_calls == [] and rig.coach.asked == []
     watcher.check_once()  # no second alert for the same change
     assert drain(mailbox) == []

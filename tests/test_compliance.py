@@ -183,7 +183,7 @@ def _uses_a_shell(path: Path) -> list[int]:
 
 @pytest.mark.parametrize("path", PYTHON_FILES, ids=lambda path: path.name)
 def test_no_program_is_ever_run_through_a_shell(path: Path) -> None:
-    # Notifications and read-aloud pass AI text to system programs. As a list of
+    # Notifications pass AI text to system programs. As a list of
     # arguments that text is only text; through a shell it could become a command.
     lines = _uses_a_shell(path)
     assert not lines, f"{path.name} uses shell=True on line(s) {lines}"

@@ -4,6 +4,116 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [0.10.0] - 2026-11-08
+
+WoW Coach is now a real desktop app in a game-style look: chat with your coach, quick
+buttons, a card or overlay on top of the game, and a coach that looks things up, gives its
+sources and updates your next steps every time the game saves.
+
+### Added
+
+- **The WoW Coach app** (`wow-coach app`): your coach in its own window instead of a browser
+  page ([guide](docs/desktop-app.md)). Install it with the `desktop` extra (Qt for Python).
+  - A chat with your coach, and quick buttons: What next?, Check my gear, Spells to train,
+    Plan my session, Why did I die?, Make gold, Explain a word.
+  - "Game data: 12 min old" shows how fresh the coach's view is. It updates by itself whenever
+    the game saves (press your new key in WoW, type `/coach`, or `/reload`), with a short
+    "Got your latest game data" note. There is no refresh button, and a question is always
+    asked right away.
+  - **Keep on top of the game**: a small card above the game with the newest answer.
+  - **Settings**, **ChatGPT** and **Privacy** pages. Settings save by themselves.
+  - **Setup** page: checks the game folder, installs or updates CoachLink, creates the
+    answers folder, and adds WoW Coach to your app menu or starts it when you log in (Linux
+    and Windows).
+  - It keeps running in the tray when you close the window, and only one copy runs at a time.
+  - Light and dark mode follow your computer.
+  - If it can't find your game (for example the game disk isn't connected yet), it asks
+    you to choose the folder instead of not opening.
+  - After you change the game folder, a **Restart WoW Coach** button applies it.
+- **A step-by-step install guide for beginners** ([the app guide](docs/desktop-app.md)):
+  separate sections for Windows, Linux and macOS, from opening a terminal and installing uv
+  to the first chat, with what you should see after each step. The README now points
+  beginners to the app first, and the "Pick your way" ways are numbered again (1: the app,
+  2: paste, 3: connect an AI app, 4: skill and live mode, 5: the Claude Code agent). New app
+  section in [Troubleshooting](docs/troubleshooting.md#the-wow-coach-app) and new words in the
+  [glossary](docs/glossary.md).
+- **`wow-coach-app`**: starts the app directly, without a console window on Windows. The app
+  menu and log-in shortcuts use it.
+- **"Save for the coach" key** in the addon (Options → Keybindings → CoachLink): one key does
+  what `/coach` does.
+- **Overlay mode: the coach on top of your game.** A key (**Ctrl+Shift+Space** at first)
+  shows or hides the coach as a see-through panel over the game, with the cursor in the
+  question box, so you can ask without leaving the game. Esc or the same key hides it and the
+  game gets the keyboard back. Move and resize it; it remembers its place. Change the key and
+  how see-through it is (60-100 %) in **Settings → Overlay**. It is just a window of WoW Coach:
+  it never touches the game. Also in the tray menu and as an **Overlay** button on the Coach
+  page. The key works by itself on Linux (through the desktop's global-shortcuts portal) and
+  Windows; the command `wow-coach-app --toggle-overlay` works everywhere (on macOS it is the
+  only way), and the Setup page has an **Overlay hotkey** card that shows the exact command
+  to bind by hand. See [the guide](docs/desktop-app.md#overlay-mode-the-coach-on-top-of-your-game).
+- **App size** in Settings: make WoW Coach 70 % to 130 % of its normal size, to take less
+  room next to the game. It applies when WoW Coach starts again (a **Restart now** button is
+  right there).
+- **The coach uses tools, searches the web and shows its sources.** WoW Coach's own coach now
+  works like your Claude coach: while it answers it can read your character's status, history
+  and notes, look things up on the Warcraft Wiki, search the web and save your notebook (the
+  last 20 versions of your notes are kept). Under each answer you see **Sources** (buttons that
+  open the pages it used) and **What the coach looked up**, and the chat says what it is doing
+  while it works. The links come from what was really searched and read, never from links the
+  AI wrote. New **Coach tools** card in Settings to turn any of it off, and `wow-coach ask`
+  prints a "Sources:" list ([privacy](docs/privacy.md)).
+- **One chat history that any AI can use, and your Claude coach chats in the app.** WoW Coach
+  keeps one chat file per character in a standard format (JSON Lines, documented in
+  [the design notes](docs/design.md#the-data-folder-shared-storage)), so a new AI (Gemini, the
+  Claude API...) can read and continue the same conversation. The app imports your
+  `claude --agent wow-coach` chats from Claude Code's own session files (read only, every
+  minute), shows the full history in the Coach page (tagged "from the game", "from your Claude
+  coach", "from another app"), and gives the recent messages to the coach so it knows what you
+  already talked about. Other players' names are still hidden. Turn it off with **Use my Claude
+  coach chats** in Settings ([privacy](docs/privacy.md)).
+
+### Fixed
+
+- `/coach copy` no longer fails with "invalid value (secret) ... for 'concat'". WoW Forever
+  hides some details from addons (for example during fights); those now show as "(hidden by
+  the game)", in the copy text and in what the addon saves.
+- wow-coach's own coach now sees the whole coach's notebook. It used to send only the first
+  4 000 characters of a character's journal, so it missed your next steps, choices and
+  progress. Long notes now keep their most useful sections whole, and sections about your
+  computer (for example "## This computer") are never sent.
+- `/coach` and the new key no longer reload the interface during a fight. They say "Can't save
+  during a fight" instead.
+
+### Removed
+
+- The small-AI "triage" step and its "in your own words" text, plus the timer, quiet hours and
+  cooldown for the coach speaking up by itself (see Changed).
+- Reading answers aloud. Notifications still tell you when an answer is ready.
+- Your own usage limits (calls per hour and per day). Only your ChatGPT plan's own limits
+  apply.
+
+### Changed
+
+- **"Coach on its own" is now one setting, "When the game saves".** Choose Off, **Tell me
+  what's worth knowing** (the default: one free notification listing what changed, such as a
+  level-up, full bags, a finished quest or a death, worked out without any AI) or **Tell me
+  and update my next steps** (the same, and after every save the coach
+  is asked "Status updated: what next?"; the answer shows in the chat and on the keep-on-top
+  card). The timer, quiet hours, the
+  per-event rules, the waiting time between answers and the small-AI filter are gone, because
+  the game only shares your data when it saves, so nothing could ever be live. "Stay quiet in
+  dungeons and raids" stays. Older settings files still work and are mapped to the new choice.
+- The Notebook page starts collapsed and opens sections when you click them.
+- An At a glance summary of your notes (goal, next steps, where you are, choices, latest
+  progress) on the Notebook page and beside the chat.
+- The "From ChatGPT · 10 min ago" line under answers is gone; the time shows when you point at
+  an answer.
+- `wow-coach app` opens the new app when it is installed, and the browser window otherwise.
+  `wow-coach app --browser` always opens the browser window. `--hidden` starts the app in the
+  tray (used by "start when I log in").
+
 ## [0.9.0] - 2026-11-08
 
 Your own coach with your ChatGPT plan: the coach window answers your questions from the game by

@@ -1,4 +1,4 @@
-# Way 4: the Claude Code agent
+# Way 5: the Claude Code agent
 
 This is the easiest way if you use **Claude Code** (Anthropic's AI app for your terminal). An
 **agent** is a ready-made helper with its own instructions. The wow-coach agent runs your whole
@@ -13,7 +13,7 @@ You need: WoW Forever, Claude Code, and [uv](https://docs.astral.sh/uv/getting-s
 In a terminal, run this one line:
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach setup --claude-code
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup --claude-code
 ```
 
 It goes through five steps and prints `OK` or `PROBLEM` for each:

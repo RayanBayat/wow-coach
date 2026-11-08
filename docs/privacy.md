@@ -25,14 +25,18 @@ Last updated: 2026-11-08.
 | Your character's snapshot: name, realm, level, zone, quests, gear, bags, bank, mail, spells, stats, reputations, history (deaths, items, quests) | The game's SavedVariables file on your computer | OpenAI, when wow-coach's own coach answers (only after you signed in). Any other AI app you connect |
 | Questions you type in the Coach panel or the coach window | The game's SavedVariables file, and a conversation file in wow-coach's data folder | OpenAI, as above |
 | The coach's answers | `Interface/AddOns/CoachLink_Advice/Advice.lua`, and the conversation file | Nobody else |
-| Your player notes and character journals (the coach writes them; they can hold personal notes, for example how you like to be coached or notes about your computer) | wow-coach's data folder | OpenAI, with each question to wow-coach's own coach (up to a few thousand characters of each), unless you turn off "send the coach's notes" in the window's Settings. The AI app you use, when it reads them |
+| Your chats with your Claude coach (`claude --agent wow-coach`): what you typed and the coach's text replies, copied from Claude Code's own session files in `~/.claude/projects` (never its tool calls, thinking or other sessions), plus answers other apps write into the game's answer file | The same conversation file in wow-coach's data folder. The Claude Code files are only read, never changed | OpenAI, as part of the recent conversation that goes with each question to wow-coach's own coach (the newest messages that fit, about 6 000 characters). Other players' names in them are replaced with "a player" like everywhere else. Turn off "Use my Claude coach chats" in Settings to stop importing them and to keep them out of what is sent |
+| Your player notes and character journals (the coach writes them; they can hold personal notes, for example how you like to be coached or notes about your computer) | wow-coach's data folder | OpenAI, with each question to wow-coach's own coach (the whole journal and player notes, up to about 16 000 and 6 000 characters; longer notes keep their most useful sections), unless you turn off "send the coach's notes" in Settings. Sections about your computer (a heading with "computer", "PC" or "machine", such as "## This computer") are never sent. The AI app you use, when it reads them |
 | Other players' names (your group, mail senders, players who attacked you) | The game's SavedVariables file | Hidden from wow-coach's own coach (replaced with "a player") unless you turn on "share other players' names". Other AI apps can read them in the status report |
 | Your ChatGPT sign-in: a renewal token, the id OpenAI gave this copy of wow-coach, and your ChatGPT account id (not your email) | Your computer's password store (for example KDE Wallet, GNOME Keyring, macOS Keychain, Windows Credential Manager), never a file. The short-lived access token is only kept in memory | OpenAI only, when wow-coach asks for an answer |
 | Your email address | Not stored by wow-coach (it is shown once after sign-in) | Nobody |
 | A usage log (time, model, number of tokens; no text) | wow-coach's data folder | Nobody |
-| Your "when to speak up" rules in your own words, and short summaries of game events (for example "Died in Brill") | wow-coach's data folder (settings) | OpenAI's smallest model on your plan, only if you turn on "use a small AI to decide" |
-| Names of other players the coach has seen (to keep hiding them), and the ids of questions already answered | wow-coach's data folder (`hidden-names-v2.json`, `answered-questions.json`), kept until you delete them | Nobody |
+| Short summaries of what changed between two saves (for example "Died in Brill"), worked out on your computer | Not stored | Nobody by default (a notification only). OpenAI, as part of one question, if you choose "Tell me and update my next steps" under "When the game saves" in Settings |
+| Names of other players the coach has seen (to keep hiding them), and the ids of questions already answered | wow-coach's data folder (`hidden-names-v2.json`, `answered-questions.json`), kept until you delete them. `import-state.json` only remembers how far your Claude Code session files were read | Nobody |
 | Words you look up on the Warcraft Wiki | Nowhere | The Warcraft Wiki (warcraft.wiki.gg), when the coach looks something up |
+| Web searches the built-in coach makes (the search words and the pages found) | The conversation file keeps the pages it cited as the answer's sources | OpenAI, who run the search as part of your ChatGPT plan. Turn off "Let the coach search the web too" in Settings to stop them |
+| What the built-in coach reads with its tools (your character's data, recent history, your notes) | Nowhere new | OpenAI, as part of the answer. Sections of your notes about your computer are left out of what it reads, and kept when it saves |
+| Notes the built-in coach saves (the character journal and the player notes) | wow-coach's data folder, with the last 20 earlier versions in a `.history` folder next to each file | Nobody. Turn off "Let the coach update your notebook" in Settings to stop it |
 
 wow-coach's data folder is `~/.local/share/wow-coach` on Linux (or `$XDG_DATA_HOME/wow-coach`),
 `~/Library/Application Support/wow-coach` on macOS, and `%LOCALAPPDATA%\wow-coach` on
@@ -60,6 +64,13 @@ the requests (`store: false`).
   game's `Interface/AddOns`, and the CoachLink SavedVariables file
   (`WTF/Account/<account>/SavedVariables/CoachLink.lua`).
 - **Other players' names:** keep "share other players' names" off (the default).
+- **Your Claude coach chats:** turn off "Use my Claude coach chats" (Settings, Privacy) so they
+  are not imported, not shown, and never sent to ChatGPT. Chats already imported stay in the
+  conversation file until you delete it (`conversations/<character>.jsonl` in the data folder).
+- **The coach's tools:** turn off "Let the coach look things up" to stop its tools (it then
+  answers only from the data sent with your question), "Let the coach search the web too" to
+  stop web searches, and "Let the coach update your notebook" to stop it saving notes.
+  "Show what the coach looked up" only changes what you see.
 - **The coach's notes:** turn off "send the coach's notes" to keep your player notes and
   journals on your computer (answers fit you less well).
 

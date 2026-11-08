@@ -5,7 +5,6 @@ from typing import ClassVar
 
 from wow_coach.app_settings import AppSettings, save_settings
 from wow_coach.companion import LiveCoach
-from wow_coach.usage import UsageLog
 
 
 class FakeModel:
@@ -29,8 +28,8 @@ class FakeChatCoach:
         del plan  # the fake never calls the AI
         FakeChatCoach.made.append(options)
 
-    def ask(self, question: str, *, character: str | None = None) -> str:
-        del character
+    def ask(self, question: str, *, character: str | None = None, source: str = "app") -> str:
+        del character, source
         return f"answer to {question}"
 
     def answer_open_questions(self, *, character: str | None = None) -> list[str]:
@@ -62,13 +61,19 @@ def test_live_coach_reads_the_settings_before_every_answer(tmp_path: Path) -> No
     assert plan.model_lists == 2  # fetched again only when the choice changed
 
 
-def test_new_caps_count_at_once(tmp_path: Path) -> None:
-    log = UsageLog(tmp_path / "usage.jsonl", max_calls_per_hour=5, max_calls_per_day=5)
-    log.begin_call("m")
-    log.set_caps(max_calls_per_hour=1, max_calls_per_day=1)
-    try:
-        log.begin_call("m")
-    except Exception as error:
-        assert "limit" in str(error).lower() or "cap" in str(error).lower()
-    else:
-        raise AssertionError("the new cap of 1 call should have refused the second call")
+def test_live_coach_passes_the_activity_listener_to_each_engine(tmp_path: Path) -> None:
+    FakeChatCoach.made.clear()
+    coach = LiveCoach(
+        FakePlan(),  # type: ignore[arg-type]  # a fake with the same methods
+        wow_dir=tmp_path,
+        environ={},
+        settings_file=tmp_path / "settings.json",
+        make_coach=FakeChatCoach,  # type: ignore[arg-type]
+    )
+    heard: list[str] = []
+    coach.set_activity_listener(lambda key, _activity: heard.append(key))
+    coach.ask("hi")
+    listener = FakeChatCoach.made[0]["on_activity"]
+    assert callable(listener)
+    listener("Hero-Realm", None)
+    assert heard == ["Hero-Realm"]

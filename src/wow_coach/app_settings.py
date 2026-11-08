@@ -19,11 +19,19 @@ from wow_coach.triggers.settings import trigger_settings_from_dict, trigger_sett
 
 SETTINGS_FILE_NAME: Final = "settings.json"
 MAX_SETTINGS_BYTES: Final = 64_000
-# Caps that protect the player's ChatGPT plan. The window lets them change these.
-MIN_CALLS: Final = 0
-MAX_CALLS_PER_HOUR_LIMIT: Final = 200
-MAX_CALLS_PER_DAY_LIMIT: Final = 2000
 MAX_MODEL_CHARS: Final = 80
+# The overlay (the coach as a see-through panel on top of the game): how solid it is, in
+# percent, and the key that shows or hides it. Below 60 % the text is too hard to read.
+MIN_OVERLAY_OPACITY: Final = 60
+MAX_OVERLAY_OPACITY: Final = 100
+DEFAULT_OVERLAY_OPACITY: Final = 92
+# Ctrl+Shift+Space: WoW's default keys are mostly single keys, Shift+key and Ctrl+key, so
+# this three-key chord does not clash (Space alone is "jump").
+DEFAULT_OVERLAY_HOTKEY: Final = "Ctrl+Shift+Space"
+# How big the desktop app is drawn, in percent of normal (Qt applies it when the app starts).
+UI_SCALE_CHOICES: Final = (70, 80, 90, 100, 110, 120, 130)
+DEFAULT_UI_SCALE: Final = 100
+MAX_HOTKEY_CHARS: Final = 40
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,19 +44,33 @@ class AppSettings:
     answer_questions_from_game: bool = True
     # Show a desktop notification when an answer is ready.
     notify: bool = True
-    # Read answers aloud (off by default: not everyone wants a talking PC).
-    speak: bool = False
-    # Never use more of the plan than this.
-    max_calls_per_hour: int = 20
-    max_calls_per_day: int = 100
     # Send other players' names (group members, mail senders, killers) to the AI. Off:
     # they are replaced with "a player" before anything leaves the PC.
     share_other_player_names: bool = False
     # Send the coach's notes (player notes and the character's journal) with each question.
     # They make answers fit the player, but they can hold personal notes, so it is a choice.
     send_coach_notes: bool = True
-    # When the coach speaks up by itself (deaths, level-ups, a timer...). Manual by default.
+    # Use the chats the player had with their Claude Code coach: show them in the window and
+    # give them to the AI as part of the recent conversation.
+    use_claude_chats: bool = True
+    # Let the coach use tools while answering: read the character's status, history and
+    # notes and look things up on the Warcraft Wiki.
+    use_tools: bool = True
+    # Let the coach also search the web (run by OpenAI as part of the ChatGPT plan).
+    web_search: bool = True
+    # Let the coach save the notebook (player notes and character journal). Off: it can
+    # read them but not change them.
+    save_notes: bool = True
+    # Show what the coach looked up under its answers (and live while it works).
+    show_lookups: bool = True
+    # "When the game saves": what the coach tells you after a save (notes, optionally advice).
     triggers: TriggerSettings = field(default_factory=TriggerSettings)
+    # The overlay panel's see-through level (60-100 %; 100 = solid).
+    overlay_opacity: int = DEFAULT_OVERLAY_OPACITY
+    # The key that shows or hides the overlay, in Qt's portable text ("Ctrl+Shift+Space").
+    overlay_hotkey: str = DEFAULT_OVERLAY_HOTKEY
+    # The desktop app's size, in percent: one of ``UI_SCALE_CHOICES``.
+    ui_scale: int = DEFAULT_UI_SCALE
 
 
 DEFAULTS: Final = AppSettings()
@@ -67,14 +89,32 @@ def _clean_model(value: object) -> str | None:
     return value if ok else None
 
 
-def _clean_count(value: object, default: int, limit: int) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        return default
-    return min(max(value, MIN_CALLS), limit)
-
-
 def _clean_flag(value: object, default: bool) -> bool:
     return value if isinstance(value, bool) else default
+
+
+def _clean_opacity(value: object) -> int:
+    """A whole number from 60 to 100, else the default (a bool is not a number)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return DEFAULT_OVERLAY_OPACITY
+    in_range = MIN_OVERLAY_OPACITY <= value <= MAX_OVERLAY_OPACITY
+    return value if in_range else DEFAULT_OVERLAY_OPACITY
+
+
+def _clean_scale(value: object) -> int:
+    """One of the offered sizes (70 to 130 percent), else the normal size."""
+    if isinstance(value, bool) or value not in UI_SCALE_CHOICES:
+        return DEFAULT_UI_SCALE
+    return int(value)  # checked against the whole-number choices above
+
+
+def _clean_hotkey(value: object) -> str:
+    """Key text such as "Ctrl+Shift+Space": plain printable characters, not too long."""
+    if not isinstance(value, str):
+        return DEFAULT_OVERLAY_HOTKEY
+    value = value.strip()
+    plain = value.isascii() and value.isprintable()
+    return value if plain and 0 < len(value) <= MAX_HOTKEY_CHARS else DEFAULT_OVERLAY_HOTKEY
 
 
 def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
@@ -85,18 +125,19 @@ def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
             data.get("answer_questions_from_game"), DEFAULTS.answer_questions_from_game
         ),
         notify=_clean_flag(data.get("notify"), DEFAULTS.notify),
-        speak=_clean_flag(data.get("speak"), DEFAULTS.speak),
-        max_calls_per_hour=_clean_count(
-            data.get("max_calls_per_hour"), DEFAULTS.max_calls_per_hour, MAX_CALLS_PER_HOUR_LIMIT
-        ),
-        max_calls_per_day=_clean_count(
-            data.get("max_calls_per_day"), DEFAULTS.max_calls_per_day, MAX_CALLS_PER_DAY_LIMIT
-        ),
         share_other_player_names=_clean_flag(
             data.get("share_other_player_names"), DEFAULTS.share_other_player_names
         ),
         send_coach_notes=_clean_flag(data.get("send_coach_notes"), DEFAULTS.send_coach_notes),
+        use_claude_chats=_clean_flag(data.get("use_claude_chats"), DEFAULTS.use_claude_chats),
+        use_tools=_clean_flag(data.get("use_tools"), DEFAULTS.use_tools),
+        web_search=_clean_flag(data.get("web_search"), DEFAULTS.web_search),
+        save_notes=_clean_flag(data.get("save_notes"), DEFAULTS.save_notes),
+        show_lookups=_clean_flag(data.get("show_lookups"), DEFAULTS.show_lookups),
         triggers=trigger_settings_from_dict(data.get("triggers")),
+        overlay_opacity=_clean_opacity(data.get("overlay_opacity")),
+        overlay_hotkey=_clean_hotkey(data.get("overlay_hotkey")),
+        ui_scale=_clean_scale(data.get("ui_scale")),
     )
 
 

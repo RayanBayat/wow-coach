@@ -111,7 +111,7 @@ Code's **Monitor** tool is the one tested). Offer it when a session starts and t
 running; the player can also say "start live mode".
 
 1. Start the watcher with Monitor:
-   - command: `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach watch`
+   - command: `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach watch`
      (it finds the game folder that `wow-coach setup` saved; without that, set the
      environment variable `WOW_COACH_WOW_DIR` to the `_forever_` folder first)
    - description: `WoW /coach saves`
@@ -336,10 +336,13 @@ journal is `characters/<Name-Realm>.md`.
 ## Player
 - Started WoW Forever: <date>, experience level
 - Preferences: detail level, click-by-click or not, Questie or not, solo/group, pace
-- Computer notes:
 
 ## Terms they know
 -
+
+## This computer
+- Game folder, performance notes, anything about the PC (wow-coach's own coach never sends
+  a section whose heading mentions the computer)
 ```
 
 ### Character journal template

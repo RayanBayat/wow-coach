@@ -1,4 +1,4 @@
-# Way 3: the coach skill and live mode
+# Way 4: the coach skill and live mode
 
 An **AI agent** is an AI app that can run commands and read files on your computer, such as
 Claude Code, OpenAI Codex, Gemini CLI, GitHub Copilot or Cursor. Many of them support **Agent
@@ -6,11 +6,11 @@ Skills**: a folder with a `SKILL.md` file of instructions that the agent loads w
 relevant. The format is an open standard: https://agentskills.io/specification
 
 The wow-coach skill is the same instructions file used in the other ways, in the skill format.
-Combine it with [Way 2](connect-an-ai-app.md) so the agent can read your character.
+Combine it with [Way 3](connect-an-ai-app.md) so the agent can read your character.
 
 ## Shortcut for Claude Code
 
-Run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach setup --claude-code`.
+Run `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup --claude-code`.
 It copies the skill (and the ready-made coach agent, see
 [the Claude Code agent](claude-code-agent.md)) into `~/.claude`. For other agents, follow the
 steps below.
@@ -89,7 +89,7 @@ message. Each line ends with the reason:
 To start it, say to Claude: `start live mode`. Claude runs this command with the Monitor tool:
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach watch
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach watch
 ```
 
 Monitors last at most 30 minutes. The skill tells Claude to restart it while the game runs.

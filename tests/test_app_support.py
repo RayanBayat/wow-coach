@@ -15,7 +15,6 @@ from pathlib import Path
 
 from wow_coach.advice.contract import AdviceAnswer, AdviceFile, CharacterAdvice
 from wow_coach.advice.serialize import advice_to_lua
-from wow_coach.ai.base import Provider
 from wow_coach.ai.chatgpt_plan import PlanModel
 from wow_coach.app.core import AppCore
 from wow_coach.app.events import Mailbox
@@ -36,6 +35,8 @@ def write_save(
     deaths_at: tuple[int, ...] = (),
     levels_at: tuple[int, ...] = (),
     in_instance: bool = False,
+    zone: str = "Tirisfal Glades",
+    reason: str = "ask",
 ) -> Path:
     """Write a CoachLink.lua with one character, its (id, text) questions and some deaths."""
     instance = '["instance"] = {["name"] = "Deadmines"},\n' if in_instance else ""
@@ -53,7 +54,7 @@ def write_save(
     path.write_text(
         'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
         f'["{KEY}"] = {{\n["snapshot"] = {{\n["name"] = "Testchar",\n["level"] = 8,\n'
-        f'["savedAt"] = {mtime},\n["reason"] = "ask",\n{instance}}},\n'
+        f'["savedAt"] = {mtime},\n["reason"] = "{reason}",\n["zone"] = "{zone}",\n{instance}}},\n'
         f'["questions"] = {{\n{asked}}},\n'
         f'["history"] = {{\n{deaths}}},\n'
         "},\n},\n}\n",
@@ -115,8 +116,10 @@ class FakeCoach:
         os.utime(advice, (self.clock, self.clock))
         return CoachReply(KEY, answer, True, "In the game after your next /reload.")
 
-    def ask(self, question: str, *, character: str | None = None) -> CoachReply:
-        del character
+    def ask(
+        self, question: str, *, character: str | None = None, source: str = "app"
+    ) -> CoachReply:
+        del character, source
         if self.gate is not None:
             self.gate.wait(5)
         if self.error is not None:
@@ -158,18 +161,13 @@ class FakeSignIn:
 class FakeAlerts:
     def __init__(self) -> None:
         self.notified: list[tuple[str, str]] = []
-        self.spoken: list[str] = []
 
     def notify(self, title: str, body: str) -> bool:
         self.notified.append((title, body))
         return True
 
-    def speak(self, text: str) -> bool:
-        self.spoken.append(text)
-        return True
-
     def available(self) -> dict[str, bool]:
-        return {"notify": True, "speak": False}
+        return {"notify": True}
 
 
 class FakeUsage:
@@ -197,8 +195,7 @@ def make_rig(
     tmp_path: Path,
     *,
     signed_in: bool = True,
-    triage_provider: Provider | None = None,
-    small_model: str | None = "model-luna",
+    claude_projects_dir: Path | None = None,
 ) -> Rig:
     wow_dir = tmp_path / "wow"
     wow_dir.mkdir()
@@ -215,8 +212,7 @@ def make_rig(
         settings_file=settings_file,
         wow_dir=wow_dir,
         usage=FakeUsage(),
-        triage_provider=triage_provider,
-        small_model=lambda: small_model,
+        claude_projects_dir=claude_projects_dir,
     )
     return Rig(core, coach, signin, alerts, wow_dir, settings_file)
 

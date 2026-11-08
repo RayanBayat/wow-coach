@@ -34,3 +34,6 @@ htmlcov/
 # Real SavedVariables files hold personal character data; keep them out of git.
 # Test fixtures live in tests/fixtures/ and are made up.
 /saved-variables/
+
+# Temporary git worktrees made by coding agents
+.claude/worktrees/

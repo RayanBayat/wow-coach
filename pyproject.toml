@@ -1,6 +1,6 @@
 [project]
 name = "wow-coach"
-version = "0.9.0"
+version = "0.10.0"
 description = "An AI coach for World of Warcraft: Forever: an addon saves your character, and any AI app can read it."
 readme = "README.md"
 license = "MIT"
@@ -28,6 +28,15 @@ dependencies = [
     "mcp==2.3.0",
 ]
 
+[project.optional-dependencies]
+# The desktop app (`wow-coach app`): Qt for Python. Optional because it is a big download
+# (about 80 MB) that people who only use the MCP server or the addon don't need.
+desktop = [
+    "PySide6-Essentials==6.12.0",
+    # Talks to the Linux desktop's global-shortcuts portal (pure Python, no C library).
+    "jeepney==0.9.0; sys_platform == 'linux'",
+]
+
 [project.urls]
 Homepage = "https://github.com/RayanBayat/wow-coach"
 Source = "https://github.com/RayanBayat/wow-coach"
@@ -38,6 +47,10 @@ Changelog = "https://github.com/RayanBayat/wow-coach/blob/main/CHANGELOG.md"
 wow-coach = "wow_coach.cli:main"
 wow-coach-mcp = "wow_coach.server:main"
 
+# A "GUI script": on Windows it starts without a console window. Shortcuts point to it.
+[project.gui-scripts]
+wow-coach-app = "wow_coach.desktop.launcher:main"
+
 [build-system]
 requires = ["uv_build>=0.12.24,<0.14.0"]
 build-backend = "uv_build"
@@ -46,13 +59,17 @@ build-backend = "uv_build"
 dev = [
     "hypothesis==6.170.15",
     "mypy==2.4.1",
+    "pyside6-essentials==6.12.0",
     "pytest==9.2.0",
+    "pytest-qt==4.5.0",
     "ruff==0.17.4",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+# Agent worktrees live inside the repo while they work; they are checked in their own copy.
+extend-exclude = [".claude"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "RUF", "ANN", "S", "PTH", "RET", "ARG", "PLC0415"]
@@ -64,6 +81,12 @@ ignore = ["ANN401"]
 [tool.mypy]
 strict = true
 warn_unreachable = true
+
+# jeepney ships no type information (no py.typed), so mypy cannot see its types.
+# Only desktop/portal_bus.py uses it, and keeps the untyped parts behind `Any`.
+[[tool.mypy.overrides]]
+module = "jeepney.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --strict-config"

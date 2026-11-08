@@ -1,7 +1,10 @@
 """Build the messages for the AI: the rules first, then the character's data, then the question.
 
-Every token comes out of the player's ChatGPT plan, so the prompt is small and each block
-has a size cap. The data blocks are *untrusted*: mail subjects, other players' names and
+Every token comes out of the player's ChatGPT plan, so each block has a size cap. The caps
+leave room for the whole coach's notebook (a typical journal is about 12 000 characters):
+without it the coach forgets what the player already decided and learned. The notes are sent
+section by section, most useful first, and sections about the player's computer are never
+sent (``notes_digest.py``). The data blocks are *untrusted*: mail subjects, other players' names and
 wiki text can contain tricks such as "ignore your rules". The system message says to treat
 them as data, and ``_neutralise`` stops a block from faking its own closing tag.
 """
@@ -13,17 +16,18 @@ from typing import Final
 from wow_coach.advice.contract import MAX_STEP_CHARS, MAX_STEPS, MAX_TEXT_CHARS, MAX_WARNINGS
 from wow_coach.ai.base import Message
 from wow_coach.assets import SKILL_PATH, read_asset_text
-from wow_coach.engine.conversation import Turn
+from wow_coach.engine.conversation import ChatMessage
+from wow_coach.engine.notes_digest import digest, without_private_sections
 from wow_coach.engine.redact import redact_names
 
-MAX_PROMPT_CHARS: Final = 24_000  # all data blocks together, about 6 000 tokens
+MAX_PROMPT_CHARS: Final = 48_000  # all data blocks together, about 12 000 tokens
 # Per-block caps, in characters.
 _BLOCK_CAPS: Final = {
-    "character_status": 12_000,
+    "character_status": 16_000,
     "recent_history": 3_000,
-    "journal": 4_000,
-    "player_notes": 3_000,
-    "conversation": 4_000,
+    "journal": 16_000,
+    "player_notes": 6_000,
+    "conversation": 6_000,
     "question": 2_000,
 }
 # When everything together is too big, cut the least important block first.
@@ -44,15 +48,57 @@ _ORDER: Final = (
     "conversation",
     "question",
 )
+# Notes files: shortened section by section (most useful first), not at a fixed length.
+_NOTES: Final = ("journal", "player_notes")
 _CUT_MARK: Final = "[cut: too long]"
 # "<question" or "</journal" inside data would look like one of our own tags.
 _FAKE_TAG = re.compile(rf"<(?=\s*/?\s*(?:{'|'.join(_ORDER)})\b)", re.IGNORECASE)
 
 _INTRO: Final = (
     "You are wow-coach, a patient teacher and play partner for one player of World of "
-    "Warcraft: Forever. You are given the character's saved data and a question. Answer "
-    "only from that data and what you know about classic WoW; if you are unsure, say so."
+    "Warcraft: Forever. You are given the character's saved data, the coach's notebook and a "
+    "question. Answer from that data, the coaching playbook below and what you know about "
+    "classic WoW; if you are unsure, say so."
 )
+_NO_TOOLS: Final = (
+    "In this chat you cannot look things up or save notes: when a plan or a choice should be "
+    "remembered, tell the player to save it with their coach (for example the Claude Code "
+    "coach) or in their notes."
+)
+_TOOLS_USE: Final = (
+    "You have tools, listed with this request. Use them when the data below does not answer "
+    "the question: read the character status, history or notes, or look something up on the "
+    "Warcraft Wiki. For anything about Forever, check the Warcraft Wiki or the web instead "
+    "of guessing."
+)
+_CANNOT_SAVE: Final = (
+    "You cannot save notes in this chat: when a plan or a choice should be remembered, tell "
+    "the player to write it in their notes."
+)
+_SOURCES_NOTE: Final = (
+    "The app shows your sources under the answer itself, so say where a fact came from in "
+    'words (for example "on the Warcraft Wiki") and do not write links, even where the '
+    "playbook says to give the link."
+)
+_SAVE_TOOLS: Final = (
+    "You can also save the notebook with save_coach_notes (this character's journal) and "
+    "save_player_notes (shared by all characters). Saving replaces the whole file, so first "
+    "call read_coach_notes and send back the WHOLE updated text: keep every section "
+    '(never drop "## This computer" or any other section), and write dates as absolute '
+    'dates (for example 2026-11-08), not "today". Do not save on every question: save '
+    "only for real decisions, goals, plans and progress."
+)
+# The parts of the coaching skill (``SKILL.md``) every coach gets, matched by the start of
+# their ``## `` heading. The other parts are about tools this chat doesn't have.
+_PLAYBOOK: Final = (
+    "Teaching style",
+    "Goals and plans",
+    "What to check in every snapshot",
+    "Forever facts",
+    "Limits to remember",
+    "Hard rules",
+)
+_LOOKING_UP: Final = "Looking things up"
 _OWN_RULES: Final = """\
 Rules for every answer:
 - Start with the next 1-3 concrete actions, then the why. Plain words, short sentences.
@@ -75,10 +121,13 @@ Reply with one JSON object and nothing else: {{"title": short heading, \
 
 
 def _section(markdown: str, heading: str) -> str:
-    """The body of the ``## heading`` section of a Markdown text (up to the next ``## ``)."""
+    """The body of the first ``## `` section whose heading starts with ``heading``.
+
+    The body runs up to the next ``## `` heading, so ``### `` sub-sections are included.
+    """
     lines = markdown.splitlines()
     wanted = f"## {heading}"
-    start = next((i for i, line in enumerate(lines) if line.strip() == wanted), None)
+    start = next((i for i, line in enumerate(lines) if line.strip().startswith(wanted)), None)
     if start is None:
         return ""
     body: list[str] = []
@@ -89,12 +138,25 @@ def _section(markdown: str, heading: str) -> str:
     return "\n".join(body).strip()
 
 
-def system_message() -> str:
-    """The coaching instructions: the skill's teaching style and hard rules, plus ours."""
+def system_message(*, tools: bool = False, save_notes: bool = True) -> str:
+    """The coaching instructions: the skill's playbook (``_PLAYBOOK``), plus our own rules.
+
+    With ``tools`` the coach may look things up, so the playbook also gets the skill's
+    "Looking things up" part; ``save_notes`` says whether it may also save the notebook.
+    """
     skill = read_asset_text(SKILL_PATH)
-    teaching = _section(skill, "Teaching style")
-    hard_rules = _section(skill, "Hard rules")
-    parts = [_INTRO, f"Teaching style:\n{teaching}", f"Hard rules:\n{hard_rules}"]
+    if not tools:
+        guidance = _NO_TOOLS
+    else:
+        guidance = " ".join(
+            (_TOOLS_USE, _SAVE_TOOLS if save_notes else _CANNOT_SAVE, _SOURCES_NOTE)
+        )
+    parts = [f"{_INTRO} {guidance}"]
+    headings = (*_PLAYBOOK, _LOOKING_UP) if tools else _PLAYBOOK
+    for heading in headings:
+        body = _section(skill, heading)
+        if body:
+            parts.append(f"{heading}:\n{body}")
     parts += [_OWN_RULES, _DATA_RULES, _JSON_RULES]
     return "\n\n".join(part for part in parts if part.strip())
 
@@ -114,6 +176,13 @@ def _cut(text: str, size: int, *, keep_end: bool) -> str:
     return f"{text[:room].rstrip()}\n{_CUT_MARK}"
 
 
+def _shrink(tag: str, text: str, size: int) -> str:
+    """Shorten one block to about ``size`` characters, the right way for its kind."""
+    if tag in _NOTES:
+        return digest(text, size)
+    return _cut(text, size, keep_end=tag in _KEEP_END)
+
+
 def _block_size(tag: str, text: str) -> int:
     return len(text) + 2 * len(tag) + 8  # "<tag>\n", "\n</tag>" and the line break
 
@@ -127,12 +196,42 @@ class PromptData:
     history: str = ""
     journal: str = ""
     player_notes: str = ""
-    turns: list[Turn] = field(default_factory=list)
+    messages: list[ChatMessage] = field(default_factory=list)  # the chat so far, oldest first
 
 
-def _conversation_text(turns: list[Turn]) -> str:
-    labels = {"user": "Player", "assistant": "Coach"}
-    return "\n".join(f"{labels[turn.role]}: {' '.join(turn.content.split())}" for turn in turns)
+MAX_LINE_CHARS: Final = 1_200  # one long message (for example a Claude reply) is shortened
+
+
+def _speaker(message: ChatMessage) -> str:
+    """Who spoke, so the AI can tell the player, this coach and other coaches apart."""
+    if message.role == "user":
+        return "Player"
+    if message.source == "claude-code":
+        return "Coach (Claude Code)"
+    if message.source == "outside":
+        return "Coach (another app)"
+    return "Coach"
+
+
+def _conversation_text(messages: list[ChatMessage]) -> str:
+    """The newest messages from every source that fit the block's size, oldest first.
+
+    Whole messages are kept or left out (a message is never cut in the middle of the block),
+    so the AI always reads complete sentences.
+    """
+    budget = _BLOCK_CAPS["conversation"]
+    lines: list[str] = []
+    used = 0
+    for message in reversed(messages):
+        text = " ".join(message.content.split())
+        if len(text) > MAX_LINE_CHARS:
+            text = text[:MAX_LINE_CHARS].rstrip() + "..."
+        line = f"{_speaker(message)}: {text}"
+        if lines and used + len(line) + 1 > budget:
+            break
+        lines.append(line)
+        used += len(line) + 1
+    return "\n".join(reversed(lines))
 
 
 def _fit_total(blocks: dict[str, str], budget: int) -> dict[str, str]:
@@ -148,7 +247,7 @@ def _fit_total(blocks: dict[str, str], budget: int) -> dict[str, str]:
         if smaller <= len(_CUT_MARK) + 20:
             del fitted[tag]  # not worth keeping a few words
         else:
-            fitted[tag] = _cut(fitted[tag], smaller, keep_end=tag in _KEEP_END)
+            fitted[tag] = _shrink(tag, fitted[tag], smaller)
     return fitted
 
 
@@ -159,14 +258,16 @@ def build_blocks(data: PromptData, *, hidden_names: set[str]) -> dict[str, str]:
         "recent_history": data.history,
         "journal": data.journal,
         "player_notes": data.player_notes,
-        "conversation": _conversation_text(data.turns),
+        "conversation": _conversation_text(data.messages),
         "question": data.question,
     }
+    for tag in _NOTES:  # sections about the player's computer stay on this computer
+        raw[tag] = without_private_sections(raw[tag])
     blocks: dict[str, str] = {}
     for tag in _ORDER:
         text = _neutralise(redact_names(raw[tag].strip(), hidden_names))
         if text:
-            blocks[tag] = _cut(text, _BLOCK_CAPS[tag], keep_end=tag in _KEEP_END)
+            blocks[tag] = _shrink(tag, text, _BLOCK_CAPS[tag])
     return _fit_total(blocks, MAX_PROMPT_CHARS)
 
 
@@ -176,9 +277,11 @@ def user_message(data: PromptData, *, hidden_names: set[str]) -> str:
     return "\n".join(f"<{tag}>\n{blocks[tag]}\n</{tag}>" for tag in _ORDER if tag in blocks)
 
 
-def build_messages(data: PromptData, *, hidden_names: set[str]) -> list[Message]:
+def build_messages(
+    data: PromptData, *, hidden_names: set[str], tools: bool = False, save_notes: bool = True
+) -> list[Message]:
     """The two messages sent to the AI: instructions first, then data and question."""
     return [
-        Message("system", system_message()),
+        Message("system", system_message(tools=tools, save_notes=save_notes)),
         Message("user", user_message(data, hidden_names=hidden_names)),
     ]

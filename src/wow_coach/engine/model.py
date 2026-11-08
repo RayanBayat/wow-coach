@@ -33,9 +33,3 @@ def choose_model(available: Sequence[str], preferred: str | None) -> str | None:
         return preferred
     found = _first_ending(available, (BALANCED_SUFFIX, LARGE_SUFFIX, SMALL_SUFFIX))
     return found or (available[0] if available else None)
-
-
-def choose_small_model(available: Sequence[str]) -> str | None:
-    """The model for quick yes-or-no checks: small first, then balanced, then any."""
-    found = _first_ending(available, (SMALL_SUFFIX, BALANCED_SUFFIX, LARGE_SUFFIX))
-    return found or (available[0] if available else None)

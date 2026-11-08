@@ -1,5 +1,6 @@
 """Tests for the companion's settings file."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from wow_coach.app_settings import (
     settings_path,
     update_settings,
 )
+from wow_coach.triggers.contract import TriggerSettings
 
 
 def test_a_missing_file_gives_the_defaults(tmp_path: Path) -> None:
@@ -20,21 +22,18 @@ def test_a_missing_file_gives_the_defaults(tmp_path: Path) -> None:
 
 
 def test_defaults_protect_the_plan_and_privacy() -> None:
-    assert DEFAULTS.speak is False
     assert DEFAULTS.share_other_player_names is False
-    assert DEFAULTS.max_calls_per_hour == 20
-    assert DEFAULTS.max_calls_per_day == 100
 
 
 def test_save_then_load_gives_the_same_settings(tmp_path: Path) -> None:
     path = tmp_path / "data" / "settings.json"
-    chosen = AppSettings(model="gpt-6-luna", speak=True, max_calls_per_hour=5)
+    chosen = AppSettings(model="gpt-6-luna", notify=False)
     save_settings(path, chosen)
     assert load_settings(path) == chosen
     assert [p.name for p in path.parent.iterdir()] == ["settings.json"]  # no temp file left
 
 
-@pytest.mark.parametrize("text", ["", "not json", "[1, 2]", '{"speak": "yes"}', "{" * 5000])
+@pytest.mark.parametrize("text", ["", "not json", "[1, 2]", '{"notify": "yes"}', "{" * 5000])
 def test_a_damaged_file_never_breaks_anything(tmp_path: Path, text: str) -> None:
     path = tmp_path / "settings.json"
     path.write_text(text, encoding="utf-8")
@@ -45,24 +44,17 @@ def test_bad_values_fall_back_one_by_one() -> None:
     settings = settings_from_dict(
         {
             "model": "gpt-6-luna; rm -rf /",
-            "notify": False,
-            "max_calls_per_hour": -3,
-            "max_calls_per_day": 10**9,
-            "speak": 1,  # not a real bool
+            "notify": 1,  # not a real bool
         }
     )
     assert settings.model is None
-    assert settings.notify is False
-    assert settings.max_calls_per_hour == 0
-    assert settings.max_calls_per_day == 2000
-    assert settings.speak is False
+    assert settings.notify is True
 
 
 def test_update_applies_good_changes_and_keeps_old_values_for_bad_ones() -> None:
-    start = AppSettings(model="gpt-6-luna", max_calls_per_hour=7)
-    changed = update_settings(start, {"speak": True, "max_calls_per_hour": "lots", "x": 1})
-    assert changed.speak is True
-    assert changed.max_calls_per_hour == 7
+    start = AppSettings(model="gpt-6-luna")
+    changed = update_settings(start, {"notify": False, "x": 1})
+    assert changed.notify is False
     assert changed.model == "gpt-6-luna"
 
 
@@ -71,25 +63,74 @@ def test_the_file_lives_in_the_data_folder(tmp_path: Path) -> None:
     assert settings_path(environ=environ).name == "settings.json"
 
 
-def test_trigger_rules_are_saved_and_read_back(tmp_path: Path) -> None:
+def test_the_save_choice_is_saved_and_read_back(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
-    start = update_settings(
-        DEFAULTS, {"triggers": {"modes": {"died": "notify"}, "every_minutes": 30}}
-    )
-    save_settings(path, start)
+    save_settings(path, update_settings(DEFAULTS, {"triggers": {"on_save": "advice"}}))
+    assert load_settings(path).triggers.on_save == "advice"
+
+
+def test_an_old_settings_file_with_the_old_rules_still_loads(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    old_rules = {
+        "modes": {"asked": "coach", "died": "notify", "level_up": "coach"},
+        "every_minutes": 30,
+        "cooldown_minutes": 15,
+        "quiet_in_instances": False,
+        "quiet_from_hour": 23,
+        "quiet_to_hour": 7,
+        "use_triage": True,
+        "rules_text": "only if I die twice",
+    }
+    path.write_text(json.dumps({"notify": False, "triggers": old_rules}), encoding="utf-8")
     loaded = load_settings(path)
-    assert loaded.triggers.modes["died"] == "notify"
-    assert loaded.triggers.every_minutes == 30
-    assert loaded.triggers.modes["asked"] == "coach"  # always: the player asked
+    assert loaded.notify is False
+    assert loaded.triggers == TriggerSettings(on_save="advice", quiet_in_instances=False)
 
 
 def test_a_partial_trigger_change_keeps_the_other_rules() -> None:
-    start = update_settings(DEFAULTS, {"triggers": {"cooldown_minutes": 5, "use_triage": True}})
-    changed = update_settings(start, {"triggers": {"use_triage": False}})
-    assert changed.triggers.cooldown_minutes == 5
-    assert changed.triggers.use_triage is False
+    start = update_settings(
+        DEFAULTS, {"triggers": {"on_save": "advice", "quiet_in_instances": False}}
+    )
+    changed = update_settings(start, {"triggers": {"quiet_in_instances": True}})
+    assert changed.triggers.on_save == "advice"
+    assert changed.triggers.quiet_in_instances is True
 
 
-def test_by_default_the_coach_only_answers_when_asked() -> None:
-    modes = DEFAULTS.triggers.modes
-    assert {kind for kind, mode in modes.items() if mode != "off"} == {"asked"}
+def test_by_default_the_coach_tells_what_is_worth_knowing_without_ai() -> None:
+    assert DEFAULTS.triggers.on_save == "notify"
+    assert DEFAULTS.triggers.quiet_in_instances is True
+
+
+def test_overlay_settings_have_defaults() -> None:
+    assert DEFAULTS.overlay_opacity == 92
+    assert DEFAULTS.overlay_hotkey == "Ctrl+Shift+Space"
+
+
+def test_an_old_settings_file_without_overlay_values_loads(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text('{"notify": false}', encoding="utf-8")
+    loaded = load_settings(path)
+    assert loaded.notify is False
+    assert (loaded.overlay_opacity, loaded.overlay_hotkey) == (92, "Ctrl+Shift+Space")
+
+
+def test_overlay_settings_round_trip(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    chosen = update_settings(DEFAULTS, {"overlay_opacity": 70, "overlay_hotkey": "Ctrl+Alt+F9"})
+    save_settings(path, chosen)
+    loaded = load_settings(path)
+    assert (loaded.overlay_opacity, loaded.overlay_hotkey) == (70, "Ctrl+Alt+F9")
+
+
+@pytest.mark.parametrize("bad", [59, 101, -5, "80", 80.5, True, None])
+def test_a_bad_opacity_is_refused(bad: object) -> None:
+    assert settings_from_dict({"overlay_opacity": bad}).overlay_opacity == 92
+    start = update_settings(DEFAULTS, {"overlay_opacity": 75})
+    assert update_settings(start, {"overlay_opacity": bad}).overlay_opacity == 75
+
+
+@pytest.mark.parametrize("bad", ["", "   ", "x" * 41, "Ctrl+\u00e9", "Ctrl+\nA", 5, None])
+def test_a_bad_hotkey_is_refused(bad: object) -> None:
+    assert settings_from_dict({"overlay_hotkey": bad}).overlay_hotkey == "Ctrl+Shift+Space"
+    start = update_settings(DEFAULTS, {"overlay_hotkey": "Ctrl+F9"})
+    assert update_settings(start, {"overlay_hotkey": bad}).overlay_hotkey == "Ctrl+F9"
