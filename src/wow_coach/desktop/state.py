@@ -44,6 +44,18 @@ class UsageView:
 
 
 @dataclass(frozen=True, slots=True)
+class CharacterView:
+    """A short description of the shown character, for the Coach page's header."""
+
+    name: str
+    level: int | None = None
+    race: str | None = None
+    class_name: str | None = None
+    zone: str | None = None
+    money: int | None = None  # in copper
+
+
+@dataclass(frozen=True, slots=True)
 class StateView:
     """Everything the window needs to draw itself."""
 
@@ -59,6 +71,7 @@ class StateView:
     notify_available: bool = True
     speak_available: bool = True
     problem: str | None = None  # a plain sentence to show, or None
+    character: CharacterView | None = None  # None when no character was saved yet
 
 
 def read_state(raw: Mapping[str, object]) -> StateView:
@@ -80,6 +93,7 @@ def read_state(raw: Mapping[str, object]) -> StateView:
         notify_available=alerts.get("notify") is not False,
         speak_available=alerts.get("speak") is not False,
         problem=problem if isinstance(problem, str) and problem else None,
+        character=_character(raw.get("character")),
     )
 
 
@@ -102,6 +116,19 @@ def _question(raw: Mapping[str, object]) -> QuestionView:
         id=_text(raw.get("id")),
         text=_text(raw.get("text")),
         asked_at=_int_or_none(raw.get("asked_at")) or 0,
+    )
+
+
+def _character(raw: object) -> CharacterView | None:
+    if not isinstance(raw, Mapping):
+        return None
+    return CharacterView(
+        name=_text(raw.get("name")),
+        level=_int_or_none(raw.get("level")),
+        race=_text_or_none(raw.get("race")),
+        class_name=_text_or_none(raw.get("class_name")),
+        zone=_text_or_none(raw.get("zone")),
+        money=_int_or_none(raw.get("money")),
     )
 
 
