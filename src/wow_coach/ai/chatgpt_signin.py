@@ -177,13 +177,21 @@ def _is_finite_number(value: object) -> bool:
 
 
 def _is_for(claims: Mapping[str, Any], audience: str) -> bool:
-    """True if the token is meant for us. With several audiences, ``azp`` must be us too."""
+    """True if the token is meant for us.
+
+    ``aud`` is one string or a list; OpenAI sends a one-item list (seen 2026-11-08). With
+    several audiences, ``azp`` must be us too (OIDC Core 3.1.3.7). An ``azp`` that is
+    present must always be us.
+    """
     audiences = claims.get("aud")
     if isinstance(audiences, str):
-        return audiences == audience
-    if isinstance(audiences, list):
-        return audience in audiences and claims.get("azp") == audience
-    return False
+        audiences = [audiences]
+    if not isinstance(audiences, list) or audience not in audiences:
+        return False
+    azp = claims.get("azp")
+    if len(audiences) > 1 or azp is not None:
+        return azp == audience
+    return True
 
 
 def _decode_payload(token: str) -> dict[str, Any]:

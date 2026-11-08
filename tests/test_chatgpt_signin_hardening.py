@@ -414,6 +414,16 @@ def test_iat_if_present_must_be_a_finite_number(bad: object) -> None:
         _check(iat=bad)
 
 
+def test_a_one_item_audience_list_needs_no_azp() -> None:
+    # What OpenAI really sends (seen 2026-11-08): "aud": ["<issued client id>"], no azp.
+    # OIDC Core 3.1.3.7 only asks for azp when there are several audiences.
+    assert _check(aud=[ISSUED_CLIENT_ID])["sub"] == "user-1"
+    with pytest.raises(AIError, match="another app"):
+        _check(aud=["someone-else"])
+    with pytest.raises(AIError, match="another app"):
+        _check(aud=[ISSUED_CLIENT_ID], azp="someone-else")
+
+
 def test_several_audiences_need_azp_to_be_us() -> None:
     audiences = ["x", ISSUED_CLIENT_ID]
     with pytest.raises(AIError, match="another app"):
