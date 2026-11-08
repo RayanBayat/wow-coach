@@ -14,9 +14,18 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from wow_coach.ai.chatgpt_signin import REVOKE_NOT_CONFIRMED
 from wow_coach.characters import pick_character
 from wow_coach.check import run_check
+from wow_coach.companion import (
+    MANAGE_USAGE_URL,
+    WELCOME_TEXT,
+    WELCOME_TITLE,
+    build_coach,
+    build_sign_in,
+)
 from wow_coach.config import config_path
+from wow_coach.engine.contract import CoachReply
 from wow_coach.errors import WowCoachError
 from wow_coach.gamedir import resolve_game_folder
 from wow_coach.report import format_history, format_progress, format_status
@@ -100,6 +109,15 @@ def _build_parser() -> argparse.ArgumentParser:
     wiki.add_argument("--section", metavar="NAME", help="with --page: only this section")
     wiki.add_argument("--quest", type=int, metavar="ID", help="find the page of this quest ID")
     wiki.add_argument("--limit", type=int, default=5, help="how many search results (default 5)")
+    commands.add_parser(
+        "signin", help="sign in with ChatGPT, so the coach can answer with your ChatGPT plan"
+    )
+    commands.add_parser("signout", help="sign out of ChatGPT and take back wow-coach's access")
+    ask = commands.add_parser(
+        "ask", parents=[shared], help="ask your coach a question (uses your ChatGPT plan)"
+    )
+    ask.add_argument("question", nargs="*", help="your question, for example: what next?")
+    ask.add_argument("--character", metavar="NAME", help="character name (default: newest save)")
     return parser
 
 
@@ -195,6 +213,55 @@ def _watch(wow_dir_flag: Path | None) -> int:
     return 0
 
 
+def _signin() -> int:
+    """Sign in with ChatGPT on OpenAI's own page (opens the browser)."""
+    sign_in = build_sign_in(os.environ)
+    print("Opening your browser. Choose Continue with ChatGPT and sign in.")
+
+    def show_address(url: str) -> None:
+        print(f"If the browser does not open, copy this address into it:\n{url}")
+
+    account = sign_in.sign_in(on_url=show_address)
+    who = f" as {account.email}" if getattr(account, "email", None) else ""
+    print(f"Signed in{who}.")
+    print(f"{WELCOME_TITLE} {WELCOME_TEXT}")
+    print(f"Manage usage: {MANAGE_USAGE_URL}")
+    return 0
+
+
+def _signout() -> int:
+    if build_sign_in(os.environ).sign_out():
+        print("Signed out. OpenAI confirmed that wow-coach can no longer use your plan.")
+    else:
+        print(REVOKE_NOT_CONFIRMED)
+    return 0
+
+
+def _reply_text(reply: CoachReply) -> str:
+    """The coach's answer as plain text for the terminal."""
+    answer = reply.answer
+    lines = [answer.title]
+    lines += [f"{number}. {step}" for number, step in enumerate(answer.steps, start=1)]
+    if answer.text:
+        lines += ["", answer.text]
+    lines += [f"Watch out: {warning}" for warning in answer.warnings]
+    lines += ["", f"From {answer.source}. AI can be wrong.", reply.note]
+    return "\n".join(lines)
+
+
+def _ask(wow_dir_flag: Path | None, words: Sequence[str], character: str | None) -> int:
+    question = " ".join(words).strip()
+    if not question:
+        print(
+            'wow-coach: give your question, for example: wow-coach ask "what next?"',
+            file=sys.stderr,
+        )
+        return 2
+    coach = build_coach(wow_dir_flag=wow_dir_flag, environ=os.environ)
+    print(_reply_text(coach.ask(question, character=character)))
+    return 0
+
+
 def _mcp(wow_dir_flag: Path | None) -> int:
     run_mcp_server(wow_dir_flag)
     return 0
@@ -226,6 +293,9 @@ def main(
         "mcp": lambda: _mcp(flag),
         "check": lambda: _check(flag),
         "wiki": lambda: _wiki(arguments, fetch),
+        "signin": _signin,
+        "signout": _signout,
+        "ask": lambda: _ask(flag, arguments.question, arguments.character),
     }
     try:
         return commands[arguments.command]()
