@@ -74,6 +74,13 @@ itself, while you play. When you close the window, the coach keeps running next 
 
   Why can't the app make the game save alone? Programs that press keys in your game break
   Blizzard's rules, so WoW Coach never does it. One key press from you is all it needs.
+- **Sources and lookups:** while the coach works, the typing bubble says what it is doing
+  ("Searched the Warcraft Wiki for ..."). Under each answer you see **Sources**: small link
+  buttons with the page title (or the website) that open the page in your browser when you click
+  them. Point at one to see the whole link. The links come from what the coach really searched
+  and read, never from links the AI wrote. **What the coach looked up (3)** unfolds to a list of
+  what it checked, including when it saved your notes. Point at an answer to see when it came.
+  Both also show for older answers in the history.
 - **Keep on top of the game:** opens a small card that stays above the game window and shows
   the newest answer. Drag it where you like; it remembers the spot. It never takes the
   keyboard away from the game.
@@ -86,7 +93,8 @@ itself, while you play. When you close the window, the coach keeps running next 
 
 ## The other pages
 
-- **Settings:** notifications, answering game questions by itself, when the
+- **Settings:** the **Coach tools** (let the coach look things up, search the web, update your
+  notebook, and show what it looked up; all on at first), notifications, answering game questions by itself, when the
   coach should speak up on its own (when you die, level up, need repairs...), quiet hours,
   and what is shared with the AI. Changes save by themselves. More about speaking up: [the coach window guide](coach-window.md#when-the-coach-speaks-up-by-itself).
 - **ChatGPT:** your sign-in, how many questions you asked in the last hour and day,
