@@ -6,7 +6,7 @@ animation can never outlive its widget.
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation
+from PySide6.QtCore import QAbstractAnimation, QEasingCurve, QPropertyAnimation
 from PySide6.QtWidgets import QGraphicsOpacityEffect, QScrollBar, QWidget
 
 from wow_coach.desktop.theme import FADE_MS, SCROLL_MS
@@ -56,11 +56,14 @@ def fade_in(widget: QWidget) -> QPropertyAnimation:
 
 
 def glide(bar: QScrollBar, target: int) -> QPropertyAnimation:
-    """Scroll smoothly to ``target`` instead of jumping."""
+    """Scroll smoothly to ``target`` instead of jumping.
+
+    The animation deletes itself when it stops, so finished glides do not pile up.
+    """
     animation = QPropertyAnimation(bar, b"value", bar)
     animation.setDuration(SCROLL_MS)
     animation.setStartValue(bar.value())
     animation.setEndValue(target)
     animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-    animation.start()
+    animation.start(QAbstractAnimation.DeletionPolicy.DeleteWhenStopped)
     return animation
