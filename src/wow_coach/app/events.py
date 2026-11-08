@@ -14,8 +14,10 @@ from typing import Final
 
 # The only event names the page understands.
 # "history" = new chat messages were imported; the browser page ignores it, the app redraws.
+# "activity" = the coach is looking something up right now ({character, text, kind}); the
+# browser page ignores it, the app shows the newest line in its typing bubble.
 EVENT_KINDS: Final = (
-    "answer", "question", "save", "error", "signin", "decision", "info", "history",
+    "answer", "question", "save", "error", "signin", "decision", "info", "history", "activity",
 )  # fmt: skip
 MAILBOX_SIZE: Final = 200
 

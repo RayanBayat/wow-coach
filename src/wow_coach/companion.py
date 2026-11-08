@@ -14,7 +14,7 @@ from wow_coach.ai.chatgpt_signin import ChatGPTSignIn
 from wow_coach.app_settings import AppSettings, load_settings, settings_path
 from wow_coach.config import config_path
 from wow_coach.datafolder import data_folder
-from wow_coach.engine.coach import ChatCoach
+from wow_coach.engine.coach import ActivityListener, ChatCoach
 from wow_coach.engine.contract import CoachReply
 from wow_coach.engine.model import choose_model
 from wow_coach.gamedir import resolve_game_folder
@@ -106,6 +106,11 @@ class LiveCoach:
         self._settings_file = settings_file
         self._make_coach = make_coach
         self._model_for: tuple[str | None, str] | None = None  # (the player's choice, model)
+        self._on_activity: ActivityListener | None = None
+
+    def set_activity_listener(self, listener: ActivityListener) -> None:
+        """Where to report what the coach looks up while it answers (the app core sets it)."""
+        self._on_activity = listener
 
     def _model(self, settings: AppSettings) -> str:
         if self._model_for is None or self._model_for[0] != settings.model:
@@ -120,6 +125,7 @@ class LiveCoach:
             wow_dir=self._wow_dir,
             environ=self._environ,
             settings=settings,
+            on_activity=self._on_activity,
         )
 
     def ask(self, question: str, *, character: str | None = None) -> CoachReply:

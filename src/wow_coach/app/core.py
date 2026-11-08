@@ -33,6 +33,7 @@ from wow_coach.app_settings import (
     save_settings,
     update_settings,
 )
+from wow_coach.engine.agent import Activity
 from wow_coach.engine.contract import Coach, CoachReply
 from wow_coach.engine.conversation import (
     ChatAnswer,
@@ -133,6 +134,10 @@ class AppCore:
         self._signin_busy = threading.Lock()
         # (character, question id) pairs already answered: a question is never answered twice.
         self._answered: set[tuple[str, str]] = set()
+        # Let the engine tell the windows what it is looking up while it works.
+        listen = getattr(coach, "set_activity_listener", None)
+        if callable(listen):
+            listen(self.publish_activity)
 
     # ---- settings ---------------------------------------------------------------------
 
@@ -329,6 +334,13 @@ class AppCore:
         """
         self.bus.publish("error", {"message": message, "kind": kind})
 
+    def publish_activity(self, character_key: str, activity: Activity) -> None:
+        """Tell every open window what the coach is doing now ("Searched the web for ...")."""
+        self.bus.publish(
+            "activity",
+            {"character": character_key, "text": activity.text, "kind": activity.kind},
+        )
+
     def publish_reply(self, reply: CoachReply) -> None:
         """Send a finished answer to the window (and remember its question as answered).
 
@@ -345,6 +357,8 @@ class AppCore:
                 "answer": answer_to_json(reply.answer),
                 "note": reply.note,
                 "written_to_game": reply.written_to_game,
+                "sources": [{"title": s.title, "url": s.url} for s in reply.sources],
+                "lookups": [{"kind": item.kind, "text": item.text} for item in reply.lookups],
             },
         )
 

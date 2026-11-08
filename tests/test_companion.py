@@ -59,3 +59,21 @@ def test_live_coach_reads_the_settings_before_every_answer(tmp_path: Path) -> No
     assert isinstance(settings, AppSettings) and settings.share_other_player_names is True
     assert third["model"] == "gpt-6-sol"
     assert plan.model_lists == 2  # fetched again only when the choice changed
+
+
+def test_live_coach_passes_the_activity_listener_to_each_engine(tmp_path: Path) -> None:
+    FakeChatCoach.made.clear()
+    coach = LiveCoach(
+        FakePlan(),  # type: ignore[arg-type]  # a fake with the same methods
+        wow_dir=tmp_path,
+        environ={},
+        settings_file=tmp_path / "settings.json",
+        make_coach=FakeChatCoach,  # type: ignore[arg-type]
+    )
+    heard: list[str] = []
+    coach.set_activity_listener(lambda key, _activity: heard.append(key))
+    coach.ask("hi")
+    listener = FakeChatCoach.made[0]["on_activity"]
+    assert callable(listener)
+    listener("Hero-Realm", None)
+    assert heard == ["Hero-Realm"]
