@@ -47,6 +47,24 @@ def test_the_app_icon_can_be_saved_as_ico(tmp_path: Path) -> None:
     assert target.stat().st_size > 100
 
 
+def test_saving_the_ico_never_makes_a_pixmap(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Pixmaps may only be used in the window's thread; the Setup page saves in a background one.
+    class NoPixmaps:
+        def __init__(self, *_args: object) -> None:
+            raise AssertionError("a QPixmap was made")
+
+        @staticmethod
+        def fromImage(_image: object) -> None:  # noqa: N802 - Qt's name
+            raise AssertionError("a QPixmap was made")
+
+    monkeypatch.setattr(icons, "QPixmap", NoPixmaps)
+    target = tmp_path / "wow-coach.ico"
+    assert icons.save_app_ico(target) is True
+    assert target.stat().st_size > 100
+
+
 def test_the_sidebar_shows_icons_and_follows_the_selected_page(qtbot: QtBot) -> None:
     bridge, _core = make_bridge()
     window = MainWindow(bridge)
