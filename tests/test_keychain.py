@@ -8,6 +8,7 @@ import keyring.backend
 import keyring.backends.fail
 import pytest
 
+from wow_coach.ai.base import AIError
 from wow_coach.keychain import SERVICE_NAME, Keychain
 
 
@@ -93,3 +94,47 @@ def test_no_secret_is_ever_written_to_a_file(
     monkeypatch.chdir(tmp_path)
     Keychain().set("token", "super-secret")
     assert list(tmp_path.iterdir()) == []
+
+
+class LockedBackend(MemoryBackend):
+    """A keychain that exists but fails, like a locked wallet (raises a raw, unwrapped error)."""
+
+    locked = True
+
+    def get_password(self, service: str, username: str) -> str | None:
+        if self.locked:
+            raise RuntimeError("DBus: wallet is locked")
+        return super().get_password(service, username)
+
+    def set_password(self, service: str, username: str, password: str) -> None:
+        if self.locked:
+            raise RuntimeError("DBus: wallet is locked")
+        super().set_password(service, username, password)
+
+
+def test_a_locked_keychain_raises_a_plain_error_and_never_pretends_secrets_are_missing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    fake = LockedBackend()
+    keyring.set_keyring(fake)
+    keychain = Keychain()
+    with pytest.raises(AIError, match="unlock it") as caught:
+        keychain.get("token")
+    assert "DBus" not in str(caught.value)
+    with pytest.raises(AIError):
+        keychain.set("token", "super-secret")
+    assert keychain.persistent  # still the real keychain, not a silent memory fallback
+    assert "super-secret" not in caplog.text
+    fake.locked = False  # the player unlocks it: everything works again
+    keychain.set("token", "abc")
+    assert keychain.get("token") == "abc"
+
+
+def test_keyring_error_other_than_no_keyring_is_also_a_plain_error() -> None:
+    class Broken(MemoryBackend):
+        def get_password(self, service: str, username: str) -> str | None:  # noqa: ARG002
+            raise keyring.errors.InitError("cannot start")
+
+    keyring.set_keyring(Broken())
+    with pytest.raises(AIError, match="could not be used"):
+        Keychain().get("token")
