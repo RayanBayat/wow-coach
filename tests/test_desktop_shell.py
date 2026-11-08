@@ -6,13 +6,18 @@ import pytest
 from desktop_support import make_bridge
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtNetwork import QLocalServer
+from PySide6.QtNetwork import QHostInfo, QLocalServer
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from pytestqt.qtbot import QtBot
 
 from wow_coach.desktop import icons
 from wow_coach.desktop.main_window import MainWindow
-from wow_coach.desktop.single_instance import SingleInstance, default_name
+from wow_coach.desktop.single_instance import (
+    SingleInstance,
+    default_name,
+    socket_address,
+    socket_folder,
+)
 from wow_coach.desktop.theme import DARK
 from wow_coach.desktop.tray import TRAY_MESSAGE, AppTray
 
@@ -79,9 +84,19 @@ def test_the_sidebar_shows_icons_and_follows_the_selected_page(qtbot: QtBot) -> 
 # ---- one instance only -------------------------------------------------------------------
 
 
-def test_the_second_copy_wakes_the_first_and_exits(qtbot: QtBot) -> None:
-    first = SingleInstance("wow-coach-test-wake")
-    second = SingleInstance("wow-coach-test-wake")
+def private_environ(root: Path) -> dict[str, str]:
+    """Environment variables that keep the lock file and the socket inside ``root``."""
+    (root / "run").mkdir(exist_ok=True)
+    return {"WOW_COACH_DATA_DIR": str(root / "data"), "XDG_RUNTIME_DIR": str(root / "run")}
+
+
+def make_instance(root: Path, name: str = "t") -> SingleInstance:
+    return SingleInstance(name, environ=private_environ(root))
+
+
+def test_the_second_copy_wakes_the_first_and_exits(qtbot: QtBot, tmp_path: Path) -> None:
+    first = make_instance(tmp_path)
+    second = make_instance(tmp_path)
     try:
         assert first.claim() is True
         with qtbot.waitSignal(first.show_requested, timeout=3000):
@@ -90,32 +105,132 @@ def test_the_second_copy_wakes_the_first_and_exits(qtbot: QtBot) -> None:
         first.close()
 
 
-def test_the_first_instance_raises_its_window(qtbot: QtBot) -> None:
+def test_the_first_instance_raises_its_window(qtbot: QtBot, tmp_path: Path) -> None:
     bridge, _core = make_bridge()
     window = MainWindow(bridge)
     qtbot.addWidget(window)
-    first = SingleInstance("wow-coach-test-raise")
+    first = make_instance(tmp_path)
     try:
         assert first.claim()
         first.show_requested.connect(window.bring_to_front)
         assert not window.isVisible()
-        assert SingleInstance("wow-coach-test-raise").claim() is False
+        assert make_instance(tmp_path).claim() is False
         qtbot.waitUntil(window.isVisible, timeout=3000)
     finally:
         first.close()
 
 
-@pytest.mark.usefixtures("qtbot")
-def test_a_name_left_by_a_crash_is_cleaned_up() -> None:
+def test_only_one_of_two_copies_gets_the_lock_and_the_winner_keeps_its_socket(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    # The old check looked first and claimed later, so two copies could both win and the
+    # second would delete the first one's socket. The lock decides in one step.
+    copies = [make_instance(tmp_path) for _ in range(3)]
+    try:
+        results = [copy.claim() for copy in copies]
+        assert results.count(True) == 1
+        winner = copies[results.index(True)]
+        assert Path(winner.address).exists()  # the losers did not remove it
+        with qtbot.waitSignal(winner.show_requested, timeout=3000):
+            assert make_instance(tmp_path).claim() is False
+    finally:
+        for copy in copies:
+            copy.close()
+
+
+def test_the_lock_is_free_again_after_close(tmp_path: Path) -> None:
+    first = make_instance(tmp_path)
+    assert first.claim()
+    first.close()
+    second = make_instance(tmp_path)
+    try:
+        assert second.claim() is True
+    finally:
+        second.close()
+
+
+def test_a_lock_left_by_a_crashed_copy_is_taken_over(tmp_path: Path) -> None:
+    # A lock file whose program is gone (here: a process id that does not exist) is stale.
+    environ = private_environ(tmp_path)
+    lock_file = Path(environ["WOW_COACH_DATA_DIR"]) / "instance.lock"
+    lock_file.parent.mkdir(parents=True)
+    lock_file.write_text(f"2147483646\nwow-coach\n{QHostInfo.localHostName()}\n")
+    instance = SingleInstance("t", environ=environ)
+    try:
+        assert instance.claim() is True
+    finally:
+        instance.close()
+
+
+def test_a_socket_left_by_a_crash_is_cleaned_up(tmp_path: Path) -> None:
     # A server that was not closed properly leaves its name behind; nobody answers on it.
+    fresh = make_instance(tmp_path)
+    folder = Path(fresh.address).parent
+    folder.mkdir(mode=0o700)
     crashed = QLocalServer()
-    assert crashed.listen("wow-coach-test-stale")
+    assert crashed.listen(fresh.address)
     crashed.close()
-    fresh = SingleInstance("wow-coach-test-stale")
     try:
         assert fresh.claim() is True
     finally:
         fresh.close()
+
+
+def test_somebody_squatting_on_the_name_does_not_stop_us(tmp_path: Path) -> None:
+    # Another program listens on our name but holds no lock: we are still the first copy, and
+    # we must not tell it "show" as if it were a running coach.
+    instance = make_instance(tmp_path)
+    folder = Path(instance.address).parent
+    folder.mkdir(mode=0o700)
+    squatter = QLocalServer()
+    assert squatter.listen(instance.address)
+    try:
+        assert instance.claim() is True
+        assert not squatter.hasPendingConnections()
+    finally:
+        instance.close()
+        squatter.close()
+
+
+def test_the_socket_lives_in_a_private_folder(tmp_path: Path) -> None:
+    instance = make_instance(tmp_path)
+    try:
+        assert instance.claim()
+        folder = Path(instance.address).parent
+        assert folder == tmp_path / "run" / "wow-coach"
+        assert folder.stat().st_mode & 0o777 == 0o700
+    finally:
+        instance.close()
+
+
+def test_a_folder_that_is_really_a_link_is_not_trusted(tmp_path: Path) -> None:
+    # Somebody swapped our folder for a link to a place they control: do not listen there.
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (tmp_path / "run").mkdir()
+    (tmp_path / "run" / "wow-coach").symlink_to(elsewhere, target_is_directory=True)
+    instance = make_instance(tmp_path)
+    try:
+        assert instance.claim() is True  # the app still runs
+        assert list(elsewhere.iterdir()) == []  # but no socket was made there
+    finally:
+        instance.close()
+
+
+def test_the_socket_folder_follows_the_system() -> None:
+    runtime = {"XDG_RUNTIME_DIR": "/run/user/1000"}
+    assert socket_folder(runtime, "linux") == Path("/run/user/1000/wow-coach")
+    assert socket_folder({}, "linux", user_id=1000, fallback_root=Path("/t")) == Path(
+        "/t/wow-coach-1000"
+    )
+    assert socket_folder(runtime, "win32") is None  # Windows uses a named pipe
+
+
+def test_a_long_runtime_folder_falls_back_to_a_short_one() -> None:
+    long_runtime = {"XDG_RUNTIME_DIR": "/very/" + "long/" * 30}
+    address = socket_address("wow-coach-me", long_runtime, "linux", fallback_root=Path("/t"))
+    assert len(address) < 100
+    assert address.startswith("/t/wow-coach-")
 
 
 def test_the_default_name_is_per_user() -> None:
