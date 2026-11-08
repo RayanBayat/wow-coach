@@ -8,6 +8,7 @@ per hour and calls per day. Only counts are kept, never the questions or the ans
 
 import json
 import logging
+import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -20,6 +21,9 @@ HOUR_SECONDS = 3600
 DAY_SECONDS = 24 * HOUR_SECONDS
 
 _log = logging.getLogger(__name__)
+
+# One lock for the whole program, so two parallel calls can't both slip under a cap.
+_LOCK = threading.Lock()
 
 
 def usage_log_path(data_dir: Path) -> Path:
@@ -53,34 +57,71 @@ class UsageLog:
 
     def check_allowed(self) -> None:
         """Raise ``PlanLimitReached`` if one more call would go over a cap."""
+        with _LOCK:
+            self._check_allowed_locked()
+
+    def begin_call(self, model: str) -> None:
+        """Check the caps, then count this call at once (before it is sent).
+
+        Counting the ATTEMPT, not only the success, means a call that fails or breaks halfway
+        still counts: it may have used some of the plan. The check and the count happen under
+        one lock, so parallel calls can't both slip under a cap.
+
+        Raises:
+            PlanLimitReached: A cap is used up (nothing is counted then).
+        """
+        with _LOCK:
+            self._check_allowed_locked()
+            self._append(self._line(model, Usage(), tokens_only=False))
+
+    def record_tokens(self, model: str, usage: Usage) -> None:
+        """Add the token numbers of a call that ``begin_call`` already counted."""
+        with _LOCK:
+            self._append(self._line(model, usage, tokens_only=True))
+
+    def record(self, model: str, usage: Usage) -> None:
+        """Count one finished call together with its token numbers."""
+        with _LOCK:
+            self._append(self._line(model, usage, tokens_only=False))
+
+    def calls_in_last(self, seconds: float) -> int:
+        """How many calls were made in the last ``seconds`` seconds."""
+        now = self._clock()
+        return sum(1 for moment in self._call_times() if now - seconds < moment <= now)
+
+    def _check_allowed_locked(self) -> None:
         times = self._call_times()
         now = self._clock()
         self._check_cap(times, now, HOUR_SECONDS, self._hour_cap, "hour")
         self._check_cap(times, now, DAY_SECONDS, self._day_cap, "day")
 
-    def record(self, model: str, usage: Usage) -> None:
-        """Add one line for a finished call."""
-        line = {
+    def _line(self, model: str, usage: Usage, *, tokens_only: bool) -> dict[str, object]:
+        line: dict[str, object] = {
             "at": datetime.fromtimestamp(self._clock(), UTC).isoformat(),
             "model": model,
             "input_tokens": usage.input_tokens,
             "output_tokens": usage.output_tokens,
         }
+        if tokens_only:
+            line["tokens_only"] = True  # numbers for an earlier counted call: not a new call
+        return line
+
+    def _append(self, line: dict[str, object]) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._path.open("a", encoding="utf-8") as file:
             file.write(json.dumps(line) + "\n")
-
-    def calls_in_last(self, seconds: float) -> int:
-        """How many calls were made in the last ``seconds`` seconds."""
-        limit = self._clock() - seconds
-        return sum(1 for moment in self._call_times() if moment > limit)
 
     def _check_cap(
         self, times: list[float], now: float, window: int, cap: int | None, name: str
     ) -> None:
         if cap is None:
             return
-        recent = sorted(moment for moment in times if moment > now - window)
+        if cap <= 0:
+            raise PlanLimitReached(
+                f"You set a limit of 0 AI calls per {name}, so no calls are allowed. "
+                "You can change the limit in the wow-coach settings."
+            )
+        recent = sorted(moment for moment in times if now - window < moment <= now)
         if len(recent) < cap:
             return
         # The cap frees up when the oldest call that still counts leaves the window.
@@ -92,20 +133,27 @@ class UsageLog:
         )
 
     def _call_times(self) -> list[float]:
-        """The time of every logged call. Damaged lines are skipped, not fatal."""
+        """The time of every counted call. Damaged lines and future dates are skipped."""
         if not self._path.exists():
             return []
         times: list[float] = []
-        for text in self._path.read_text(encoding="utf-8").splitlines():
-            moment = _parse_line_time(text)
-            if moment is not None:
+        limit = self._clock()
+        # errors="replace": a damaged byte must not stop the coach from working
+        text = self._path.read_text(encoding="utf-8", errors="replace")
+        for line in text.splitlines():
+            moment = _parse_line_time(line)
+            if moment is not None and moment <= limit:
                 times.append(moment)
         return times
 
 
 def _parse_line_time(text: str) -> float | None:
+    """The time of a line that counts as a call, else ``None`` (damaged or tokens-only)."""
     try:
-        return datetime.fromisoformat(json.loads(text)["at"]).timestamp()
-    except ValueError, KeyError, TypeError:
+        data = json.loads(text)
+        if data.get("tokens_only") is True:
+            return None
+        return datetime.fromisoformat(data["at"]).timestamp()
+    except ValueError, KeyError, TypeError, AttributeError, RecursionError, OverflowError:
         _log.warning("Skipping a damaged line in the usage log.")
         return None

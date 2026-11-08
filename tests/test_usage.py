@@ -1,6 +1,7 @@
 """Tests for the usage log and the call caps."""
 
 import json
+import threading
 from pathlib import Path
 
 import pytest
@@ -83,3 +84,61 @@ def test_damaged_lines_are_skipped(tmp_path: Path) -> None:
     log.record("m", Usage())
     with pytest.raises(PlanLimitReached):
         log.check_allowed()
+
+
+def test_a_cap_of_zero_means_no_calls_not_a_crash(tmp_path: Path) -> None:
+    log = UsageLog(tmp_path / "usage.jsonl", max_calls_per_hour=0)
+    with pytest.raises(PlanLimitReached, match="no calls are allowed"):
+        log.check_allowed()
+    with pytest.raises(PlanLimitReached):
+        log.begin_call("m")
+    assert not (tmp_path / "usage.jsonl").exists()
+
+
+def test_begin_call_counts_the_attempt_and_tokens_lines_are_not_extra_calls(
+    tmp_path: Path,
+) -> None:
+    log = UsageLog(tmp_path / "usage.jsonl", max_calls_per_hour=2, clock=Clock())
+    log.begin_call("m")
+    log.record_tokens("m", Usage(3, 4))
+    assert log.calls_in_last(3600) == 1
+    log.begin_call("m")  # a second attempt, whatever happens to it
+    with pytest.raises(PlanLimitReached):
+        log.begin_call("m")
+
+
+def test_lines_dated_in_the_future_are_ignored(tmp_path: Path) -> None:
+    path = tmp_path / "usage.jsonl"
+    future = {"at": "2999-01-01T00:00:00+00:00", "model": "m"}
+    path.write_text(json.dumps(future) + "\n")
+    log = UsageLog(path, max_calls_per_hour=1, clock=Clock())
+    log.check_allowed()  # the far-future line must not count
+    assert log.calls_in_last(10**12) == 0
+
+
+def test_undecodable_bytes_in_the_log_do_not_stop_the_coach(tmp_path: Path) -> None:
+    path = tmp_path / "usage.jsonl"
+    path.write_bytes(b"\xff\xfe broken \xff\n")
+    log = UsageLog(path, max_calls_per_hour=1, clock=Clock())
+    log.begin_call("m")
+    with pytest.raises(PlanLimitReached):
+        log.check_allowed()
+
+
+def test_parallel_calls_cannot_slip_under_the_cap(tmp_path: Path) -> None:
+    log = UsageLog(tmp_path / "usage.jsonl", max_calls_per_hour=3, clock=Clock())
+    allowed: list[bool] = []
+
+    def try_call() -> None:
+        try:
+            log.begin_call("m")
+            allowed.append(True)
+        except PlanLimitReached:
+            allowed.append(False)
+
+    threads = [threading.Thread(target=try_call) for _ in range(12)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert allowed.count(True) == 3
