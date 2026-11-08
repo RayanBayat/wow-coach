@@ -106,6 +106,35 @@ def saved_at(character: Character | None) -> int | None:
     return int(value)
 
 
+def character_summary(character: Character | None) -> dict[str, object] | None:
+    """A short description of the character for the window's header, or None.
+
+    Fields the save does not have (for example an old save without ``zone``) are None.
+    """
+    if character is None:
+        return None
+    snapshot = character.snapshot
+    name = snapshot.get("name")
+    return {
+        "name": name if isinstance(name, str) and name else character.key.split("-")[0],
+        "level": _whole_number(snapshot.get("level")),
+        "race": _text_or_none(snapshot.get("race")),
+        "class_name": _text_or_none(snapshot.get("class")),
+        "zone": _text_or_none(snapshot.get("zone")),
+        "money": _whole_number(snapshot.get("money")),  # in copper
+    }
+
+
+def _whole_number(value: object) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value)
+
+
+def _text_or_none(value: object) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
 def usage_counts(counter: CallCounter, settings: AppSettings) -> dict[str, int]:
     """How many AI calls were made in the last hour and day, with the player's caps."""
     return {
@@ -137,6 +166,7 @@ def build_state(
         "open_questions": [question_to_json(q) for q in open_questions_for(game, character)],
         "usage": usage_counts(counter, settings),
         "last_save": saved_at(character),
+        "character": character_summary(character),
         "alerts": alerts_available,
         "problem": game.problem,
     }
