@@ -1,0 +1,9 @@
+<Bindings>
+	<!-- One key binding: show or hide the Coach panel. The names shown in the key
+	     bindings window are BINDING_HEADER_COACHLINK and BINDING_NAME_COACHLINK_TOGGLE,
+	     set in CoachLinkPanel.lua. /coach panel does the same thing, and (like it) does
+	     nothing in combat. -->
+	<Binding name="COACHLINK_TOGGLE" category="BINDING_HEADER_COACHLINK">
+		SlashCmdList.COACHLINK("panel");
+	</Binding>
+</Bindings>
