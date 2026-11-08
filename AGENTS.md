@@ -20,7 +20,7 @@ facts. Users' docs start at `README.md`.
 | `tests/` | pytest. `test_addon_contract.py` runs the Lua test and reads its output with the Python code. `tests/fixtures/wiki/` holds real wiki responses; tests never use the network |
 | `src/wow_coach/assets/` | Claude files shipped inside the package so `wow-coach setup` can copy them: `skills/wow-coach/SKILL.md` (the Agent Skill; folder name must equal `name`) and `agents/wow-coach.md` (the Claude Code agent) |
 | `docs/` | User guides, `design.md` (how it works), `troubleshooting.md`, `glossary.md` |
-| `.github/workflows/` | `ci.yml` (tests) and `release.yml` (builds `CoachLink-<version>.zip` on a `v*` tag) |
+| `.github/workflows/` | `ci.yml` (tests) and `release.yml` (builds `CoachLink-<version>.zip` on a `v*` tag, and uploads it to CurseForge once that is set up: [docs/curseforge.md](docs/curseforge.md); the CurseForge page text is `addon/CURSEFORGE.md`) |
 | `CHANGELOG.md` | Keep a Changelog format |
 
 ## Commands

@@ -1,7 +1,8 @@
 name: Release
 
 # Runs when you push a tag like v0.5.0. It builds CoachLink-<version>.zip
-# and publishes it on the GitHub Releases page.
+# and publishes it on the GitHub Releases page. When CurseForge is set up (see
+# docs/curseforge.md), it also uploads the same zip there.
 
 on:
   push:
@@ -47,3 +48,38 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" "CoachLink-${VERSION}.zip" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+
+      # Optional: the same zip on CurseForge. It runs only after the owner set the repository
+      # variables CURSEFORGE_PROJECT_ID and CURSEFORGE_GAME_VERSIONS and the secret
+      # CF_API_TOKEN (docs/curseforge.md). The token only travels in an environment variable.
+      - name: Upload to CurseForge (when it is set up)
+        if: ${{ vars.CURSEFORGE_PROJECT_ID != '' }}
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          PROJECT_ID: ${{ vars.CURSEFORGE_PROJECT_ID }}
+          GAME_VERSIONS: ${{ vars.CURSEFORGE_GAME_VERSIONS }}
+        run: |
+          if [ -z "$CF_API_TOKEN" ] || [ -z "$GAME_VERSIONS" ]; then
+            echo "CurseForge is only half set up (token or game versions missing): skipping."
+            exit 0
+          fi
+          python3 - <<'PY' > metadata.json
+          import json
+          import os
+
+          ids = [int(part) for part in os.environ["GAME_VERSIONS"].split(",") if part.strip()]
+          with open("release-notes.md", encoding="utf-8") as notes:
+              changelog = notes.read()
+          print(json.dumps({
+              "changelog": changelog,
+              "changelogType": "markdown",
+              "displayName": f"CoachLink {os.environ['VERSION']}",
+              "gameVersions": ids,
+              "releaseType": "release",
+          }))
+          PY
+          curl --fail-with-body --silent --show-error \
+            --header "X-Api-Token: ${CF_API_TOKEN}" \
+            --form "metadata=<metadata.json" \
+            --form "file=@CoachLink-${VERSION}.zip" \
+            "https://wow.curseforge.com/api/projects/${PROJECT_ID}/upload-file"
