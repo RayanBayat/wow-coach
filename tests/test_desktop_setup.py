@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from desktop_support import make_bridge, run_now
+from PySide6.QtCore import Qt
 from pytestqt.qtbot import QtBot
 
 from wow_coach.config import load_saved_wow_dir
@@ -305,6 +306,14 @@ def test_the_page_hides_shortcut_cards_where_unsupported(qtbot: QtBot, tmp_path:
     assert page.menu_card.isHidden()
     assert page.login_card.isHidden()
     assert "macOS" in page.no_shortcuts.text()
+
+
+def test_paths_and_error_texts_are_shown_as_plain_text(qtbot: QtBot, tmp_path: Path) -> None:
+    # A folder called "<b>x</b>" must not turn into bold text (Qt's AutoText would).
+    page = make_page(qtbot, make_services(tmp_path), None)
+    assert page.message.textFormat() == Qt.TextFormat.PlainText
+    for card in (page.game_card, page.addon_card, page.answers_card, page.menu_card):
+        assert card.sentence.textFormat() == Qt.TextFormat.PlainText
 
 
 def test_the_key_card_explains_the_keybinding(qtbot: QtBot, tmp_path: Path) -> None:

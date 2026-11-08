@@ -131,6 +131,7 @@ class SetupCard(QFrame):
         self._title.setProperty("role", "cardtitle")
         self.sentence = QLabel()
         self.sentence.setWordWrap(True)
+        self.sentence.setTextFormat(Qt.TextFormat.PlainText)  # paths and OS errors, never markup
         self.sentence.setProperty("role", "muted")
         self.sentence.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.command = QLabel(INSTALL_COMMAND)
@@ -219,6 +220,7 @@ class SetupPage(Page):
         intro.setProperty("role", "muted")
         self.message = QLabel()
         self.message.setWordWrap(True)
+        self.message.setTextFormat(Qt.TextFormat.PlainText)
         self.message.hide()
 
         self.game_card = SetupCard("Game folder")
