@@ -1,4 +1,4 @@
-"""Tests for finding and loading the CoachLink data file."""
+"""Tests for finding and loading the HeroBridge data file."""
 
 import os
 from pathlib import Path
@@ -9,7 +9,7 @@ from wow_coach.errors import CoachDataMissing, LuaParseError, UnsupportedFormat
 from wow_coach.savedvars import find_saved_variables, load_characters
 
 GOOD_FILE = """
-CoachLinkDB = {
+HeroBridgeDB = {
 ["formatVersion"] = 1,
 ["characters"] = {
 ["Testchar-Testrealm"] = {
@@ -46,7 +46,7 @@ CoachLinkDB = {
 def make_saved_vars(wow_dir: Path, account: str, text: str = GOOD_FILE) -> Path:
     folder = wow_dir / "WTF" / "Account" / account / "SavedVariables"
     folder.mkdir(parents=True)
-    path = folder / "CoachLink.lua"
+    path = folder / "HeroBridge.lua"
     path.write_text(text, encoding="utf-8")
     return path
 
@@ -65,7 +65,7 @@ def test_find_returns_most_recently_modified(tmp_path: Path) -> None:
 
 
 def test_find_missing_gives_friendly_message(tmp_path: Path) -> None:
-    with pytest.raises(CoachDataMissing, match=r"CoachLink addon.*restart WoW.*/coach"):
+    with pytest.raises(CoachDataMissing, match=r"HeroBridge addon.*restart WoW.*/coach"):
         find_saved_variables(tmp_path)
 
 
@@ -103,23 +103,23 @@ def test_character_without_pieces_gets_empty_defaults(tmp_path: Path) -> None:
 
 
 def test_no_characters_table_gives_empty_dict(tmp_path: Path) -> None:
-    path = make_saved_vars(tmp_path, "A", 'CoachLinkDB = {\n["formatVersion"] = 1,\n}\n')
+    path = make_saved_vars(tmp_path, "A", 'HeroBridgeDB = {\n["formatVersion"] = 1,\n}\n')
     assert load_characters(path) == {}
 
 
 def test_unknown_format_version(tmp_path: Path) -> None:
-    path = make_saved_vars(tmp_path, "A", 'CoachLinkDB = {\n["formatVersion"] = 99,\n}\n')
+    path = make_saved_vars(tmp_path, "A", 'HeroBridgeDB = {\n["formatVersion"] = 99,\n}\n')
     with pytest.raises(UnsupportedFormat, match="99"):
         load_characters(path)
 
 
 def test_missing_database_variable(tmp_path: Path) -> None:
     path = make_saved_vars(tmp_path, "A", "Other = 1\n")
-    with pytest.raises(UnsupportedFormat, match="CoachLinkDB"):
+    with pytest.raises(UnsupportedFormat, match="HeroBridgeDB"):
         load_characters(path)
 
 
 def test_broken_lua_raises_parse_error(tmp_path: Path) -> None:
-    path = make_saved_vars(tmp_path, "A", "CoachLinkDB = {")
+    path = make_saved_vars(tmp_path, "A", "HeroBridgeDB = {")
     with pytest.raises(LuaParseError):
         load_characters(path)

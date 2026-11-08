@@ -63,22 +63,22 @@ Coach can't find your game yet. Click to choose it.").
    again.
 3. If the game is on a disk that is not connected yet, connect it and click **Try again**.
 
-## CoachLink is not loaded in the game
+## HeroBridge is not loaded in the game
 
-`/coach` does nothing, or the Setup page says CoachLink is missing.
+`/coach` does nothing, or the Setup page says HeroBridge is missing.
 
-1. In WoW Coach, open **Setup**. Click **Install CoachLink** (or **Update CoachLink**).
+1. In WoW Coach, open **Setup**. Click **Install HeroBridge** (or **Update HeroBridge**).
 2. Quit the game completely and start it again. `/reload` is not enough for a new addon.
-3. On the character screen, click **AddOns** (bottom left). Tick **CoachLink**. If it is marked
+3. On the character screen, click **AddOns** (bottom left). Tick **HeroBridge**. If it is marked
    out of date, tick the box that loads out-of-date addons (the exact wording may vary).
 4. Still nothing? Check that this file exists:
-   `_forever_\Interface\AddOns\CoachLink\CoachLink.toc`. More:
+   `_forever_\Interface\AddOns\HeroBridge\HeroBridge.toc`. More:
    [`/coach` does nothing](#coach-does-nothing-or-unknown-command).
 
 ## The "Save for the coach" key is not in the key list
 
 The game only notices a new key after a full restart. Quit the game completely and start it
-again, then open **Options → Keybindings → CoachLink**. A `/reload` is not enough.
+again, then open **Options → Keybindings → HeroBridge**. A `/reload` is not enough.
 
 ## "Game data" stays old
 
@@ -137,10 +137,10 @@ again, and add the shortcut.
 
 The addon isn't loaded.
 
-1. Check the file exists: `_forever_\Interface\AddOns\CoachLink\CoachLink.toc`
+1. Check the file exists: `_forever_\Interface\AddOns\HeroBridge\HeroBridge.toc`
    (see [Install the addon](install-the-addon.md)).
 2. Quit the game fully and start it again. `/reload` does not load new addons.
-3. On the character screen, click **AddOns** and tick CoachLink. If it is marked out of date,
+3. On the character screen, click **AddOns** and tick HeroBridge. If it is marked out of date,
    tick **Load out of date AddOns** (the wording may vary).
 
 ## `/coach copy` shows an empty window or no window
@@ -164,7 +164,7 @@ The AI app cannot see your game. Paste the text from `/coach copy` into the mess
    `$env:WOW_COACH_WOW_DIR = "D:\Games\World of Warcraft\_forever_"`, on macOS and Linux
    `export WOW_COACH_WOW_DIR="/path/to/_forever_"`.
 
-## `wow-coach check` says no CoachLink.lua was found
+## `wow-coach check` says no HeroBridge.lua was found
 
 The addon has not saved yet. Start the game, log in, type `/coach`, wait for the reload, run the
 check again. The file is only written on `/coach`, `/reload` or a clean logout. Killing the game
@@ -204,7 +204,7 @@ works. Please report it at https://github.com/RayanBayat/wow-coach/issues with t
 
 ## The addon shows as "out of date"
 
-The interface number in `CoachLink.toc` is for the game build it was made for. Tick **Load out of
+The interface number in `HeroBridge.toc` is for the game build it was made for. Tick **Load out of
 date AddOns** on the character screen, and check for a new release.
 
 ## Still stuck

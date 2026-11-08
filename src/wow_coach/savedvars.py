@@ -1,6 +1,6 @@
-"""Find and load the CoachLink data file that the in-game addon saves.
+"""Find and load the HeroBridge data file that the in-game addon saves.
 
-WoW writes the file to ``<wow_dir>/WTF/Account/<account>/SavedVariables/CoachLink.lua``.
+WoW writes the file to ``<wow_dir>/WTF/Account/<account>/SavedVariables/HeroBridge.lua``.
 There is one folder per game account, so we look in all of them and use the file that
 was changed most recently.
 """
@@ -12,7 +12,7 @@ from wow_coach.errors import CoachDataMissing, UnsupportedFormat
 from wow_coach.lua_table import LuaValue, parse_saved_variables
 
 SUPPORTED_FORMAT_VERSION = 1
-_FILE_NAME = "CoachLink.lua"
+_FILE_NAME = "HeroBridge.lua"
 
 
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class Character:
 
 
 def find_saved_variables(wow_dir: Path) -> Path:
-    """Return the newest ``CoachLink.lua`` under ``wow_dir``.
+    """Return the newest ``HeroBridge.lua`` under ``wow_dir``.
 
     Raises:
         CoachDataMissing: If no such file exists yet.
@@ -38,7 +38,7 @@ def find_saved_variables(wow_dir: Path) -> Path:
     candidates = list(wow_dir.glob(pattern))
     if not candidates:
         raise CoachDataMissing(
-            f"No {_FILE_NAME} found under {wow_dir}. Install the CoachLink addon, "
+            f"No {_FILE_NAME} found under {wow_dir}. Install the HeroBridge addon, "
             "restart WoW completely, then type /coach in game (or log out) so it saves."
         )
     return max(candidates, key=lambda path: path.stat().st_mtime)
@@ -52,13 +52,13 @@ def load_characters(path: Path) -> dict[str, Character]:
         UnsupportedFormat: If ``formatVersion`` is not one we understand.
     """
     text = path.read_text(encoding="utf-8")
-    database = parse_saved_variables(text).get("CoachLinkDB")
+    database = parse_saved_variables(text).get("HeroBridgeDB")
     if not isinstance(database, dict):
-        raise UnsupportedFormat(f"{path} does not contain a CoachLinkDB table.")
+        raise UnsupportedFormat(f"{path} does not contain a HeroBridgeDB table.")
     version = database.get("formatVersion")
     if version != SUPPORTED_FORMAT_VERSION:
         raise UnsupportedFormat(
-            f"CoachLink data has formatVersion {version!r}, but this reader only "
+            f"HeroBridge data has formatVersion {version!r}, but this reader only "
             f"understands version {SUPPORTED_FORMAT_VERSION}. Update wow-coach or the addon."
         )
     raw_characters = database.get("characters")

@@ -84,7 +84,7 @@ def test_write_then_read_gives_the_same_advice(advice: AdviceFile) -> None:
 @given(advice_files)
 def test_output_is_one_statement_and_stable(advice: AdviceFile) -> None:
     text = advice_to_lua(advice)
-    assert list(parse_saved_variables(text)) == ["CoachLinkAdvice"]
+    assert list(parse_saved_variables(text)) == ["HeroBridgeAdvice"]
     assert advice_to_lua(advice) == text
     # Writing what we read gives the same file again.
     again = parse_advice_text(text)

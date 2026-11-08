@@ -1,6 +1,6 @@
 """End to end: the coach's answer travels from the MCP tool to the in-game Coach panel.
 
-The Python side writes ``CoachLink_Advice/Advice.lua`` with ``answer_send_advice_to_game``,
+The Python side writes ``HeroBridge_Advice/Advice.lua`` with ``answer_send_advice_to_game``,
 then the panel's Lua test harness loads that very file with LuaJIT (the language the game
 uses) and checks what the panel shows. This proves the two halves agree on the format, and
 that AI text can't turn into WoW color codes or links: the panel must show them as plain
@@ -18,7 +18,7 @@ from wow_coach.advice.tools import answer_send_advice_to_game
 ROOT = Path(__file__).parent.parent
 HARNESS = ROOT / "addon" / "tests" / "run_panel_test.lua"
 SAVE = """
-CoachLinkDB = {
+HeroBridgeDB = {
 ["formatVersion"] = 1,
 ["characters"] = {
 ["Testchar-Testrealm"] = {
@@ -37,7 +37,7 @@ pytestmark = pytest.mark.skipif(shutil.which("luajit") is None, reason="needs lu
 def make_game(tmp_path: Path) -> Path:
     saved = tmp_path / "WTF" / "Account" / "ACC" / "SavedVariables"
     saved.mkdir(parents=True)
-    (saved / "CoachLink.lua").write_text(SAVE, encoding="utf-8")
+    (saved / "HeroBridge.lua").write_text(SAVE, encoding="utf-8")
     (tmp_path / "Interface" / "AddOns").mkdir(parents=True)
     return tmp_path
 
@@ -69,7 +69,7 @@ def test_an_answer_written_by_the_tool_shows_in_the_panel(tmp_path: Path) -> Non
         now=1793995000,
     )
     assert "/reload" in reply
-    advice_file = game / "Interface" / "AddOns" / "CoachLink_Advice" / "Advice.lua"
+    advice_file = game / "Interface" / "AddOns" / "HeroBridge_Advice" / "Advice.lua"
     output = run_panel(advice_file, 'Talk to "Farmer Solliden" in Brill.', "Take the road east.")
     assert "ALL PASSED" in output, output
 
@@ -88,7 +88,7 @@ def test_color_codes_from_the_ai_stay_plain_text_in_the_panel(tmp_path: Path) ->
         source="Test coach",
         now=1793995000,
     )
-    advice_file = game / "Interface" / "AddOns" / "CoachLink_Advice" / "Advice.lua"
+    advice_file = game / "Interface" / "AddOns" / "HeroBridge_Advice" / "Advice.lua"
     # Doubled pipes reach the panel: WoW draws "||" as a plain "|", so nothing is colored,
     # linked or turned into a picture.
     output = run_panel(

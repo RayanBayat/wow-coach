@@ -1,7 +1,7 @@
 # Glossary
 
 **Addon**: a small add-on for the game, made of a folder of text files. The game loads it at
-startup. CoachLink is an addon.
+startup. HeroBridge is an addon.
 
 **AI agent**: an AI app that can also run commands and read files on your computer (Claude Code,
 Codex, Gemini CLI, Cursor...).
@@ -19,7 +19,7 @@ relevant. See https://agentskills.io.
 your computer. wow-coach is one such helper.
 
 **SavedVariables**: files the game writes in the `WTF` folder when you log out or `/reload`.
-CoachLink keeps your character there.
+HeroBridge keeps your character there.
 
 **Terminal**: a window where you type a line of text and press Enter to run it. Windows:
 PowerShell. macOS: Terminal. Linux: Terminal or Konsole (the name depends on your desktop).

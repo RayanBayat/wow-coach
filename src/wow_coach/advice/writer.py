@@ -1,8 +1,8 @@
-"""Write the ``CoachLink_Advice`` data addon into the game's AddOns folder, safely.
+"""Write the ``HeroBridge_Advice`` data addon into the game's AddOns folder, safely.
 
 Safety rules (tested):
 
-* Everything is written inside ``<AddOns>/CoachLink_Advice/`` and nowhere else.
+* Everything is written inside ``<AddOns>/HeroBridge_Advice/`` and nowhere else.
 * That folder and the files in it must not be symbolic links (or Windows junctions), so a
   link can never send our write somewhere else. ``<AddOns>`` itself may hold linked addons.
 * ``Advice.lua`` is replaced atomically: the new text goes to a temporary file in the same
@@ -52,9 +52,9 @@ class UnsafeAdvicePath(WowCoachError):  # noqa: N818
     """A path was refused because writing there could leave the data addon's folder."""
 
 
-def interface_from_coachlink(addons_dir: Path) -> str:
-    """Read ``## Interface:`` from ``CoachLink.toc`` so our .toc is never "out of date"."""
-    text = read_plain_text(addons_dir / "CoachLink" / "CoachLink.toc", MAX_TOC_BYTES)
+def interface_from_herobridge(addons_dir: Path) -> str:
+    """Read ``## Interface:`` from ``HeroBridge.toc`` so our .toc is never "out of date"."""
+    text = read_plain_text(addons_dir / "HeroBridge" / "HeroBridge.toc", MAX_TOC_BYTES)
     match = None if text is None else _INTERFACE_LINE.search(text)
     value = match.group(1).strip() if match else ""
     return value if _INTERFACE_OK.fullmatch(value) else DEFAULT_INTERFACE
@@ -67,8 +67,8 @@ def _toc_text(interface: str) -> str:
         version = "unknown"
     return (
         f"## Interface: {interface}\n"
-        "## Title: CoachLink Advice\n"
-        "## Notes: Answers from the wow-coach program for the CoachLink Coach panel. "
+        "## Title: HeroBridge Advice\n"
+        "## Notes: Answers from the wow-coach program for the HeroBridge Coach panel. "
         "Data only, no code.\n"
         f"## Version: {version}\n"
         "\n"
@@ -189,7 +189,7 @@ def _locked(folder: Path) -> Iterator[None]:
 
 
 def install_advice_addon(addons_dir: Path, *, interface: str) -> Path:
-    """Create or refresh ``CoachLink_Advice/CoachLink_Advice.toc``; return the folder.
+    """Create or refresh ``HeroBridge_Advice/HeroBridge_Advice.toc``; return the folder.
 
     The .toc has no ``SavedVariables`` line: this addon is data only.
 

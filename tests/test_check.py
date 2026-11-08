@@ -10,7 +10,7 @@ from wow_coach.check import run_check
 
 NOW = 1_000_000.0
 DATA = (
-    'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
+    'HeroBridgeDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
     '["Testchar-Testrealm"] = {\n["snapshot"] = {\n["name"] = "Testchar",\n'
     '["class"] = "Mage",\n["level"] = 7,\n["zone"] = "Brill",\n["savedAt"] = 999700,\n'
     "},\n},\n},\n}\n"
@@ -36,7 +36,7 @@ def check(
 def install_save(game: Path, text: str = DATA) -> Path:
     folder = game / "WTF" / "Account" / "ACC" / "SavedVariables"
     folder.mkdir(parents=True)
-    path = folder / "CoachLink.lua"
+    path = folder / "HeroBridge.lua"
     path.write_text(text, encoding="utf-8")
     os.utime(path, (NOW - 300, NOW - 300))
     return path
@@ -66,27 +66,27 @@ def test_no_save_file_yet_and_addon_not_installed(tmp_path: Path) -> None:
     code, text = check(tmp_path)
     assert code == 1
     assert "No save file yet" in text
-    assert "start WoW with the CoachLink addon enabled and type /coach" in text
-    assert "CoachLink addon is not installed" in text
+    assert "start WoW with the HeroBridge addon enabled and type /coach" in text
+    assert "HeroBridge addon is not installed" in text
 
 
 def test_no_save_file_but_addon_installed(tmp_path: Path) -> None:
     (tmp_path / "WTF").mkdir()
-    (tmp_path / "Interface" / "AddOns" / "CoachLink").mkdir(parents=True)
+    (tmp_path / "Interface" / "AddOns" / "HeroBridge").mkdir(parents=True)
     _, text = check(tmp_path)
     assert "No save file yet" in text
     assert "not installed" not in text
 
 
 def test_unreadable_save_file(tmp_path: Path) -> None:
-    install_save(tmp_path, "CoachLinkDB = {")
+    install_save(tmp_path, "HeroBridgeDB = {")
     code, text = check(tmp_path)
     assert code == 1
     assert "could not be read" in text
 
 
 def test_save_file_without_characters(tmp_path: Path) -> None:
-    install_save(tmp_path, 'CoachLinkDB = {\n["formatVersion"] = 1,\n}\n')
+    install_save(tmp_path, 'HeroBridgeDB = {\n["formatVersion"] = 1,\n}\n')
     code, text = check(tmp_path)
     assert code == 1
     assert "no characters" in text

@@ -92,29 +92,33 @@ def check_game_folder(game_dir: Path | None) -> Check:
 
 
 def check_addon(game_dir: Path, app_version: str) -> tuple[Check, str | None, bool]:
-    """Is CoachLink installed, and is it the version that matches this app?
+    """Is HeroBridge installed, and is it the version that matches this app?
 
     Returns the check, the installed version (None when missing) and whether the addon
     folder is a link (a developer's copy, which the app never replaces).
     """
     addon = addons_folder(game_dir) / ADDON_FOLDER
     if is_link(addon):
-        return Check(Status.OK, "CoachLink is linked from a development copy."), None, True
+        return Check(Status.OK, "HeroBridge is linked from a development copy."), None, True
     installed = installed_addon_version(addon)
     if installed is None:
         return (
-            Check(Status.PROBLEM, "CoachLink is not installed yet. It lets the game talk to me."),
+            Check(Status.PROBLEM, "HeroBridge is not installed yet. It lets the game talk to me."),
             None,
             False,
         )
     if installed != app_version:
-        sentence = f"CoachLink {installed} is installed, and this app is {app_version}."
+        sentence = f"HeroBridge {installed} is installed, and this app is {app_version}."
         return Check(Status.ATTENTION, sentence + " An update is ready."), installed, False
-    return Check(Status.OK, f"CoachLink {installed} is installed and up to date."), installed, False
+    return (
+        Check(Status.OK, f"HeroBridge {installed} is installed and up to date."),
+        installed,
+        False,
+    )
 
 
 def check_answers_folder(game_dir: Path) -> Check:
-    """Does the folder for the coach's answers (``CoachLink_Advice``) exist?"""
+    """Does the folder for the coach's answers (``HeroBridge_Advice``) exist?"""
     folder = addons_folder(game_dir) / ADVICE_ADDON_NAME
     if folder.is_dir():
         return Check(Status.OK, "The answers folder is ready.")
@@ -156,19 +160,19 @@ def change_game_folder(chosen: Path, config_file: Path) -> ActionResult:
 
 
 def install_or_update_addon(game_dir: Path, app_version: str, download: FetchBytes) -> ActionResult:
-    """Download CoachLink (the version that matches this app) and put it in the game.
+    """Download HeroBridge (the version that matches this app) and put it in the game.
 
     Installing while the game runs is fine: the game reads addon files only when it loads.
     The answers folder is created too, because the addon needs it.
     """
     addons = addons_folder(game_dir)
     if is_link(addons / ADDON_FOLDER):
-        return ActionResult(True, "CoachLink is a linked development copy, so I left it alone.")
+        return ActionResult(True, "HeroBridge is a linked development copy, so I left it alone.")
     try:
         install_addon(addons, app_version, download)
         create_advice_folder(addons)
     except (WowCoachError, ValueError) as error:
-        return ActionResult(False, f"I could not install CoachLink: {error}. Please try again.")
+        return ActionResult(False, f"I could not install HeroBridge: {error}. Please try again.")
     except OSError as error:
         return ActionResult(
             False, f"I could not write to the game folder: {error}. Is the folder choice right?"

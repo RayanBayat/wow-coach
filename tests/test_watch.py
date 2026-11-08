@@ -14,7 +14,7 @@ START = datetime(2026, 11, 7, 12, 0, 0)
 
 def snapshot_file(name: str, level: int, saved_at: int, reason: str = "coach") -> str:
     return (
-        'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
+        'HeroBridgeDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
         f'["{name}-Testrealm"] = {{\n["snapshot"] = {{\n["name"] = "{name}",\n'
         f'["level"] = {level},\n["savedAt"] = {saved_at},\n["reason"] = "{reason}",\n'
         "},\n},\n},\n}\n"
@@ -24,7 +24,7 @@ def snapshot_file(name: str, level: int, saved_at: int, reason: str = "coach") -
 def account_file(wow_dir: Path, account: str = "ACC") -> Path:
     folder = wow_dir / "WTF" / "Account" / account / "SavedVariables"
     folder.mkdir(parents=True, exist_ok=True)
-    return folder / "CoachLink.lua"
+    return folder / "HeroBridge.lua"
 
 
 class Script:
@@ -73,7 +73,7 @@ def test_reports_a_save_with_name_level_and_reason(tmp_path: Path) -> None:
     write(file, snapshot_file("Testchar", 7, 100), 1000)
     script = Script(lambda: write(file, snapshot_file("Testchar", 8, 200, "logout"), 2000))
     lines = run_watch(tmp_path, script)
-    assert lines == ["CoachLink saved at 12:00:00: Testchar level 8 (reason: logout)"]
+    assert lines == ["HeroBridge saved at 12:00:00: Testchar level 8 (reason: logout)"]
 
 
 def test_an_unloaded_save_is_called_almost_empty(tmp_path: Path) -> None:
@@ -134,12 +134,12 @@ def test_unreadable_file_is_reported_and_watching_continues(tmp_path: Path) -> N
     file = account_file(tmp_path)
     write(file, snapshot_file("Testchar", 7, 100), 1000)
     script = Script(
-        lambda: write(file, "CoachLinkDB = {", 2000),
+        lambda: write(file, "HeroBridgeDB = {", 2000),
         None,
         lambda: write(file, snapshot_file("Testchar", 9, 300), 3000),
     )
     lines = run_watch(tmp_path, script)
-    assert lines[0].startswith("CoachLink saved at 12:00:00: (could not read the snapshot: ")
+    assert lines[0].startswith("HeroBridge saved at 12:00:00: (could not read the snapshot: ")
     assert lines[0].endswith(")")
     assert "Testchar level 9" in lines[1]
 

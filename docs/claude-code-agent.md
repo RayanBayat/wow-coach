@@ -20,7 +20,7 @@ It goes through five steps and prints `OK` or `PROBLEM` for each:
 
 1. Finds your game folder (it asks you to paste the path of `_forever_` if it cannot find it)
    and remembers it.
-2. Installs the CoachLink addon (or updates an old one).
+2. Installs the HeroBridge addon (or updates an old one).
 3. Creates your player notes file (never overwrites an existing one). The coach creates one
    journal per character later.
 4. Copies the coach agent and skill into `~/.claude` (your Claude Code folder).
@@ -88,7 +88,7 @@ the agent. A different agent file that was there is kept as `wow-coach.md.bak`.
 
 1. Delete `~/.claude/agents/wow-coach.md`.
 2. Delete the folder `~/.claude/skills/wow-coach`.
-3. Optional: delete the `CoachLink` folder in the game's `Interface/AddOns`, and the folder
+3. Optional: delete the `HeroBridge` folder in the game's `Interface/AddOns`, and the folder
    `wow-coach` in your data folder (see the notes location in
    [Connect an AI app](connect-an-ai-app.md)) to remove your notes, journals and saved settings.
 

@@ -3,7 +3,7 @@
 The steps, each ending in a clear OK or PROBLEM line:
 
 1. Find the game folder (and remember it).
-2. Install or update the CoachLink addon.
+2. Install or update the HeroBridge addon.
 3. Create the player notes file (the coach starts one journal per character later).
 4. Optionally install the Claude Code agent and skill.
 5. Run the same checks as ``wow-coach check``.
@@ -12,7 +12,7 @@ It is safe to run again: it only changes what is missing or out of date.
 
 Everything that touches the network, the keyboard or the home folder is passed in as an
 argument, so the tests can use fake ones. We only ever write to the game's
-``Interface/AddOns/CoachLink`` folder, wow-coach's own data folder, and (only when you ask)
+``Interface/AddOns/HeroBridge`` folder, wow-coach's own data folder, and (only when you ask)
 ``~/.claude``.
 """
 
@@ -26,7 +26,7 @@ from pathlib import Path, PurePosixPath
 from typing import TextIO
 
 from wow_coach.advice.contract import ADVICE_ADDON_NAME
-from wow_coach.advice.writer import install_advice_addon, interface_from_coachlink
+from wow_coach.advice.writer import install_advice_addon, interface_from_herobridge
 from wow_coach.assets import AGENT_PATH, SKILL_PATH, notebook_template, read_asset
 from wow_coach.check import run_check
 from wow_coach.config import config_path, save_wow_dir
@@ -41,10 +41,10 @@ from wow_coach.gamedir import resolve_game_folder
 from wow_coach.notes import notes_path
 from wow_coach.web import FetchBytes
 
-RELEASE_URL = "https://github.com/RayanBayat/wow-coach/releases/download/v{v}/CoachLink-{v}.zip"
-ADDON_FOLDER = "CoachLink"
-_STAGING = ".CoachLink-new"
-_OLD_COPY = ".CoachLink-old"
+RELEASE_URL = "https://github.com/RayanBayat/wow-coach/releases/download/v{v}/HeroBridge-{v}.zip"
+ADDON_FOLDER = "HeroBridge"
+_STAGING = ".HeroBridge-new"
+_OLD_COPY = ".HeroBridge-old"
 _PASTE_TRIES = 3
 _VERSION_LINE = re.compile(r"^##\s*Version:\s*(\S+)", re.MULTILINE)
 
@@ -165,7 +165,7 @@ def installed_addon_version(addon: Path) -> str | None:
 
 
 def _is_safe_member(name: str) -> bool:
-    """True when a zip entry stays inside ``CoachLink/`` (the zip-slip guard).
+    """True when a zip entry stays inside ``HeroBridge/`` (the zip-slip guard).
 
     A zip slip is a zip whose entry names like ``../../x`` write outside the folder
     you extract into.
@@ -195,7 +195,7 @@ def _extract_zip(data: bytes, staging: Path) -> None:
         if unsafe:
             raise SetupFailed(f"the zip has an unsafe entry ({unsafe[0]!r}), so I did not use it")
         if f"{ADDON_FOLDER}/{ADDON_FOLDER}.toc" not in names:
-            raise SetupFailed("the zip does not contain CoachLink/CoachLink.toc")
+            raise SetupFailed("the zip does not contain HeroBridge/HeroBridge.toc")
         for member in archive.infolist():
             target = staging / PurePosixPath(member.filename.replace("\\", "/"))
             if member.is_dir():
@@ -224,14 +224,14 @@ def _swap_in(staged_addon: Path, addon: Path) -> None:
 
 
 def install_addon(addons: Path, version: str, download: FetchBytes) -> None:
-    """Download CoachLink ``version`` and swap it into the ``AddOns`` folder.
+    """Download HeroBridge ``version`` and swap it into the ``AddOns`` folder.
 
     The new copy is unpacked next to the old one first, so a failed download never leaves
     the player without a working addon. ``wow-coach setup`` and the desktop app both use it.
 
     Raises:
         LookupFailed: If the download fails.
-        SetupFailed: If the zip is not a valid CoachLink zip.
+        SetupFailed: If the zip is not a valid HeroBridge zip.
         OSError: If the folder cannot be written.
     """
     addons.mkdir(parents=True, exist_ok=True)
@@ -255,9 +255,9 @@ def _setup_addon(game: Path, world: SetupWorld, say: Say) -> bool:
     version = world.package_version
     installed = installed_addon_version(addon)
     if installed == version:
-        say(f"  OK: CoachLink {version} is already installed in {addon}.")
+        say(f"  OK: HeroBridge {version} is already installed in {addon}.")
         return True
-    say(f"  Installing CoachLink {version} (installed now: {installed or 'nothing'}) ...")
+    say(f"  Installing HeroBridge {version} (installed now: {installed or 'nothing'}) ...")
     try:
         install_addon(addons, version, world.download)
     except (LookupFailed, SetupFailed, OSError) as error:
@@ -266,14 +266,14 @@ def _setup_addon(game: Path, world: SetupWorld, say: Say) -> bool:
         say("  https://github.com/RayanBayat/wow-coach/releases/latest and follow")
         say("  docs/install-the-addon.md (https://github.com/RayanBayat/wow-coach).")
         return False
-    say(f"  OK: CoachLink {version} installed in {addon}.")
+    say(f"  OK: HeroBridge {version} installed in {addon}.")
     say("  Now quit WoW completely (use the game menu: Exit Game), then start it again.")
     say("  The game only notices a new or updated addon after a full restart.")
     return True
 
 
 def create_advice_folder(addons: Path) -> bool:
-    """Create or refresh ``CoachLink_Advice`` in ``addons``. Returns True when it was new.
+    """Create or refresh ``HeroBridge_Advice`` in ``addons``. Returns True when it was new.
 
     Raises:
         WowCoachError: If the folder is unsafe (for example a link).
@@ -281,12 +281,12 @@ def create_advice_folder(addons: Path) -> bool:
         ValueError: If the addon's Interface number is not valid.
     """
     existed = (addons / ADVICE_ADDON_NAME).is_dir()
-    install_advice_addon(addons, interface=interface_from_coachlink(addons))
+    install_advice_addon(addons, interface=interface_from_herobridge(addons))
     return not existed
 
 
 def _setup_advice_folder(game: Path, say: Say) -> bool:
-    """Create or refresh CoachLink_Advice, the folder where the coach's answers for the
+    """Create or refresh HeroBridge_Advice, the folder where the coach's answers for the
     in-game Coach panel go (a tiny data-only addon that wow-coach writes, see advice/)."""
     addons = game / "Interface" / "AddOns"
     folder = addons / ADVICE_ADDON_NAME
@@ -398,7 +398,7 @@ def run_setup(choices: SetupChoices, world: SetupWorld) -> int:
     problems = 0
 
     say()
-    say("Step 2 of 5: the CoachLink addon")
+    say("Step 2 of 5: the HeroBridge addon")
     if choices.skip_addon:
         say("  Skipped (--skip-addon).")
     elif not _setup_addon(game, world, say) or not _setup_advice_folder(game, say):

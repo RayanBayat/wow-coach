@@ -89,7 +89,7 @@ def test_empty_file() -> None:
 
 def test_crlf_no_indentation_like_wow_forever() -> None:
     text = (
-        "\r\nCoachLinkDB = {\r\n"
+        "\r\nHeroBridgeDB = {\r\n"
         '["formatVersion"] = 1,\r\n'
         '["characters"] = {\r\n'
         '["Testchar-Testrealm"] = {\r\n'
@@ -103,7 +103,7 @@ def test_crlf_no_indentation_like_wow_forever() -> None:
         "},\r\n"
         "}\r\n"
     )
-    db = parse_saved_variables(text)["CoachLinkDB"]
+    db = parse_saved_variables(text)["HeroBridgeDB"]
     assert db == {
         "formatVersion": 1,
         "characters": {"Testchar-Testrealm": {"history": [None, {"text": "Died\nagain"}]}},

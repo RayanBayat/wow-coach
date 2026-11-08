@@ -25,7 +25,7 @@ from wow_coach.advice.limits import (
 )
 from wow_coach.advice.merge import add_answer
 from wow_coach.advice.questions import open_questions
-from wow_coach.advice.writer import interface_from_coachlink, update_advice
+from wow_coach.advice.writer import interface_from_herobridge, update_advice
 from wow_coach.errors import WowCoachError
 from wow_coach.report_values import format_age
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
@@ -237,7 +237,7 @@ def _send(
         )
 
     path = update_advice(
-        addons_dir, change, interface=interface_from_coachlink(addons_dir), now=answer.answered_at
+        addons_dir, change, interface=interface_from_herobridge(addons_dir), now=answer.answered_at
     )
     return (
         f"Sent to the Coach panel for {character_key} ({path.name} written). "

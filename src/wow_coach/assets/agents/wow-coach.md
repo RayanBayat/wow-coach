@@ -1,6 +1,6 @@
 ---
 name: wow-coach
-description: Your personal World of Warcraft Forever coach. Reads your real character through the CoachLink addon, takes a goal for your playthrough (for example "level 20 by Sunday", "100 gold for the mount", "max Tailoring", "run Deadmines") and builds and tracks the best plan to reach it. Start a whole Claude Code session as this coach with `claude --agent wow-coach`.
+description: Your personal World of Warcraft Forever coach. Reads your real character through the HeroBridge addon, takes a goal for your playthrough (for example "level 20 by Sunday", "100 gold for the mount", "max Tailoring", "run Deadmines") and builds and tracks the best plan to reach it. Start a whole Claude Code session as this coach with `claude --agent wow-coach`.
 skills:
   - wow-coach
 mcpServers:

@@ -27,8 +27,8 @@ def make_zip(entries: dict[str, str]) -> bytes:
 def addon_zip(version: str = VERSION) -> bytes:
     return make_zip(
         {
-            "CoachLink/CoachLink.toc": f"## Title: CoachLink\n## Version: {version}\n",
-            "CoachLink/CoachLink.lua": "-- addon code\n",
+            "HeroBridge/HeroBridge.toc": f"## Title: HeroBridge\n## Version: {version}\n",
+            "HeroBridge/HeroBridge.lua": "-- addon code\n",
         }
     )
 
@@ -82,11 +82,11 @@ class Session:
 
     @property
     def addon(self) -> Path:
-        return self.game / "Interface" / "AddOns" / "CoachLink"
+        return self.game / "Interface" / "AddOns" / "HeroBridge"
 
     @property
     def advice(self) -> Path:
-        return self.game / "Interface" / "AddOns" / "CoachLink_Advice"
+        return self.game / "Interface" / "AddOns" / "HeroBridge_Advice"
 
 
 @pytest.fixture
@@ -97,7 +97,7 @@ def session(tmp_path: Path) -> Session:
 def test_fresh_setup_installs_everything_and_remembers_the_folder(session: Session) -> None:
     code, text = session.run()
     assert code == 0
-    assert (session.addon / "CoachLink.toc").is_file()
+    assert (session.addon / "HeroBridge.toc").is_file()
     assert session.downloaded == [RELEASE_URL.format(v=VERSION)]
     assert load_saved_wow_dir(config_path(environ=session.environ)) == session.game
     assert "# Player notes" in Path(session.environ["WOW_COACH_NOTES_FILE"]).read_text("utf-8")
@@ -121,24 +121,24 @@ def test_second_run_changes_nothing_and_downloads_nothing(session: Session) -> N
     code, text = session.run()
     assert code == 0
     assert session.downloaded == []
-    assert f"CoachLink {VERSION} is already installed" in text
+    assert f"HeroBridge {VERSION} is already installed" in text
     assert "did not touch it" in text
 
 
 def test_older_addon_is_replaced_and_the_old_copy_removed(session: Session) -> None:
     session.addon.mkdir(parents=True)
-    (session.addon / "CoachLink.toc").write_text("## Version: 0.1.0\n", encoding="utf-8")
+    (session.addon / "HeroBridge.toc").write_text("## Version: 0.1.0\n", encoding="utf-8")
     (session.addon / "stale.lua").write_text("old", encoding="utf-8")
     code, _ = session.run()
     assert code == 0
-    assert "Version: 9.9.9" in (session.addon / "CoachLink.toc").read_text("utf-8")
+    assert "Version: 9.9.9" in (session.addon / "HeroBridge.toc").read_text("utf-8")
     assert not (session.addon / "stale.lua").exists()
     leftovers = [item.name for item in session.addon.parent.iterdir()]
-    assert sorted(leftovers) == ["CoachLink", "CoachLink_Advice"]  # no staging folders left
+    assert sorted(leftovers) == ["HeroBridge", "HeroBridge_Advice"]  # no staging folders left
 
 
 def test_a_linked_addon_is_left_alone(session: Session, tmp_path: Path) -> None:
-    developer_copy = tmp_path / "dev" / "CoachLink"
+    developer_copy = tmp_path / "dev" / "HeroBridge"
     developer_copy.mkdir(parents=True)
     session.addon.parent.mkdir(parents=True)
     try:
@@ -152,10 +152,12 @@ def test_a_linked_addon_is_left_alone(session: Session, tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
-    "bad_name", ["../evil.lua", "CoachLink/../../evil.lua", "/abs/evil.lua", "Other/x.lua"]
+    "bad_name", ["../evil.lua", "HeroBridge/../../evil.lua", "/abs/evil.lua", "Other/x.lua"]
 )
 def test_unsafe_zip_is_refused_and_nothing_is_written(session: Session, bad_name: str) -> None:
-    session.zip_bytes = make_zip({"CoachLink/CoachLink.toc": "## Version: 9.9.9\n", bad_name: "x"})
+    session.zip_bytes = make_zip(
+        {"HeroBridge/HeroBridge.toc": "## Version: 9.9.9\n", bad_name: "x"}
+    )
     code, text = session.run()
     assert code == 1
     assert "unsafe entry" in text
@@ -165,10 +167,10 @@ def test_unsafe_zip_is_refused_and_nothing_is_written(session: Session, bad_name
 
 
 def test_zip_without_the_toc_file_is_refused(session: Session) -> None:
-    session.zip_bytes = make_zip({"CoachLink/CoachLink.lua": "x"})
+    session.zip_bytes = make_zip({"HeroBridge/HeroBridge.lua": "x"})
     code, text = session.run()
     assert code == 1
-    assert "CoachLink.toc" in text
+    assert "HeroBridge.toc" in text
 
 
 def test_not_a_zip_is_refused(session: Session) -> None:
@@ -191,11 +193,11 @@ def test_failed_swap_keeps_the_old_addon_working(
     session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     session.addon.mkdir(parents=True)
-    (session.addon / "CoachLink.toc").write_text("## Version: 0.1.0\n", encoding="utf-8")
+    (session.addon / "HeroBridge.toc").write_text("## Version: 0.1.0\n", encoding="utf-8")
     real_rename = Path.rename
 
     def failing_rename(self: Path, target: Path) -> Path:
-        if self.name == "CoachLink" and self.parent.name == ".CoachLink-new":
+        if self.name == "HeroBridge" and self.parent.name == ".HeroBridge-new":
             raise PermissionError("pretend the folder is locked")
         return real_rename(self, target)
 
@@ -203,13 +205,13 @@ def test_failed_swap_keeps_the_old_addon_working(
     code, text = session.run()
     assert code == 1
     assert "PROBLEM" in text
-    assert "Version: 0.1.0" in (session.addon / "CoachLink.toc").read_text("utf-8")
+    assert "Version: 0.1.0" in (session.addon / "HeroBridge.toc").read_text("utf-8")
 
 
 def test_setup_creates_the_folder_for_the_coach_panel(session: Session) -> None:
     code, text = session.run()
     assert code == 0
-    toc = (session.advice / "CoachLink_Advice.toc").read_text("utf-8")
+    toc = (session.advice / "HeroBridge_Advice.toc").read_text("utf-8")
     assert "## Interface:" in toc
     assert "Advice.lua" in toc
     assert "Coach panel" in text

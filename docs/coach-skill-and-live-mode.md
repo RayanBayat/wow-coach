@@ -69,11 +69,11 @@ The skill tells the agent to:
 Normally you type `/coach` in the game, switch to the AI and ask. In **live mode** the AI
 answers on its own the moment you type `/coach`.
 
-How it works: the command `wow-coach watch` prints one line each time CoachLink saves, for
+How it works: the command `wow-coach watch` prints one line each time HeroBridge saves, for
 example:
 
 ```
-CoachLink saved at 21:56:54: Testchar level 8 (reason: coach)
+HeroBridge saved at 21:56:54: Testchar level 8 (reason: coach)
 ```
 
 Claude Code's **Monitor** tool runs a command in the background and shows each printed line to
@@ -98,7 +98,7 @@ may not have an equivalent of Monitor, and then you just ask after typing `/coac
 
 Test the watcher by itself in a terminal with the command above, then type `/coach` in the game.
 
-**You should see:** a new "CoachLink saved at ..." line within a few seconds.
+**You should see:** a new "HeroBridge saved at ..." line within a few seconds.
 
 ## Privacy
 

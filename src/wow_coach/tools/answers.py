@@ -36,11 +36,11 @@ def load_all(wow_dir: Path) -> dict[str, Character] | str:
     try:
         return load_characters(find_saved_variables(wow_dir))
     except WowCoachError as error:
-        logger.warning("Could not load CoachLink data: %s", error)
+        logger.warning("Could not load HeroBridge data: %s", error)
         return str(error)
     except OSError as error:
-        logger.warning("Could not read CoachLink data: %s", error)
-        return f"Could not read the CoachLink file: {error}"
+        logger.warning("Could not read HeroBridge data: %s", error)
+        return f"Could not read the HeroBridge file: {error}"
 
 
 def _known_names(characters: dict[str, Character]) -> str:
@@ -50,7 +50,7 @@ def _known_names(characters: dict[str, Character]) -> str:
 def unknown_character_message(wanted: str | None, characters: dict[str, Character]) -> str:
     """The sentence for "that character does not exist"."""
     if not characters:
-        return "The CoachLink file contains no characters yet. Type /coach in game."
+        return "The HeroBridge file contains no characters yet. Type /coach in game."
     return f"No character matches {wanted!r}. Known characters: {_known_names(characters)}"
 
 
@@ -88,7 +88,7 @@ def answer_list_characters(wow_dir: Path, now: float, environ: Mapping[str, str]
     if isinstance(loaded, str):
         return loaded
     if not loaded:
-        return "The CoachLink file contains no characters yet. Type /coach in game."
+        return "The HeroBridge file contains no characters yet. Type /coach in game."
     return format_character_list(loaded, now, environ)
 
 

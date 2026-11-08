@@ -11,7 +11,7 @@ from wow_coach.desktop.widgets.bubbles import plain_label
 from wow_coach.desktop.widgets.formatting import Freshness, gold_text
 
 NO_CHARACTER_TEXT = "No character yet"
-NO_CHARACTER_HELP = "Log in to the game once with the CoachLink addon on, then type /coach."
+NO_CHARACTER_HELP = "Log in to the game once with the HeroBridge addon on, then type /coach."
 
 
 class FreshnessPill(QFrame):

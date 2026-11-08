@@ -6,10 +6,10 @@ helps you decide what to do next.
 
 ## How it works: one addon, many ways in
 
-The heart of wow-coach is a small in-game addon, **CoachLink**. It is the gateway between the
+The heart of wow-coach is a small in-game addon, **HeroBridge**. It is the gateway between the
 game and any AI:
 
-- **Out of the game:** CoachLink saves your character, and the questions you type in its
+- **Out of the game:** HeroBridge saves your character, and the questions you type in its
   Coach panel, to a file on your computer each time the game saves (a `/reload`, `/coach`,
   your "Save for the coach" key, or logging out).
 - **Into the game:** answers written for you show up in the in-game Coach panel after your next
@@ -19,7 +19,7 @@ Everything else plugs into that gateway. Pick the way that fits you:
 
 ```
 World of Warcraft
-  └─ CoachLink addon (the gateway: saves your character, shows answers in the Coach panel)
+  └─ HeroBridge addon (the gateway: saves your character, shows answers in the Coach panel)
        ├─ WoW Coach app ......... everyone with a ChatGPT plan
        ├─ MCP server ............ your own AI agent (Claude Code, Codex, Cursor...)
        ├─ wow-coach command ..... the terminal and scripts
@@ -64,7 +64,7 @@ line (a "terminal") and how to install the one free helper tool (uv) the app nee
 
 ## Bring your own AI agent
 
-For people who already use an AI agent or an MCP-capable app. You need the CoachLink addon
+For people who already use an AI agent or an MCP-capable app. You need the HeroBridge addon
 ([install it](docs/install-the-addon.md), or let `wow-coach setup` do it) and
 [uv](https://docs.astral.sh/uv/getting-started/installation/).
 
@@ -78,7 +78,7 @@ For people who already use an AI agent or an MCP-capable app. You need the Coach
   that use Agent Skills, and `wow-coach watch` to react the moment the game saves.
 - **The terminal:** `wow-coach status`, `wow-coach watch`, `wow-coach ask "what next?"` (with
   your ChatGPT sign-in), and `wow-coach --help` for the rest.
-- **Build your own:** the files CoachLink writes, the answer file it reads, and everything
+- **Build your own:** the files HeroBridge writes, the answer file it reads, and everything
   wow-coach keeps in its data folder are documented in [How it works](docs/design.md), so any
   tool or AI can read and write them.
 
@@ -99,10 +99,10 @@ Shortcut: if you have [uv](https://docs.astral.sh/uv/getting-started/installatio
 does steps 1 to 3 for you:
 `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup`
 
-1. Download `CoachLink-0.10.0.zip` from the
+1. Download `HeroBridge-0.10.0.zip` from the
    [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest).
 2. Unzip it into the game's `Interface\AddOns` folder, so this file exists:
-   `World of Warcraft\_forever_\Interface\AddOns\CoachLink\CoachLink.toc`.
+   `World of Warcraft\_forever_\Interface\AddOns\HeroBridge\HeroBridge.toc`.
    [Step-by-step help for Windows, macOS and Linux](docs/install-the-addon.md).
 3. Quit the game completely and start it again. (A new addon is only noticed after a full
    restart.)

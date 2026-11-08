@@ -1,13 +1,13 @@
 --[[
-CoachLink: saves a snapshot of your character for the wow-coach MCP server.
+HeroBridge: saves a snapshot of your character for the wow-coach MCP server.
 
 How it works, in plain words:
   * WoW lets an addon keep one Lua table that survives between sessions
-    ("SavedVariables"). Ours is called CoachLinkDB (declared in CoachLink.toc).
+    ("SavedVariables"). Ours is called HeroBridgeDB (declared in HeroBridge.toc).
   * WoW writes that table to disk only when you log out, type /reload, or
     exit the game normally. The file is
-    WTF/Account/<account>/SavedVariables/CoachLink.lua
-  * So this addon fills CoachLinkDB with a snapshot of your character right
+    WTF/Account/<account>/SavedVariables/HeroBridge.lua
+  * So this addon fills HeroBridgeDB with a snapshot of your character right
     before WoW writes it (the PLAYER_LOGOUT event, which also fires on
     /reload). The coach on your PC then reads that file.
   * The snapshot holds everything the game lets an addon see: level, gold,
@@ -22,7 +22,7 @@ How it works, in plain words:
   * /coach saves a snapshot right now by reloading the UI (takes a few seconds).
   * /coach copy shows the character as plain text in a window, to paste into
     any AI chat. It reads the game right now, so it needs no reload. The
-    text itself is made by CoachLinkText.lua.
+    text itself is made by HeroBridgeText.lua.
 
 The exact data format is documented in docs/design.md ("Data contract").
 If you change what is saved here, update that file and the Python reader too.
@@ -32,11 +32,11 @@ one game function breaks in a new patch, the rest still gets saved and the
 failure is written to snapshot.errors instead of crashing the addon.
 ]]
 
--- WoW passes every file of the addon the same table here; CoachLinkText.lua
+-- WoW passes every file of the addon the same table here; HeroBridgeText.lua
 -- (loaded first, see the .toc) puts ns.formatSnapshotText on it.
 local _, ns = ...
 
-local ADDON_NAME = "CoachLink"
+local ADDON_NAME = "HeroBridge"
 local FORMAT_VERSION = 1    -- bump when the saved format changes in a way old readers can't handle
 local MAX_HISTORY = 500     -- keep only the newest history events
 local MAX_PROGRESS = 500    -- keep only the newest progress points
@@ -107,7 +107,7 @@ local pendingReason = "logout"
 
 -- Print a message in the chat window, with the addon name in front.
 local function say(message)
-    print("|cff66ccffCoachLink:|r " .. message)
+    print("|cff66ccffHeroBridge:|r " .. message)
 end
 
 -- The key we store a character under, e.g. "Testchar-Stormrage".
@@ -115,23 +115,23 @@ local function characterKey()
     return UnitName("player") .. "-" .. GetRealmName()
 end
 
--- Make sure CoachLinkDB has the shape we expect, and return this character's table.
+-- Make sure HeroBridgeDB has the shape we expect, and return this character's table.
 local function characterTable()
-    CoachLinkDB = CoachLinkDB or {}
-    CoachLinkDB.formatVersion = FORMAT_VERSION
-    CoachLinkDB.characters = CoachLinkDB.characters or {}
+    HeroBridgeDB = HeroBridgeDB or {}
+    HeroBridgeDB.formatVersion = FORMAT_VERSION
+    HeroBridgeDB.characters = HeroBridgeDB.characters or {}
 
     local key = characterKey()
-    local entry = CoachLinkDB.characters[key] or {}
+    local entry = HeroBridgeDB.characters[key] or {}
     entry.history = entry.history or {}
     entry.progress = entry.progress or {}
-    CoachLinkDB.characters[key] = entry
+    HeroBridgeDB.characters[key] = entry
     return entry
 end
 
--- This character's saved table, WITHOUT creating anything in CoachLinkDB (nil if none).
+-- This character's saved table, WITHOUT creating anything in HeroBridgeDB (nil if none).
 local function savedEntry()
-    local characters = CoachLinkDB and CoachLinkDB.characters
+    local characters = HeroBridgeDB and HeroBridgeDB.characters
     return characters and characters[characterKey()]
 end
 
@@ -1346,7 +1346,7 @@ local function itemText(name, count, quality)
     return text
 end
 
--- "1g 23s 45c". The money formatter lives in CoachLinkText.lua.
+-- "1g 23s 45c". The money formatter lives in HeroBridgeText.lua.
 local function coinText(copper)
     if ns.moneyText then
         return ns.moneyText(copper)
@@ -1679,7 +1679,7 @@ runAfter("AutoLootMailItem", noteTakenFromMail)
 -- The copy window (/coach copy)
 -------------------------------------------------------------------------------
 
-local COPY_FRAME_NAME = "CoachLinkCopyFrame"
+local COPY_FRAME_NAME = "HeroBridgeCopyFrame"
 local COPY_HELP_TEXT = "Press Ctrl+C to copy (Cmd+C on a Mac), then paste it into your AI chat. "
     .. "Press Esc to close."
 
@@ -1754,7 +1754,7 @@ local function showCopyWindow(text)
     copyFrame.editBox:HighlightText()   -- select everything
 end
 
--- This character's saved history, WITHOUT creating anything in CoachLinkDB.
+-- This character's saved history, WITHOUT creating anything in HeroBridgeDB.
 local function savedHistory()
     local entry = savedEntry()
     return entry and entry.history or {}
@@ -1762,10 +1762,10 @@ end
 
 -- /coach copy: read the game now, make the text, show it. Never throws.
 local function copyCommand()
-    -- WoW only reads a new addon file (CoachLinkText.lua) after a full game
+    -- WoW only reads a new addon file (HeroBridgeText.lua) after a full game
     -- restart; a /reload is not enough. Say that plainly instead of failing.
     if not ns.formatSnapshotText then
-        say("please restart the game once to finish updating CoachLink, then try /coach copy again.")
+        say("please restart the game once to finish updating HeroBridge, then try /coach copy again.")
         return
     end
     local ok, err = pcall(function()
@@ -1788,7 +1788,7 @@ end
 -- A question waits in the character's saved table (`questions`) until wow-coach
 -- answers it. WoW only writes that table to disk at /reload, so asking reloads the
 -- UI, like /coach. The answers come back in a small addon wow-coach writes itself,
--- CoachLink_Advice, which sets the global CoachLinkAdvice; the game reads it at the
+-- HeroBridge_Advice, which sets the global HeroBridgeAdvice; the game reads it at the
 -- next /reload. The formats are in docs/design.md ("Coach panel").
 
 local MAX_QUESTIONS_KEPT = 20
@@ -1817,10 +1817,10 @@ local function cutText(text, limit)
     return cut
 end
 
--- What wow-coach wrote for this character (CoachLinkAdvice.characters["Name-Realm"]),
+-- What wow-coach wrote for this character (HeroBridgeAdvice.characters["Name-Realm"]),
 -- or nil. The file comes from outside the game, so every level is checked.
 local function myAdvice()
-    local advice = CoachLinkAdvice
+    local advice = HeroBridgeAdvice
     if type(advice) ~= "table" or type(advice.characters) ~= "table" then
         return nil
     end
@@ -1896,7 +1896,7 @@ local function askCoach(text)
     return true
 end
 
--- For CoachLinkPanel.lua (loaded after this file; see the .toc).
+-- For HeroBridgePanel.lua (loaded after this file; see the .toc).
 ns.askCoach = askCoach
 ns.openQuestions = openQuestions
 ns.myAdvice = myAdvice
@@ -1908,17 +1908,19 @@ ns.say = say
 -- /coach command
 -------------------------------------------------------------------------------
 
-SLASH_COACHLINK1 = "/coach"
-SlashCmdList.COACHLINK = function(argument)
+SLASH_HEROBRIDGE1 = "/coach"
+SLASH_HEROBRIDGE2 = "/herobridge"  -- same commands under the addon's own name
+SlashCmdList.HEROBRIDGE = function(argument)
     -- "/coach ask Where is Brill?": the first word is the command, the rest keeps its capitals.
     local command, rest = strtrim(argument or ""):match("^(%S*)%s*(.-)$")
     command = string.lower(command)
     if command == "help" then
         say("/coach: save your character for the coach on this PC (reloads the UI, a few seconds).")
         say("/coach panel: open the Coach panel with your coach's advice; you can ask there too.")
-        say("Keys for the panel and for saving: Options > Keybindings > CoachLink.")
+        say("Keys for the panel and for saving: Options > Keybindings > HeroBridge.")
         say("/coach ask <question>: ask your coach (saves and reloads the UI).")
         say("/coach copy (or /coach export): show your character as text to copy into any AI chat. No reload.")
+        say("/herobridge does the same as /coach.")
         say("/coach help: show this list.")
         say("The bank, mailbox and recipes are saved when you open them. Play time is saved by itself.")
         return
@@ -1935,11 +1937,11 @@ SlashCmdList.COACHLINK = function(argument)
         return
     end
     if command == "panel" then
-        -- WoW only reads a new addon file (CoachLinkPanel.lua) after a full game restart.
+        -- WoW only reads a new addon file (HeroBridgePanel.lua) after a full game restart.
         if ns.togglePanel then
             ns.togglePanel()
         else
-            say("please restart the game once to finish updating CoachLink, then try /coach panel again.")
+            say("please restart the game once to finish updating HeroBridge, then try /coach panel again.")
         end
         return
     end

@@ -63,7 +63,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser = argparse.ArgumentParser(
         prog="wow-coach",
-        description="An AI coach for World of Warcraft: Forever. The CoachLink addon saves "
+        description="An AI coach for World of Warcraft: Forever. The HeroBridge addon saves "
         "your character; these commands let you and any AI app read it.",
     )
     commands = parser.add_subparsers(dest="command", metavar="COMMAND", required=True)
@@ -215,7 +215,7 @@ def _choose_character(characters: dict[str, Character], wanted: str | None) -> C
 def _characters(wow_dir_flag: Path | None) -> int:
     characters = _load_saved_characters(wow_dir_flag)
     if not characters:
-        raise WowCoachError("The CoachLink file has no characters yet: type /coach in game.")
+        raise WowCoachError("The HeroBridge file has no characters yet: type /coach in game.")
     print(format_character_list(characters, time.time(), os.environ))
     return 0
 

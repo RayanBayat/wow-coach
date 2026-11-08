@@ -1,12 +1,12 @@
 --[[
-CoachLinkPanel: the Coach panel (addon 0.8.0).
+HeroBridgePanel: the Coach panel (addon 0.8.0).
 
 A window inside the game that shows what your coach wrote (next steps, the latest
 answer, who wrote it and when) and has a box to ask a question. Open it with
 /coach panel, the minimap's addon list or a key you choose in Options > Keybindings.
 
 How the pieces fit (docs/design.md, "Coach panel"):
-  - CoachLink.lua gives us ns.askCoach, ns.openQuestions, ns.myAdvice, ns.say.
+  - HeroBridge.lua gives us ns.askCoach, ns.openQuestions, ns.myAdvice, ns.say.
   - The advice comes from a file wow-coach wrote outside the game, so every field
     is checked before we show it (see "Reading the advice").
   - The panel never opens in combat, and it only reloads the UI through
@@ -50,22 +50,22 @@ local TEXT = {
     newAdvice = "your coach has new advice: /coach panel",
     noOpenInCombat = "the Coach panel can't open during a fight.",
     panelError = "Coach panel error in %s: %s",
-    bindingHeader = "CoachLink",
+    bindingHeader = "HeroBridge",
     bindingToggle = "Show or hide the Coach panel",
     bindingSave = "Save for the coach (reloads the interface)",
 }
 
 -- The key binding names the game looks up (see Bindings.xml).
-BINDING_HEADER_COACHLINK = TEXT.bindingHeader
-BINDING_NAME_COACHLINK_TOGGLE = TEXT.bindingToggle
-BINDING_NAME_COACHLINK_SAVE = TEXT.bindingSave
+BINDING_HEADER_HEROBRIDGE = TEXT.bindingHeader
+BINDING_NAME_HEROBRIDGE_TOGGLE = TEXT.bindingToggle
+BINDING_NAME_HEROBRIDGE_SAVE = TEXT.bindingSave
 
 
 -------------------------------------------------------------------------------
 -- Numbers and limits
 -------------------------------------------------------------------------------
 
-local PANEL_NAME = "CoachLinkPanel"
+local PANEL_NAME = "HeroBridgePanel"
 
 local DEFAULT_WIDTH, DEFAULT_HEIGHT = 460, 520
 local MIN_WIDTH, MIN_HEIGHT = 340, 340
@@ -100,7 +100,7 @@ local WINDOW_BACKDROP = {   -- the same dialog look as the copy window
 
 
 -------------------------------------------------------------------------------
--- Saved settings (CoachLinkDB.settings.panel)
+-- Saved settings (HeroBridgeDB.settings.panel)
 -------------------------------------------------------------------------------
 
 -- Keys: point, relPoint, x, y (position), width, height, fontSize, open (was it
@@ -121,35 +121,35 @@ end
 
 -- The saved panel settings if they exist, else an empty table. Creates nothing.
 local function savedSettings()
-    local db = CoachLinkDB
+    local db = HeroBridgeDB
     local settings = type(db) == "table" and db.settings
     local panelSettings = type(settings) == "table" and settings.panel
     return type(panelSettings) == "table" and panelSettings or {}
 end
 
--- The saved panel settings, created if missing. Only CoachLinkDB.settings.panel is
+-- The saved panel settings, created if missing. Only HeroBridgeDB.settings.panel is
 -- touched; if one of the levels holds something odd we can't save, so we hand back
 -- a throwaway table (the panel then just forgets its position).
 local function settingsToWrite()
-    if CoachLinkDB == nil then
-        CoachLinkDB = {}
+    if HeroBridgeDB == nil then
+        HeroBridgeDB = {}
     end
-    if type(CoachLinkDB) ~= "table" then
+    if type(HeroBridgeDB) ~= "table" then
         return {}
     end
-    if CoachLinkDB.settings == nil then
-        CoachLinkDB.settings = {}
+    if HeroBridgeDB.settings == nil then
+        HeroBridgeDB.settings = {}
     end
-    if type(CoachLinkDB.settings) ~= "table" then
+    if type(HeroBridgeDB.settings) ~= "table" then
         return {}
     end
-    if CoachLinkDB.settings.panel == nil then
-        CoachLinkDB.settings.panel = {}
+    if HeroBridgeDB.settings.panel == nil then
+        HeroBridgeDB.settings.panel = {}
     end
-    if type(CoachLinkDB.settings.panel) ~= "table" then
+    if type(HeroBridgeDB.settings.panel) ~= "table" then
         return {}
     end
-    return CoachLinkDB.settings.panel
+    return HeroBridgeDB.settings.panel
 end
 
 local function fontSize()
@@ -682,8 +682,8 @@ end
 
 ns.togglePanel = togglePanel
 
--- Clicking CoachLink in the minimap's addon list (the .toc names this function).
-function CoachLink_OnAddonCompartmentClick()
+-- Clicking HeroBridge in the minimap's addon list (the .toc names this function).
+function HeroBridge_OnAddonCompartmentClick()
     togglePanel()
 end
 

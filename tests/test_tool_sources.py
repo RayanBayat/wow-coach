@@ -26,7 +26,7 @@ def fixture_fetch(_url: str, params: Mapping[str, str]) -> str:
 def tools(tmp_path: Path) -> dict[str, CoachTool]:
     folder = tmp_path / "game" / "WTF" / "Account" / "ACC" / "SavedVariables"
     folder.mkdir(parents=True)
-    (folder / "CoachLink.lua").write_text(DATA, encoding="utf-8")
+    (folder / "HeroBridge.lua").write_text(DATA, encoding="utf-8")
     built = build_coach_tools(
         tmp_path / "game",
         KEY,

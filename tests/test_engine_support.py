@@ -10,7 +10,7 @@ SAVED_AT = 1793900000
 NOW = SAVED_AT + 300
 
 SAVE = """\
-CoachLinkDB = {
+HeroBridgeDB = {
 ["formatVersion"] = 1,
 ["characters"] = {
 ["Testchar-Testrealm"] = {
@@ -65,17 +65,17 @@ class World:
 
     @property
     def advice_file(self) -> Path:
-        return self.wow_dir / "Interface" / "AddOns" / "CoachLink_Advice" / "Advice.lua"
+        return self.wow_dir / "Interface" / "AddOns" / "HeroBridge_Advice" / "Advice.lua"
 
 
 def make_world(tmp_path: Path, *, save: str = SAVE) -> World:
     wow_dir = tmp_path / "wow"
     saved = wow_dir / "WTF" / "Account" / "ACCOUNT1" / "SavedVariables"
     saved.mkdir(parents=True)
-    (saved / "CoachLink.lua").write_text(save, encoding="utf-8")
-    addons = wow_dir / "Interface" / "AddOns" / "CoachLink"
+    (saved / "HeroBridge.lua").write_text(save, encoding="utf-8")
+    addons = wow_dir / "Interface" / "AddOns" / "HeroBridge"
     addons.mkdir(parents=True)
-    (addons / "CoachLink.toc").write_text("## Interface: 11507\n", encoding="utf-8")
+    (addons / "HeroBridge.toc").write_text("## Interface: 11507\n", encoding="utf-8")
     data = tmp_path / "data"
     environ = {"WOW_COACH_DATA_DIR": str(data / "wow-coach")}
     return World(wow_dir=wow_dir, environ=environ)

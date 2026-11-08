@@ -2,7 +2,7 @@
 
 Rules that keep it safe:
 
-* The output is one header comment plus exactly one statement, ``CoachLinkAdvice = { ... }``.
+* The output is one header comment plus exactly one statement, ``HeroBridgeAdvice = { ... }``.
 * Only tables, double-quoted strings, whole numbers and booleans are ever written. There
   is no way for advice text to become code, because every string is escaped.
 * Every ``|`` is doubled to ``||``, so AI text can never make a WoW color code or link.
@@ -122,7 +122,7 @@ def _character_data(character: CharacterAdvice) -> dict[str, Data]:
 
 
 def advice_data(advice: AdviceFile) -> dict[str, Data]:
-    """The whole file as plain nested data (what ``CoachLinkAdvice`` should contain)."""
+    """The whole file as plain nested data (what ``HeroBridgeAdvice`` should contain)."""
     characters: dict[str, Data] = {
         key: _character_data(value) for key, value in sorted(advice.characters.items())
     }

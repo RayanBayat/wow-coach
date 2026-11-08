@@ -1,0 +1,15 @@
+## Interface: 16001
+## Title: HeroBridge
+## Notes: Saves your character so an AI coach can read it. Type /coach help (or /herobridge help).
+## Author: Rayan Bayat
+## Version: 0.10.0
+## X-Website: https://github.com/RayanBayat/wow-coach
+## X-License: MIT
+## SavedVariables: HeroBridgeDB
+## OptionalDeps: HeroBridge_Advice
+## IconTexture: Interface\Icons\INV_Misc_Book_09
+## AddonCompartmentFunc: HeroBridge_OnAddonCompartmentClick
+
+HeroBridgeText.lua
+HeroBridge.lua
+HeroBridgePanel.lua

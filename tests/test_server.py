@@ -23,7 +23,7 @@ from wow_coach.server import (
 NOW = 10_000.0
 
 DATA = """
-CoachLinkDB = {
+HeroBridgeDB = {
 ["formatVersion"] = 1,
 ["characters"] = {
 ["Old-Realm"] = {
@@ -71,7 +71,7 @@ CoachLinkDB = {
 def wow_dir(tmp_path: Path) -> Path:
     folder = tmp_path / "WTF" / "Account" / "ACC" / "SavedVariables"
     folder.mkdir(parents=True)
-    (folder / "CoachLink.lua").write_text(DATA, encoding="utf-8")
+    (folder / "HeroBridge.lua").write_text(DATA, encoding="utf-8")
     return tmp_path
 
 
@@ -96,13 +96,13 @@ def test_pick_unknown_and_empty() -> None:
 
 
 def test_missing_file_is_friendly(tmp_path: Path) -> None:
-    assert "CoachLink addon" in answer_character_status(tmp_path, None, NOW)
+    assert "HeroBridge addon" in answer_character_status(tmp_path, None, NOW)
 
 
 def test_broken_file_is_friendly(tmp_path: Path) -> None:
     folder = tmp_path / "WTF" / "Account" / "A" / "SavedVariables"
     folder.mkdir(parents=True)
-    (folder / "CoachLink.lua").write_text("CoachLinkDB = {", encoding="utf-8")
+    (folder / "HeroBridge.lua").write_text("HeroBridgeDB = {", encoding="utf-8")
     assert "line 1" in answer_character_status(tmp_path, None, NOW)
 
 
@@ -334,7 +334,7 @@ def panel_game(tmp_path: Path) -> Path:
     data = DATA.replace(
         '["Testchar-Testrealm"] = {\n', '["Testchar-Testrealm"] = {\n' + question, 1
     )
-    (folder / "CoachLink.lua").write_text(data, encoding="utf-8")
+    (folder / "HeroBridge.lua").write_text(data, encoding="utf-8")
     (tmp_path / "Interface" / "AddOns").mkdir(parents=True)
     return tmp_path
 
@@ -360,7 +360,7 @@ def test_send_advice_to_game_answers_the_question(tmp_path: Path) -> None:
         },
     )
     assert "/reload" in reply
-    advice = game / "Interface" / "AddOns" / "CoachLink_Advice" / "Advice.lua"
+    advice = game / "Interface" / "AddOns" / "HeroBridge_Advice" / "Advice.lua"
     written = advice.read_text(encoding="utf-8")
     assert "Follow the road east from Deathknell." in written
     assert "Where is Brill?" in written  # the answer carries its question
@@ -374,7 +374,7 @@ def test_send_advice_to_game_for_an_unknown_character_explains(tmp_path: Path) -
         server, "send_advice_to_game", {"character": "Nobody", "title": "x", "steps": []}
     )
     assert "Nobody" in reply
-    assert not (tmp_path / "Interface" / "AddOns" / "CoachLink_Advice").exists()
+    assert not (tmp_path / "Interface" / "AddOns" / "HeroBridge_Advice").exists()
 
 
 def test_send_advice_to_game_writes_but_destroys_nothing() -> None:

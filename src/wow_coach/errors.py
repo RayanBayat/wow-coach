@@ -14,7 +14,7 @@ class LuaParseError(WowCoachError):
 
 
 class CoachDataMissing(WowCoachError):  # noqa: N818  (name is part of the requested API)
-    """The CoachLink data file was not found."""
+    """The HeroBridge data file was not found."""
 
 
 class UnsupportedFormat(WowCoachError):  # noqa: N818

@@ -1,7 +1,7 @@
 """Contract test: the Python reader understands what the real addon writes.
 
-``addon/tests/run_addon_test.lua`` runs the actual CoachLink addon against a fake
-WoW API and writes its CoachLinkDB in WoW Forever's file format. Here we read that
+``addon/tests/run_addon_test.lua`` runs the actual HeroBridge addon against a fake
+WoW API and writes its HeroBridgeDB in WoW Forever's file format. Here we read that
 output with the real Python code. If either side changes the data format without
 the other, this test fails.
 
@@ -30,7 +30,7 @@ pytestmark = pytest.mark.skipif(LUAJIT is None, reason="luajit is not installed"
 def addon_output(tmp_path: Path) -> Path:
     """Run the addon harness and return the SavedVariables file it wrote."""
     assert LUAJIT is not None  # guaranteed by the skipif above; helps mypy
-    output = tmp_path / "CoachLink.lua"
+    output = tmp_path / "HeroBridge.lua"
     # Trusted input: our own harness script and a temp path, no shell involved.
     result = subprocess.run(  # noqa: S603
         [LUAJIT, str(HARNESS), str(output)],

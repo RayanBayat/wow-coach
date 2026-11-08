@@ -6,14 +6,14 @@ from pathlib import Path
 from wow_coach.report import format_history, format_status
 from wow_coach.savedvars import find_saved_variables, load_characters
 
-FIXTURE = Path(__file__).parent / "fixtures" / "CoachLink.lua"
+FIXTURE = Path(__file__).parent / "fixtures" / "HeroBridge.lua"
 SAVED_AT = 1793900000.0
 
 
 def install_fixture(wow_dir: Path) -> None:
     folder = wow_dir / "WTF" / "Account" / "ACC" / "SavedVariables"
     folder.mkdir(parents=True)
-    shutil.copy(FIXTURE, folder / "CoachLink.lua")
+    shutil.copy(FIXTURE, folder / "HeroBridge.lua")
 
 
 def test_fixture_is_written_like_wow_forever() -> None:

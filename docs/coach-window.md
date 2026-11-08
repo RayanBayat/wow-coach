@@ -15,7 +15,7 @@ It runs only on your computer. Only you can open it, and it never talks to other
 
 - A ChatGPT plan that allows it (Plus or Pro). Answers come out of your plan's usage, like
   using ChatGPT itself.
-- The CoachLink addon 0.8.0 or newer, and the [Coach panel](coach-panel.md) set up.
+- The HeroBridge addon 0.8.0 or newer, and the [Coach panel](coach-panel.md) set up.
 - [uv](https://docs.astral.sh/uv/getting-started/installation/), the same one-line install as
   in the other guides.
 

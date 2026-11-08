@@ -26,7 +26,7 @@ NASTY = (
 # Prints the fields we want to compare, one per line, with newlines in text shown as "\n".
 SCRIPT = """
 dofile(arg[1])
-local advice = CoachLinkAdvice
+local advice = HeroBridgeAdvice
 local character = advice.characters["Testchar-Testrealm"]
 local answer = character.answers[1]
 local function show(value) return (tostring(value):gsub("\\n", "\\\\n"):gsub("%z", "<nul>")) end
@@ -45,7 +45,7 @@ print(character.plan.goal)
 # compared exactly. A missing field prints "-".
 HEX_SCRIPT = """
 dofile(arg[1])
-local answer = CoachLinkAdvice.characters["Testchar-Testrealm"].answers[1]
+local answer = HeroBridgeAdvice.characters["Testchar-Testrealm"].answers[1]
 local function hex(value)
   if value == nil then return "-" end
   return (value:gsub(".", function(c) return string.format("%02x", c:byte()) end))
@@ -125,7 +125,7 @@ def test_the_engine_sees_no_other_global_or_side_effect(tmp_path: Path) -> None:
     done = subprocess.run(  # noqa: S603
         [LUAJIT, str(script), str(lua_file)], capture_output=True, text=True, check=True, timeout=30
     )
-    assert done.stdout.split() == ["CoachLinkAdvice"]
+    assert done.stdout.split() == ["HeroBridgeAdvice"]
 
 
 def hex_of(text: str | None) -> str:

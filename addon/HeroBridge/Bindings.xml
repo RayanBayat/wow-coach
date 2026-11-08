@@ -1,16 +1,16 @@
 <Bindings>
 	<!-- Two key bindings. The names shown in the key bindings window are
-	     BINDING_HEADER_COACHLINK, BINDING_NAME_COACHLINK_TOGGLE and BINDING_NAME_COACHLINK_SAVE,
-	     set in CoachLinkPanel.lua. -->
+	     BINDING_HEADER_HEROBRIDGE, BINDING_NAME_HEROBRIDGE_TOGGLE and BINDING_NAME_HEROBRIDGE_SAVE,
+	     set in HeroBridgePanel.lua. -->
 	<!-- Show or hide the Coach panel: the same as /coach panel, and (like it) does nothing
 	     in combat. -->
-	<Binding name="COACHLINK_TOGGLE" category="BINDING_HEADER_COACHLINK">
-		SlashCmdList.COACHLINK("panel");
+	<Binding name="HEROBRIDGE_TOGGLE" category="BINDING_HEADER_HEROBRIDGE">
+		SlashCmdList.HEROBRIDGE("panel");
 	</Binding>
 	<!-- Save for the coach: the same as typing /coach. The game saves the character and
 	     reloads the interface for a few seconds; the WoW Coach app on the PC then sees the
 	     fresh data by itself. -->
-	<Binding name="COACHLINK_SAVE" category="BINDING_HEADER_COACHLINK">
-		SlashCmdList.COACHLINK("");
+	<Binding name="HEROBRIDGE_SAVE" category="BINDING_HEADER_HEROBRIDGE">
+		SlashCmdList.HEROBRIDGE("");
 	</Binding>
 </Bindings>

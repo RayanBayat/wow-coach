@@ -1,5 +1,5 @@
 
-CoachLinkDB = {
+HeroBridgeDB = {
 ["formatVersion"] = 1,
 ["characters"] = {
 ["Testchar-Testrealm"] = {

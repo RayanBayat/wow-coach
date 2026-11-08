@@ -14,7 +14,7 @@ from wow_coach.advice.reader import parse_advice_text, read_advice_file
 from wow_coach.advice.serialize import advice_to_lua
 
 KEY = "Testchar-Testrealm"
-HEAD = 'CoachLinkAdvice = {\n["formatVersion"] = 1,\n["writtenAt"] = 9,\n'
+HEAD = 'HeroBridgeAdvice = {\n["formatVersion"] = 1,\n["writtenAt"] = 9,\n'
 
 
 def answer(n: int, **changes: object) -> AdviceAnswer:
@@ -31,7 +31,7 @@ def test_missing_file_is_none(tmp_path: Path) -> None:
 
 
 def test_damaged_files_are_none(tmp_path: Path) -> None:
-    for content in ("CoachLinkAdvice = {", "not lua at all (((", "", "Other = {}"):
+    for content in ("HeroBridgeAdvice = {", "not lua at all (((", "", "Other = {}"):
         path = tmp_path / "a.lua"
         path.write_text(content, encoding="utf-8")
         assert read_advice_file(path) is None
@@ -45,11 +45,11 @@ def test_binary_garbage_and_directories_are_none(tmp_path: Path) -> None:
 
 
 def test_deeply_nested_garbage_is_none() -> None:
-    assert parse_advice_text("CoachLinkAdvice = " + "{" * 5000 + "}" * 5000) is None
+    assert parse_advice_text("HeroBridgeAdvice = " + "{" * 5000 + "}" * 5000) is None
 
 
 def test_unknown_format_version_is_none() -> None:
-    assert parse_advice_text('CoachLinkAdvice = { ["formatVersion"] = 99 }') is None
+    assert parse_advice_text('HeroBridgeAdvice = { ["formatVersion"] = 99 }') is None
 
 
 def test_damaged_entries_are_skipped() -> None:

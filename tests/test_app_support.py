@@ -38,7 +38,7 @@ def write_save(
     zone: str = "Tirisfal Glades",
     reason: str = "ask",
 ) -> Path:
-    """Write a CoachLink.lua with one character, its (id, text) questions and some deaths."""
+    """Write a HeroBridge.lua with one character, its (id, text) questions and some deaths."""
     instance = '["instance"] = {["name"] = "Deadmines"},\n' if in_instance else ""
     deaths = "".join(
         f'{{["time"] = {t}, ["kind"] = "death", ["text"] = "Died in Brill (level 8)."}},\n'
@@ -50,9 +50,9 @@ def write_save(
         f'{{["id"] = "{qid}", ["text"] = "{text}", ["askedAt"] = {i + 1}}},\n'
         for i, (qid, text) in enumerate(questions)
     )
-    path = folder / "CoachLink.lua"
+    path = folder / "HeroBridge.lua"
     path.write_text(
-        'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
+        'HeroBridgeDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
         f'["{KEY}"] = {{\n["snapshot"] = {{\n["name"] = "Testchar",\n["level"] = 8,\n'
         f'["savedAt"] = {mtime},\n["reason"] = "{reason}",\n["zone"] = "{zone}",\n{instance}}},\n'
         f'["questions"] = {{\n{asked}}},\n'

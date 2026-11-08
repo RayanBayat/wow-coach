@@ -8,7 +8,7 @@ fix something or add a feature.
 
 A World of Warcraft addon cannot talk to the internet or to other programs. The only thing it
 can do outside the game is **save a Lua file when you log out or type `/reload`**. WoW calls
-these files "SavedVariables". So the CoachLink addon writes a snapshot of your character
+these files "SavedVariables". So the HeroBridge addon writes a snapshot of your character
 (level, zone, quests, talents, gear...) into that file. Then one of three things reads it:
 you copy it from a window in the game (`/coach copy`), the `wow-coach` program reads the file
 and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
@@ -17,7 +17,7 @@ and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
 
 | Piece | Where | Language | Job |
 |---|---|---|---|
-| CoachLink addon | `addon/CoachLink/` | Lua | Builds the snapshot and history, saves them, shows the copy window |
+| HeroBridge addon | `addon/HeroBridge/` | Lua | Builds the snapshot and history, saves them, shows the copy window |
 | `wow-coach` program | `src/wow_coach/` | Python 3.14 | Finds and reads the saved file; commands `status`, `characters`, `progress`, `watch`, `check`, `mcp`, `wiki`; the MCP server; player notes and character journals; game lookups |
 | Coach skill | `src/wow_coach/assets/skills/wow-coach/SKILL.md` | Markdown | Tells an AI how to coach, including how to plan toward a goal |
 | Coach agent | `src/wow_coach/assets/agents/wow-coach.md` | Markdown | A Claude Code agent: runs a whole session (checks setup, starts live mode, asks which character to continue, greets, plans, says goodbye) and brings its own MCP server |
@@ -27,11 +27,11 @@ and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
 ## Settings, setup and the packaged Claude files
 
 - `wow-coach setup` (`setup.py`) finds the game folder, installs or updates the addon from
-  the GitHub release zip of the same version (`CoachLink-<version>.zip`), creates the notebook,
+  the GitHub release zip of the same version (`HeroBridge-<version>.zip`), creates the notebook,
   and with `--claude-code` copies the agent and skill into `~/.claude`. It refuses zips with
-  entries outside `CoachLink/` (zip slip), swaps the new addon in before deleting the old one,
+  entries outside `HeroBridge/` (zip slip), swaps the new addon in before deleting the old one,
   leaves symbolic links (developer copies) alone, and keeps a `.bak` of a different file it
-  replaces. It writes only to the game's `Interface/AddOns/CoachLink`, the data folder and
+  replaces. It writes only to the game's `Interface/AddOns/HeroBridge`, the data folder and
   `~/.claude`.
 - wow-coach's own files (settings, notes, journals, conversations, the usage log) live in the
   data folder: `~/.local/share/wow-coach` on Linux, `~/Library/Application Support/wow-coach` on
@@ -48,7 +48,7 @@ and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
 
 ```mermaid
 flowchart LR
-    A["CoachLink addon<br/>(in the game)"] -->|"logout, /reload, /coach"| B["CoachLink.lua<br/>(SavedVariables file)"]
+    A["HeroBridge addon<br/>(in the game)"] -->|"logout, /reload, /coach"| B["HeroBridge.lua<br/>(SavedVariables file)"]
     A -->|"/coach copy"| W["Copy window"]
     W -->|"you paste"| C["Any AI chat"]
     B -->|"read"| D["wow-coach program"]
@@ -62,14 +62,14 @@ flowchart LR
 The addon never sends anything over the network. The AI app you choose sends what it reads to
 its AI provider, like anything else you type there.
 
-## Data contract: `CoachLink.lua` (formatVersion 1)
+## Data contract: `HeroBridge.lua` (formatVersion 1)
 
 The addon owns this format. The Python reader must accept everything below and must not
 crash on missing fields: every field except `savedAt` and `name` is optional, because any
 game call can fail in a new game build.
 
 ```lua
-CoachLinkDB = {
+HeroBridgeDB = {
   ["formatVersion"] = 1,
   ["characters"] = {
     ["Testchar-SomeRealm"] = {         -- key is "Name-Realm"
@@ -261,7 +261,7 @@ Checked against the game's own `Blizzard_CombatLog.lua` SavedVariables file:
 
 ## Coach panel: questions and advice (0.8.0)
 
-The Coach panel (`CoachLinkPanel.lua`) shows advice inside the game and lets the player ask a
+The Coach panel (`HeroBridgePanel.lua`) shows advice inside the game and lets the player ask a
 question. An addon can't use the network or read files while it runs, so questions and
 answers travel through files (the plan: `docs/plans/coach-panel.md`).
 
@@ -271,7 +271,7 @@ so WoW writes it to disk with a snapshot whose `reason` is `"ask"`. It refuses a
 question and does nothing in combat (`InCombatLockdown()`).
 
 ```lua
-["questions"] = {                 -- in CoachLinkDB.characters["Name-Realm"], oldest first
+["questions"] = {                 -- in HeroBridgeDB.characters["Name-Realm"], oldest first
   { ["id"] = "1794100000-1", ["text"] = "What should I do next?", ["askedAt"] = 1794100000 },
 },
 ```
@@ -284,15 +284,15 @@ question and does nothing in combat (`InCombatLockdown()`).
 - Python: `Character.questions`.
 
 **Advice (wow-coach to game).** wow-coach writes a small data-only addon of its own into the
-game folder: `Interface/AddOns/CoachLink_Advice/` with `CoachLink_Advice.toc` and
+game folder: `Interface/AddOns/HeroBridge_Advice/` with `HeroBridge_Advice.toc` and
 `Advice.lua`.
-- It is not part of the CoachLink zip, so addon managers (the CurseForge app) never overwrite
+- It is not part of the HeroBridge zip, so addon managers (the CurseForge app) never overwrite
   it.
-- `CoachLink.toc` lists it under `## OptionalDeps`, so it loads first when it is there.
+- `HeroBridge.toc` lists it under `## OptionalDeps`, so it loads first when it is there.
 - A new addon folder is only noticed after a full game restart.
 
 ```lua
-CoachLinkAdvice = {
+HeroBridgeAdvice = {
   ["formatVersion"] = 1,
   ["writtenAt"] = 1794100100,
   ["characters"] = {
@@ -321,32 +321,32 @@ CoachLinkAdvice = {
   - It reads the result back before using it, and replaces the file in one step (atomically).
 - The addon checks every level of the table before using it (`ns.myAdvice()`).
 
-**The panel's view of CoachLink.lua.** `CoachLinkPanel.lua` gets `ns.askCoach`,
+**The panel's view of HeroBridge.lua.** `HeroBridgePanel.lua` gets `ns.askCoach`,
 `ns.openQuestions` (questions without an answer yet), `ns.myAdvice` (this character's
-`CoachLinkAdvice` entry, or nil), `ns.characterKey` and `ns.say`, and sets
+`HeroBridgeAdvice` entry, or nil), `ns.characterKey` and `ns.say`, and sets
 `ns.togglePanel`, which `/coach panel` calls. The `.toc` names
-`CoachLink_OnAddonCompartmentClick` for the minimap's addon list.
+`HeroBridge_OnAddonCompartmentClick` for the minimap's addon list.
 
-**The panel** (`CoachLinkPanel.lua`, `Bindings.xml`):
+**The panel** (`HeroBridgePanel.lua`, `Bindings.xml`):
 - **Opening it:** `/coach panel`, the minimap's addon list, or a key binding (Options, then
-  Keybindings, then CoachLink).
+  Keybindings, then HeroBridge).
 - **What it shows:** the newest answer's steps (or the plan's), its text and warnings, the
   open questions, and a footer. The footer gives who wrote it, when, and the save it was based
   on, and ends with "AI can be wrong".
 - **Combat:** it hides in combat and comes back after. Ask is disabled in combat.
 - **Advice text:** it type-checks and cuts every advice field again. It removes any single
   `|` (doubled `||` from wow-coach stay, and WoW draws them as a plain `|`).
-- **Settings:** remembered in `CoachLinkDB.settings.panel`: `point`, `relPoint`, `x`, `y`,
+- **Settings:** remembered in `HeroBridgeDB.settings.panel`: `point`, `relPoint`, `x`, `y`,
   `width`, `height`, `fontSize`, `open` and `lastSeenAnswerAt`. After a reload, a single chat
   line says when there is advice the player hasn't opened yet.
 
 **Writing the advice** (`src/wow_coach/advice/`):
-- **Where:** `writer.py` writes only inside `<AddOns>/CoachLink_Advice/`.
+- **Where:** `writer.py` writes only inside `<AddOns>/HeroBridge_Advice/`.
   - It refuses symlinks and junctions for the folder, the `.toc` and `Advice.lua`.
   - It never creates the game's own folders.
   - It replaces `Advice.lua` atomically, through a temp file in the same folder
     (`.tmp-*.part`).
-- **The `.toc`:** `## Interface:` (copied from `CoachLink.toc` each time, else 16001),
+- **The `.toc`:** `## Interface:` (copied from `HeroBridge.toc` each time, else 16001),
   `## Title`, `## Notes`, `## Version` (wow-coach's), then `Advice.lua`. No SavedVariables.
 - **Limits** (`limits.py`) are enforced by cutting:
   - Blank steps are dropped, and the first 5 steps and 5 warnings are kept, in the order to
@@ -600,7 +600,7 @@ format is Claude Code's own and not documented, so the importer trusts nothing:
 ## Logging out
 
 Because of the unloaded character at `PLAYER_LOGOUT` (above), the addon works like this
-(code: `takeSnapshot`, `looksUnloaded` and "Logging out" in `CoachLink.lua`):
+(code: `takeSnapshot`, `looksUnloaded` and "Logging out" in `HeroBridge.lua`):
 
 1. A snapshot **looks unloaded** when its bags have 0 slots in total, its max health is 0, or
    it needs 0 XP for the next level below level 60. A section that failed to read proves

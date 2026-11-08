@@ -23,7 +23,7 @@ from wow_coach.advice.limits import limit_answer
 from wow_coach.advice.merge import add_answer
 from wow_coach.advice.questions import open_questions
 from wow_coach.advice.reader import read_advice_file
-from wow_coach.advice.writer import interface_from_coachlink, update_advice
+from wow_coach.advice.writer import interface_from_herobridge, update_advice
 from wow_coach.ai.base import Provider
 from wow_coach.app_settings import AppSettings
 from wow_coach.characters import pick_character
@@ -292,7 +292,7 @@ class ChatCoach:
             update_advice(
                 addons_dir,
                 change,
-                interface=interface_from_coachlink(addons_dir),
+                interface=interface_from_herobridge(addons_dir),
                 now=answer.answered_at,
             )
         except _WRITE_ERRORS as error:

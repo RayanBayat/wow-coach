@@ -243,7 +243,7 @@ def test_state_lists_answers_questions_usage_and_alerts(rig: Rig, client: Client
 
 def test_state_without_any_save_is_a_sentence_not_an_error(tmp_path: Path) -> None:
     rig = make_rig(tmp_path)
-    for saved in rig.wow_dir.rglob("CoachLink.lua"):
+    for saved in rig.wow_dir.rglob("HeroBridge.lua"):
         saved.unlink()
     server = CoachServer(rig.core, 0)
     server.start()
