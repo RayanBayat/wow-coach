@@ -1,5 +1,9 @@
 # The coach window: answers while you play, with your ChatGPT plan
 
+> **New:** the [WoW Coach app](desktop-app.md) does everything this page does, in its own
+> window, with quick buttons and a card that stays on top of the game. This browser window
+> still works: start it with `wow-coach app --browser`.
+
 The coach window is a small page that wow-coach opens in your web browser. It is your own
 coach, answering with your ChatGPT plan. It shows the coach's answers the moment they are
 ready, so you don't need to `/reload` the game to read them. It can also pop up a

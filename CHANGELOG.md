@@ -4,6 +4,33 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **The WoW Coach app** (`wow-coach app`): your coach in its own window instead of a browser
+  page ([guide](docs/desktop-app.md)). Install it with the `desktop` extra (Qt for Python).
+  - A chat with your coach, and quick buttons: What next?, Check my gear, Spells to train,
+    Plan my session, Why did I die?, Make gold, Explain a word.
+  - "Game data: 12 min old" shows how fresh the coach's view is. **Refresh game data** tells
+    you to press your new key in WoW, waits for the save, and sends any question you typed
+    with the fresh data.
+  - **Keep on top of the game**: a small card above the game with the newest answer.
+  - **Settings**, **ChatGPT** and **Privacy** pages. Settings save by themselves.
+  - **Setup** page: checks the game folder, installs or updates CoachLink, creates the
+    answers folder, and adds WoW Coach to your app menu or starts it when you log in (Linux
+    and Windows).
+  - It keeps running in the tray when you close the window, and only one copy runs at a time.
+  - Light and dark mode follow your computer.
+- **"Save for the coach" key** in the addon (Options → Keybindings → CoachLink): one key does
+  what `/coach` does.
+
+### Changed
+
+- `wow-coach app` opens the new app when it is installed, and the browser window otherwise.
+  `wow-coach app --browser` always opens the browser window. `--hidden` starts the app in the
+  tray (used by "start when I log in").
+
 ## [0.9.0] - 2026-11-08
 
 Your own coach with your ChatGPT plan: the coach window answers your questions from the game by

@@ -417,6 +417,38 @@ compliance test fails on `shell=True`, `os.system` and `os.popen`.
 - Plan use is free in wow-coach, and security problems are also reported to OpenAI
   (`SECURITY.md`).
 
+## The desktop app (0.10.0)
+
+`wow-coach app` opens a Qt window (`src/wow_coach/desktop/`, PySide6 from the optional
+`desktop` extra). It is a second face for the same brain as the browser window: it builds the
+same `AppCore` (`app/run.py` `build_core`) and the same `Watcher`, so answering, triggers,
+limits and alerts work exactly as above. There is no web server in the desktop app.
+
+| Piece | Code | Job |
+|---|---|---|
+| The bridge | `desktop/bridge.py` | The only object the windows talk to. It reads `AppCore.state()` in a background thread (the save file may be on a slow disk), one read at a time with a "read again" flag, and turns the core's event mailbox into Qt signals. Network calls (models, sign-out) also run in the background |
+| Typed state | `desktop/state.py` | `AppCore.state()`'s dict as small frozen dataclasses; anything missing or of the wrong type becomes a safe default |
+| Look | `desktop/theme.py`, `desktop/assets/` | Every color as a named token, light and dark, one stylesheet; small SVG pictures for arrows and check marks |
+| Pages | `desktop/pages/` | Coach (chat), Settings, ChatGPT, Setup, Privacy. Each redraws from the newest state and reacts to single events |
+| Keep on top | `desktop/compact.py` | A frameless tool window that stays on top without taking focus. On Linux with Wayland the app runs through XWayland (`run.py` `platform_arguments`), because Wayland doesn't let apps keep their own window on top |
+| Shell | `desktop/tray.py`, `desktop/single_instance.py` | Closing hides to the tray (or quits without one). A per-user local socket keeps one copy running; a second start asks the first to show its window |
+| Setup | `desktop/setup_checks.py`, `desktop/shortcuts.py` | The same addon install code as `wow-coach setup`. App-menu and log-in shortcuts (`.desktop` files on Linux, `.lnk` through PowerShell with paths only in environment variables on Windows). A shortcut is never written when the program lives in a temporary uv cache |
+
+**Refreshing the game data.** Only the game can save the character, and only at a reload or a
+logout. An outside program pressing keys in the game would break Blizzard's rules, so the app
+never does. The addon has a "Save for the coach" key binding (the same as `/coach`); the
+Refresh button asks the player to press it and waits for the watcher's `save` event. A
+question typed while waiting is sent after the save.
+
+**What we tested and ruled out (2026-11-08):** the game's chat log (`/chatlog`,
+`Logs/WoWChatLog.txt`) is not written while playing: it stayed empty through 30 minutes of
+play, a `/reload` and turning logging off. WoW writes it at logout, so it can't carry live
+questions or status. Showing answers inside the game without a reload (loading pre-made
+"slot" addons on a timer) is possible but a gray area, and is not built.
+
+**Safety:** AI and game text are shown as plain text only (never rich text, Markdown or
+links). The only links opened are fixed ones in the code, plus OpenAI's sign-in page.
+
 ## Logging out
 
 Because of the unloaded character at `PLAYER_LOGOUT` (above), the addon works like this
