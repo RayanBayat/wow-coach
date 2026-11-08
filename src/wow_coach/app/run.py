@@ -17,7 +17,7 @@ from wow_coach.app.server import CoachServer
 from wow_coach.app.watcher import Watcher
 from wow_coach.app_settings import AppSettings, load_settings, settings_path
 from wow_coach.companion import LiveCoach, build_sign_in, build_usage_log
-from wow_coach.engine.model import choose_model
+from wow_coach.engine.model import choose_small_model
 from wow_coach.usage import UsageLog
 
 
@@ -96,7 +96,7 @@ def _small_model_finder(plan: ChatGPTPlan) -> Callable[[], str | None]:
     def find() -> str | None:
         if not cache:
             try:
-                cache.append(choose_model([m.slug for m in plan.list_models()], None))
+                cache.append(choose_small_model([m.slug for m in plan.list_models()]))
             except AIError:
                 return None  # not signed in, or offline: skip triage this time, try again later
         return cache[0]

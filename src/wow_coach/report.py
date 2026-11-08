@@ -8,6 +8,7 @@ section quietly disappears when its data is missing or empty.
 """
 
 import itertools
+import re
 from typing import NamedTuple
 
 from wow_coach import report_details, report_gear_hints, report_items
@@ -182,13 +183,25 @@ def _quest_line(quest: Table) -> str:
     if quest.get("complete") is True:
         line = f"- {prefix}{title}, DONE (turn in)"
     else:
-        objectives = [as_text(o.get("text")) for o in as_tables(quest.get("objectives"))]
+        objectives = [_objective_text(o) for o in as_tables(quest.get("objectives"))]
         shown = ", ".join(text for text in objectives if text)
         line = f"- {prefix}{title}, {shown}" if shown else f"- {prefix}{title}"
     # The short "Bring 10 ... to ... in Brill." text: it names who to hand the quest in to.
     if goal := as_text(quest.get("objectivesText")):
         line += f"\n  - Goal: {' '.join(goal.split())}"
     return line
+
+
+def _objective_text(objective: Table) -> str:
+    """One objective, e.g. "0/3 Vile Fin Murloc Skin".
+
+    Right after logging in, the game can save an objective before it knows the item's name
+    ("0/3"). Say so, so a reader (or an AI) doesn't guess what is missing or think it is done.
+    """
+    text = as_text(objective.get("text")) or ""
+    if re.fullmatch(r"\s*\d+\s*/\s*\d+\s*", text):
+        return f"{text.strip()} (the game had not loaded this item's name yet)"
+    return text
 
 
 def _quests_section(snapshot: Table) -> str:

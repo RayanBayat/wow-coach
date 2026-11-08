@@ -352,3 +352,9 @@ def test_full_report_shows_gear_hints_after_the_bags() -> None:
     text = format_status(snapshot, now=NOW)
     assert text.index("**Bags:**") < text.index("**Gear hints**")
     assert "Can't use: Heavy Helm" in text
+
+
+def test_an_objective_without_a_name_says_so() -> None:
+    quest: Table = {"title": "Hides", "level": 11, "objectives": [{"text": "0/3  ", "done": False}]}
+    text = format_status({"name": "Testchar", "quests": [quest]}, now=NOW)
+    assert "0/3 (the game had not loaded this item's name yet)" in text

@@ -19,7 +19,7 @@ class FakePlan:
 
     def list_models(self) -> list[FakeModel]:
         self.model_lists += 1
-        return [FakeModel("gpt-6-sol"), FakeModel("gpt-6-luna")]
+        return [FakeModel("gpt-6-sol"), FakeModel("gpt-6-terra"), FakeModel("gpt-6-luna")]
 
 
 class FakeChatCoach:
@@ -54,7 +54,7 @@ def test_live_coach_reads_the_settings_before_every_answer(tmp_path: Path) -> No
     coach.ask("second")
     coach.ask("third")
     first, second, third = FakeChatCoach.made
-    assert first["model"] == "gpt-6-luna"  # no choice yet: a small, fast one
+    assert first["model"] == "gpt-6-terra"  # no choice yet: a balanced one
     assert second["model"] == "gpt-6-sol"  # the player's new choice
     settings = second["settings"]
     assert isinstance(settings, AppSettings) and settings.share_other_player_names is True
