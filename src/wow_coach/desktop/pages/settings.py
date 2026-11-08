@@ -5,6 +5,11 @@ a number does not save after every key), and a small "Saved" appears. A value th
 work (for example a timer of 3 minutes) is not saved; a plain message says what to fix.
 
 While the player is editing, a new state from the core never overwrites their field.
+
+Until the first state that really holds the saved settings arrives, every field is disabled
+under a "Loading your settings..." line: the fields hold only Qt defaults (0, unchecked) then,
+and saving those would wipe the player's real settings. Only the fields the player actually
+changed are ever saved.
 """
 
 from collections.abc import Mapping
@@ -38,6 +43,18 @@ SAVE_DELAY_MS: Final = 400  # wait this long after the last change before saving
 SAVED_SHOWN_MS: Final = 2000  # how long "Saved" stays visible
 LABEL_WIDTH: Final = 300  # the width of the label column in the form rows
 NO_HOUR: Final = -1  # the "Off" position of a quiet-hours box
+LOADING_TEXT: Final = "Loading your settings\u2026"
+
+# The saved fields that are not trigger rules (the rules travel in one "triggers" dict).
+SIMPLE_KEYS: Final = (
+    "answer_questions_from_game",
+    "notify",
+    "speak",
+    "max_calls_per_hour",
+    "max_calls_per_day",
+    "share_other_player_names",
+    "send_coach_notes",
+)
 
 # The events the player can give a rule to, in the order shown (same words as the browser window).
 TRIGGER_KINDS: Final = (
@@ -86,6 +103,15 @@ def _as_int(value: object, default: int) -> int:
     return value
 
 
+def _as_bool(value: object, default: bool) -> bool:
+    return value if isinstance(value, bool) else default
+
+
+def _hour_or_none(value: object) -> int | None:
+    """A quiet-hours value as a whole hour, or None for Off."""
+    return None if isinstance(value, bool) or not isinstance(value, int) else value
+
+
 def _as_mapping(value: object) -> Mapping[str, object]:
     return value if isinstance(value, Mapping) else {}
 
@@ -99,6 +125,8 @@ class SettingsPage(Page):
     def __init__(self, bridge: CoreBridge, parent: QWidget | None = None) -> None:
         super().__init__(bridge, parent)
         self._loading = False  # True while the page fills its own fields (no saving then)
+        self._settings_loaded = False  # True once a state really held the saved settings
+        self._saved_values: dict[str, object] = {}  # what the core has saved, to spot edits
         self._save_timer = QTimer(self)
         self._save_timer.setSingleShot(True)
         self._save_timer.setInterval(SAVE_DELAY_MS)
@@ -119,13 +147,22 @@ class SettingsPage(Page):
         self._saved_timer.timeout.connect(self.saved_label.hide)
         self.saved_label.hide()
         self.problem_label.hide()
+        self.loading_label = make_label(LOADING_TEXT, "muted")
         column.addWidget(self.saved_label)
         column.addWidget(self.problem_label)
+        column.addWidget(self.loading_label)
 
-        column.addWidget(self._build_answers_card())
-        column.addWidget(self._build_triggers_card())
-        column.addWidget(self._build_limits_card())
-        column.addWidget(self._build_privacy_card())
+        # All the cards live in one widget, so they can be disabled together while loading.
+        self.form = QWidget()
+        form_column = QVBoxLayout(self.form)
+        form_column.setContentsMargins(0, 0, 0, 0)
+        form_column.setSpacing(SPACE)
+        form_column.addWidget(self._build_answers_card())
+        form_column.addWidget(self._build_triggers_card())
+        form_column.addWidget(self._build_limits_card())
+        form_column.addWidget(self._build_privacy_card())
+        self.form.setEnabled(False)
+        column.addWidget(self.form)
         column.addStretch(1)
 
         outer = QVBoxLayout(self)
@@ -334,6 +371,8 @@ class SettingsPage(Page):
             state.notify_available, "This computer can't show desktop notifications."
         )
         self.speak.set_available(state.speak_available, "This computer can't read aloud.")
+        if not state.settings:
+            return  # nothing read yet, or a failed read: keep what the fields already show
         if self._save_timer.isActive():
             return  # the player has unsaved edits; never overwrite them
         self._loading = True
@@ -341,6 +380,11 @@ class SettingsPage(Page):
             self._fill(state.settings)
         finally:
             self._loading = False
+        self._saved_values = self._values_from(state.settings)
+        if not self._settings_loaded:
+            self._settings_loaded = True
+            self.form.setEnabled(True)
+            self.loading_label.hide()
 
     def _show_usage(self, usage: UsageView) -> None:
         self.hour_used.setText(f"Used in the last hour: {usage.last_hour}")
@@ -409,6 +453,7 @@ class SettingsPage(Page):
         changes, problem = self._collect_changes()
         if changes:
             self.bridge.change_settings(changes)
+            self._remember_saved(changes)
             self.saved_label.show()
             self._saved_timer.start()
         self.problem_label.setText(problem or "")
@@ -416,9 +461,37 @@ class SettingsPage(Page):
         if problem is not None:
             self.saved_label.hide()
 
+    def _remember_saved(self, changes: Mapping[str, object]) -> None:
+        """Note what was just saved, so the next edit only sends what is new."""
+        for key, value in changes.items():
+            if key == "triggers":
+                old_rules = _as_mapping(self._saved_values.get("triggers"))
+                self._saved_values["triggers"] = {**old_rules, **_as_mapping(value)}
+            else:
+                self._saved_values[key] = value
+
     def _collect_changes(self) -> tuple[dict[str, object], str | None]:
-        """What to save, and a plain message when the trigger rules cannot be saved."""
-        changes: dict[str, object] = {
+        """Only the fields the player changed, and a plain message if the rules cannot be saved.
+
+        Saving just the changed fields means one edit can never overwrite a setting the
+        player did not touch. ``update_settings`` keeps every field that is left out.
+        """
+        if not self._settings_loaded:
+            return {}, None  # the fields do not show the saved settings yet
+        now = self._current_values()
+        changes = {key: now[key] for key in SIMPLE_KEYS if now[key] != self._saved_values.get(key)}
+        problem = self._trigger_problem()
+        if problem is None:
+            rules = _as_mapping(now["triggers"])
+            old_rules = _as_mapping(self._saved_values.get("triggers"))
+            changed_rules = {k: v for k, v in rules.items() if v != old_rules.get(k)}
+            if changed_rules:
+                changes["triggers"] = changed_rules
+        return changes, problem
+
+    def _current_values(self) -> dict[str, object]:
+        """What the fields hold now, in the shape the core saves."""
+        return {
             "answer_questions_from_game": self.answer_games.check.isChecked(),
             "notify": self.notify.check.isChecked(),
             "speak": self.speak.check.isChecked(),
@@ -426,11 +499,35 @@ class SettingsPage(Page):
             "max_calls_per_day": self.max_day.value(),
             "share_other_player_names": self.share_names.check.isChecked(),
             "send_coach_notes": self.send_notes.check.isChecked(),
+            "triggers": self._trigger_values(),
         }
-        problem = self._trigger_problem()
-        if problem is None:
-            changes["triggers"] = self._trigger_values()
-        return changes, problem
+
+    def _values_from(self, settings: Mapping[str, object]) -> dict[str, object]:
+        """The saved ``settings`` in the same shape as ``_current_values`` (same defaults)."""
+        rules = _as_mapping(settings.get("triggers"))
+        modes = _as_mapping(rules.get("modes"))
+        text = rules.get("rules_text")
+        return {
+            "answer_questions_from_game": _as_bool(
+                settings.get("answer_questions_from_game"), True
+            ),
+            "notify": _as_bool(settings.get("notify"), True),
+            "speak": _as_bool(settings.get("speak"), False),
+            "max_calls_per_hour": _as_int(settings.get("max_calls_per_hour"), 20),
+            "max_calls_per_day": _as_int(settings.get("max_calls_per_day"), 100),
+            "share_other_player_names": _as_bool(settings.get("share_other_player_names"), False),
+            "send_coach_notes": _as_bool(settings.get("send_coach_notes"), True),
+            "triggers": {
+                "modes": {kind: modes.get(kind, "off") for kind in self.mode_boxes},
+                "every_minutes": _as_int(rules.get("every_minutes"), 0),
+                "cooldown_minutes": _as_int(rules.get("cooldown_minutes"), 10),
+                "quiet_in_instances": _as_bool(rules.get("quiet_in_instances"), True),
+                "quiet_from_hour": _hour_or_none(rules.get("quiet_from_hour")),
+                "quiet_to_hour": _hour_or_none(rules.get("quiet_to_hour")),
+                "use_triage": _as_bool(rules.get("use_triage"), False),
+                "rules_text": text if isinstance(text, str) else "",
+            },
+        }
 
     def _trigger_problem(self) -> str | None:
         """A plain message when the trigger fields hold something that cannot work."""

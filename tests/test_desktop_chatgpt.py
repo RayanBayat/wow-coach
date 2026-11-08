@@ -98,11 +98,30 @@ def test_only_openai_sign_in_addresses_are_ever_opened(qtbot: QtBot, opened: lis
     assert opened == []
 
 
-def test_cancel_goes_back_to_the_start(qtbot: QtBot) -> None:
+def test_hide_goes_back_to_the_start_and_does_not_claim_to_cancel(qtbot: QtBot) -> None:
     page, _bridge, _core = make_page(qtbot, signed_in=False)
     page.on_event("signin", {"state": "waiting", "url": SIGN_IN_URL})
-    page.cancel_button.click()
+    assert page.hide_button.text() == "Hide this"
+    assert "few minutes" in page.hide_button.toolTip()
+    page.hide_button.click()
     assert page._signed_out_card.isVisible()
+
+
+def test_continue_again_while_the_first_sign_in_is_open_keeps_the_link(
+    qtbot: QtBot, opened: list[str]
+) -> None:
+    page, _bridge, core = make_page(qtbot, signed_in=False)
+    page.sign_in_button.click()
+    page.on_event("signin", {"state": "waiting", "url": SIGN_IN_URL})
+    page.hide_button.click()
+    core.start_sign_in = lambda: False  # type: ignore[method-assign]
+    page.sign_in_button.click()  # the core is still busy with the first sign-in
+    assert page._waiting_card.isVisible()
+    assert page.open_again_button.isEnabled()
+    assert page.copy_link_button.isEnabled()
+    page.open_again_button.click()
+    assert opened == [SIGN_IN_URL]
+    assert "5 minutes" in page._notice.text()
 
 
 def test_an_error_while_waiting_is_shown_plainly_with_try_again(qtbot: QtBot) -> None:
@@ -110,9 +129,9 @@ def test_an_error_while_waiting_is_shown_plainly_with_try_again(qtbot: QtBot) ->
     page.on_event("signin", {"state": "waiting", "url": SIGN_IN_URL})
     page.on_event("error", {"message": "<b>The sign-in was cancelled.</b>"})
     assert page._signed_out_card.isVisible()
-    assert page._error_label.text() == "<b>The sign-in was cancelled.</b>"
+    assert page._error_label.text() == "<b>The sign-in was cancelled.</b> Please try again."
     assert page._error_label.textFormat() == Qt.TextFormat.PlainText
-    assert page.sign_in_button.text() == "Try again"
+    assert page.sign_in_button.text() == "Continue with ChatGPT"  # OpenAI's required wording
 
 
 def test_an_error_when_not_signing_in_is_ignored_here(qtbot: QtBot) -> None:
@@ -286,3 +305,23 @@ def test_the_welcome_dialog_links_to_manage_usage(qtbot: QtBot, opened: list[str
     assert len(manage) == 1
     manage[0].click()
     assert opened == ["https://chatgpt.com/settings/usage"]
+
+
+def test_the_welcome_dialog_waits_while_the_window_is_hidden(qtbot: QtBot) -> None:
+    bridge, _core = make_bridge()
+    page = ChatGPTPage(bridge)  # never shown: the app started hidden in the tray
+    qtbot.addWidget(page)
+    page.show_state(read_state(sample_state(welcome_pending=True)))
+    assert page.welcome_dialog is None
+    page.show()  # the player opens the window from the tray
+    qtbot.waitUntil(lambda: page.welcome_dialog is not None, timeout=2000)
+    assert page.welcome_dialog is not None
+    assert page.welcome_dialog.isVisible()
+
+
+def test_a_hidden_window_does_not_dismiss_the_welcome(qtbot: QtBot) -> None:
+    bridge, core = make_bridge()
+    page = ChatGPTPage(bridge)
+    qtbot.addWidget(page)
+    page.show_state(read_state(sample_state(welcome_pending=True)))
+    assert core.welcome_dismissed is False

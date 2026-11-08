@@ -190,3 +190,68 @@ def test_the_focused_field_is_left_alone(qtbot: QtBot) -> None:
     newer = settings_state(AppSettings(max_calls_per_day=5))
     page.show_state(read_state(sample_state(**newer)))
     assert page.max_day.value() == 88
+
+
+# ---- not saving before the settings are known ------------------------------------------
+
+
+def make_unloaded_page(qtbot: QtBot) -> tuple[SettingsPage, FakeCore]:
+    """A page that has not yet received a state with settings."""
+    bridge, core = make_bridge()
+    page = SettingsPage(bridge)
+    qtbot.addWidget(page)
+    page.show()
+    return page, core
+
+
+def test_the_fields_are_disabled_until_the_settings_arrive(qtbot: QtBot) -> None:
+    page, _core = make_unloaded_page(qtbot)
+    assert not page.form.isEnabled()
+    assert page.loading_label.isVisible()
+    page.show_state(read_state(sample_state()))
+    assert page.form.isEnabled()
+    assert not page.loading_label.isVisible()
+
+
+def test_a_state_without_settings_changes_nothing(qtbot: QtBot) -> None:
+    page, _core = make_unloaded_page(qtbot)
+    page.show_state(read_state(sample_state(settings={})))
+    assert not page.form.isEnabled()
+    assert page.loading_label.isVisible()
+
+
+def test_a_failed_read_keeps_the_values_already_shown(qtbot: QtBot) -> None:
+    page, _bridge, _core = make_page(qtbot, **settings_state(AppSettings(max_calls_per_hour=33)))
+    page.show_state(read_state(sample_state(settings={})))
+    assert page.max_hour.value() == 33
+    assert page.form.isEnabled()
+
+
+def test_saving_before_the_settings_arrive_sends_nothing(qtbot: QtBot) -> None:
+    page, core = make_unloaded_page(qtbot)
+    page.save_now()
+    assert core.changes == []
+
+
+def test_one_edit_saves_only_that_field(qtbot: QtBot) -> None:
+    saved = AppSettings(max_calls_per_hour=33, max_calls_per_day=150, send_coach_notes=False)
+    page, _bridge, core = make_page(qtbot, **settings_state(saved))
+    page.speak.check.setChecked(True)
+    page.save_now()
+    assert core.changes == [{"speak": True}]
+
+
+def test_a_trigger_edit_sends_only_the_changed_rule_fields(qtbot: QtBot) -> None:
+    page, _bridge, core = make_page(qtbot)
+    page.cooldown.setValue(25)
+    page.save_now()
+    assert core.changes == [{"triggers": {"cooldown_minutes": 25}}]
+
+
+def test_the_same_edit_is_not_sent_twice(qtbot: QtBot) -> None:
+    page, _bridge, core = make_page(qtbot)
+    page.max_day.setValue(77)
+    page.save_now()
+    page.max_hour.setValue(12)
+    page.save_now()
+    assert core.changes == [{"max_calls_per_day": 77}, {"max_calls_per_hour": 12}]
