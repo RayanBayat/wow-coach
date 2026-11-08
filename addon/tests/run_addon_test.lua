@@ -830,6 +830,30 @@ check(brokenBox ~= nil and brokenBox.text:find("READ ERRORS", 1, true) ~= nil
     and brokenBox.text:find("talents: ", 1, true) ~= nil, "copy text lists the read error")
 check(brokenBox.text:find("Testchar, level 7", 1, true) ~= nil, "copy text still has the other facts")
 
+-- In some places the game hands addons "secret" values that can't be turned into text.
+-- The fake game marks one place name and one old event as secret.
+installFakeGame()
+loadAddon()
+local SECRET = "SECRET-VALUE"
+issecretvalue = function(value) return value == SECRET end
+GetSubZoneText = function() return SECRET end
+fire("PLAYER_ENTERING_WORLD", true, false)
+SlashCmdList.COACHLINK("")  -- save once, so the character has a saved entry
+local savedEntry = CoachLinkDB.characters["Testchar-Testrealm"]
+check(savedEntry.snapshot.subZone == "(hidden by the game)", "a hidden value is saved as a note")
+savedEntry.history = savedEntry.history or {}
+table.insert(savedEntry.history, { time = 1, kind = "death", text = SECRET })
+createdFrames = {}
+SlashCmdList.COACHLINK("copy")
+local secretBox
+for _, frame in ipairs(createdFrames) do
+    if frame.type == "EditBox" then secretBox = frame end
+end
+check(secretBox ~= nil and secretBox.text:find("(hidden by the game)", 1, true) ~= nil,
+    "/coach copy shows hidden values as a note instead of failing")
+check(secretBox.text:find(SECRET, 1, true) == nil, "no secret value reaches the copy text")
+issecretvalue = nil
+
 
 -- A game version without one of our events must still load the addon.
 installFakeGame()

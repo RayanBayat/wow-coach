@@ -63,6 +63,9 @@ All notable changes to this project are written here. The format follows
 
 ### Fixed
 
+- `/coach copy` no longer fails with "invalid value (secret) ... for 'concat'". WoW Forever
+  hides some details from addons (for example during fights); those now show as "(hidden by
+  the game)", in the copy text and in what the addon saves.
 - wow-coach's own coach now sees the whole coach's notebook. It used to send only the first
   4 000 characters of a character's journal, so it missed your next steps, choices and
   progress. Long notes now keep their most useful sections whole, and sections about your

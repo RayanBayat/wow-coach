@@ -71,12 +71,21 @@ local function numberText(value)
 end
 
 -- Add a section: a blank line, the header, then its lines. Empty sections are skipped.
+-- The last safety net for "secret" values (details the game hides from addons, for example
+-- in fights): a secret line can't be joined into text, so it is shown as a plain note.
+local function plainLine(line)
+    if issecretvalue ~= nil and issecretvalue(line) then
+        return "(hidden by the game)"
+    end
+    return line
+end
+
 local function addSection(out, header, lines)
     if #lines == 0 then return end
     table.insert(out, "")
     table.insert(out, header)
     for _, line in ipairs(lines) do
-        table.insert(out, line)
+        table.insert(out, plainLine(line))
     end
 end
 
