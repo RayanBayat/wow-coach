@@ -1,5 +1,6 @@
 """The Coach page's behavior: refreshing, asking, queues, answers, errors and the small card."""
 
+from collections.abc import Callable
 from pathlib import Path
 
 from desktop_support import KEY, FakeCore, make_bridge, sample_answer, sample_state
@@ -396,9 +397,20 @@ def test_open_questions_bar_handles_busy_and_none(qtbot: QtBot, tmp_path: Path) 
     setup.core.busy = True
     setup.page.answer_open_questions()
     assert OPEN_BUSY_TEXT in setup.texts()
-    setup.bridge.answer_open_questions = lambda: "none"  # type: ignore[method-assign]
+    setup.core.open_result = "none"
     setup.page.answer_open_questions()
     assert OPEN_NONE_TEXT in setup.texts()
+
+
+def test_answer_now_waits_for_the_background_result(qtbot: QtBot, tmp_path: Path) -> None:
+    waiting = [{"id": "a", "text": "x", "asked_at": 1}]
+    setup = start(qtbot, tmp_path, open_questions=waiting)
+    jobs: list[Callable[[], None]] = []
+    setup.bridge._run = jobs.append  # hold the background work back
+    setup.page.answer_open_questions()
+    assert setup.page.chat.typing_visible is False  # nothing is known yet
+    jobs.pop()()
+    assert setup.page.chat.typing_visible is True
 
 
 def test_open_questions_bar_hides_when_the_game_questions_are_answered_automatically(

@@ -7,7 +7,9 @@ empty) and the box where the player types.
 This file holds the *behavior* (what happens when a question is sent, when a save arrives,
 when the coach is busy...). The look of each part lives in ``desktop/widgets/``.
 
-The page never reads the game folder or the network. It talks only to the ``CoreBridge``.
+The page never reads the game folder or the network itself. It talks only to the
+``CoreBridge``, which does every slow thing (reading the game's files, "Answer now") in a
+background thread and sends the result back as a signal.
 """
 
 import time
@@ -162,6 +164,7 @@ class CoachPage(Page):
         self.refresh_banner.cancelled.connect(self._refresh_cancelled)
         self.refresh_banner.closed.connect(self._refresh_closed)
         self.questions_bar.answer_now.connect(self.answer_open_questions)
+        self.bridge.open_questions_answered.connect(self._on_open_questions_answered)
         self.sign_in_card.sign_in.connect(lambda: self.navigate.emit("chatgpt"))
         self.composer.submitted.connect(self.send_question)
         self.welcome.chosen.connect(self.use_action)
@@ -254,12 +257,20 @@ class CoachPage(Page):
             self._dispatch(self._queued.pop(0))
 
     def answer_open_questions(self) -> None:
-        """ "Answer now" was pressed: answer the questions typed in the game."""
-        result = self.bridge.answer_open_questions()
+        """ "Answer now" was pressed: answer the questions typed in the game.
+
+        The bridge looks in the background; ``_on_open_questions_answered`` shows the result.
+        """
+        self.bridge.answer_open_questions()
+
+    def _on_open_questions_answered(self, result: str) -> None:
+        """The bridge says what "Answer now" did: started, busy, none or failed."""
         if result == "started":
             self.chat.set_typing(True)
         elif result == "busy":
             self.chat.add_notice(OPEN_BUSY_TEXT)
+        elif result == "failed":
+            self.chat.add_notice(DEFAULT_ERROR)
         else:
             self.chat.add_notice(OPEN_NONE_TEXT)
         self._sync_stack()

@@ -3,8 +3,9 @@
 Two rules keep the app smooth:
 
 1. **The window never waits.** Reading the state reads the game's save file, and the game
-   may live on a slow hard disk. Signing out and listing models talk to the internet. So all
-   of that runs in a background thread, and the result comes back as a Qt signal.
+   may live on a slow hard disk. "Answer now" reads the game's questions the same way.
+   Signing out and listing models talk to the internet. So all of that runs in a background
+   thread, and the result comes back as a Qt signal.
 2. **Qt widgets only talk to this bridge**, never to ``AppCore`` directly. Tests can then
    drive the windows with a fake core.
 
@@ -88,6 +89,8 @@ class CoreBridge(QObject):
     models_loaded = Signal(object)
     # True when OpenAI confirmed the sign-out.
     signed_out = Signal(bool)
+    # What "Answer now" did: "started", "busy", "none" (nothing to answer) or "failed".
+    open_questions_answered = Signal(str)
 
     def __init__(self, core: CoreLike, *, runner: Runner = run_in_thread) -> None:
         """Create the bridge.
@@ -185,13 +188,33 @@ class CoreBridge(QObject):
 
     # ---- actions ------------------------------------------------------------------------
 
-    def ask(self, question: str) -> bool:
-        """Ask the coach about the shown character. False when it is busy with another answer."""
-        return self._core.start_ask(question, self._selected)
+    def ask(self, question: str, character: str | None = None) -> bool:
+        """Ask the coach a question. False when it is busy with another answer.
 
-    def answer_open_questions(self) -> str:
-        """Answer the questions typed in game: "started", "busy" or "none"."""
-        return self._core.start_answer_open(self._selected)
+        Args:
+            question: What the player asked.
+            character: Who it is about. Leave it out for the character shown right now; a
+                question that waited in a queue passes the character it was typed for.
+        """
+        return self._core.start_ask(question, character or self._selected)
+
+    def answer_open_questions(self) -> None:
+        """Answer the questions typed in game, in the background.
+
+        Finding them means reading the game's save files, which can be slow, so this runs off
+        the window's thread. ``open_questions_answered`` brings the result.
+        """
+        character = self._selected
+
+        def work() -> None:
+            try:
+                result = self._core.start_answer_open(character)
+            except Exception:
+                _log.exception("Could not answer the game's open questions")
+                result = "failed"
+            self.open_questions_answered.emit(result)
+
+        self._run(work)
 
     def change_settings(self, changes: Mapping[str, object]) -> AppSettings:
         """Save setting changes (a small local file, so this is quick) and redraw."""
