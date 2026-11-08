@@ -15,14 +15,23 @@ from collections.abc import Mapping
 from typing import Final
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QKeySequence
 from PySide6.QtWidgets import (
     QComboBox,
     QFormLayout,
+    QKeySequenceEdit,
     QLabel,
+    QSlider,
     QVBoxLayout,
     QWidget,
 )
 
+from wow_coach.app_settings import (
+    DEFAULT_OVERLAY_HOTKEY,
+    DEFAULT_OVERLAY_OPACITY,
+    MAX_OVERLAY_OPACITY,
+    MIN_OVERLAY_OPACITY,
+)
 from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.forms import Card, ToggleRow, make_label, page_header, scrollable
 from wow_coach.desktop.pages.base import Page
@@ -45,6 +54,8 @@ SIMPLE_KEYS: Final = (
     "web_search",
     "save_notes",
     "show_lookups",
+    "overlay_opacity",
+    "overlay_hotkey",
 )
 # The coach-tools switches are all on until the player turns one off.
 TOOL_KEYS: Final = ("use_tools", "web_search", "save_notes", "show_lookups")
@@ -127,6 +138,7 @@ class SettingsPage(Page):
         form_column.addWidget(self._build_answers_card())
         form_column.addWidget(self._build_tools_card())
         form_column.addWidget(self._build_triggers_card())
+        form_column.addWidget(self._build_overlay_card())
         form_column.addWidget(self._build_privacy_card())
         self.form.setEnabled(False)
         column.addWidget(self.form)
@@ -230,6 +242,52 @@ class SettingsPage(Page):
         )
         return card
 
+    def _build_overlay_card(self) -> Card:
+        card = Card(
+            "Overlay",
+            "The overlay shows the coach as a see-through panel on top of your game. It is a "
+            "normal window of this program; it never touches the game. Esc or the same key "
+            "hides it.",
+        )
+        form = QFormLayout()
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
+        form.setVerticalSpacing(SPACE)
+        self.hotkey_edit = QKeySequenceEdit(QKeySequence(DEFAULT_OVERLAY_HOTKEY))
+        self.hotkey_edit.setMaximumSequenceLength(1)  # one chord, not a sequence of chords
+        self.hotkey_edit.setToolTip(
+            "Click here, then press the keys you want. The setting that works best uses "
+            "Ctrl, Shift or Alt together with another key."
+        )
+        self.hotkey_edit.setAccessibleName("Overlay hotkey")
+        self.hotkey_edit.editingFinished.connect(self._edited)
+        form.addRow(
+            self._buddy_label("Show or hide the overlay", self.hotkey_edit), self.hotkey_edit
+        )
+        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        self.opacity_slider.setRange(MIN_OVERLAY_OPACITY, MAX_OVERLAY_OPACITY)
+        self.opacity_slider.setValue(DEFAULT_OVERLAY_OPACITY)
+        self.opacity_slider.setToolTip(
+            "How solid the overlay is. Lower lets you see more of the game through it."
+        )
+        self.opacity_slider.setAccessibleName("Overlay opacity")
+        self.opacity_value = make_label(f"{DEFAULT_OVERLAY_OPACITY} %", "muted")
+        self.opacity_slider.valueChanged.connect(self._opacity_moved)
+        form.addRow(self._buddy_label("How solid it is", self.opacity_slider), self.opacity_slider)
+        card.body.addLayout(form)
+        card.body.addWidget(self.opacity_value)
+        card.body.addWidget(
+            make_label(
+                "If the key does not work by itself, the Setup page shows how to add it by hand.",
+                "muted",
+            )
+        )
+        return card
+
+    def _opacity_moved(self, percent: int) -> None:
+        self.opacity_value.setText(f"{percent} %")
+        self._edited()
+
     def _buddy_label(self, text: str, field: QWidget) -> QLabel:
         """A label tied to ``field``, so a screen reader and the Alt+key shortcuts find it."""
         label = make_label(text)
@@ -293,7 +351,17 @@ class SettingsPage(Page):
         self._set_check(self.use_claude_chats, settings.get("use_claude_chats"), True)
         for key in TOOL_KEYS:
             self._set_check(getattr(self, key), settings.get(key), True)
+        self._fill_overlay(settings)
         self._fill_triggers(_as_mapping(settings.get("triggers")))
+
+    def _fill_overlay(self, settings: Mapping[str, object]) -> None:
+        hotkey = settings.get("overlay_hotkey")
+        if not self.hotkey_edit.hasFocus():
+            text = hotkey if isinstance(hotkey, str) and hotkey else DEFAULT_OVERLAY_HOTKEY
+            self.hotkey_edit.setKeySequence(QKeySequence(text))
+        opacity = _as_int(settings.get("overlay_opacity"), DEFAULT_OVERLAY_OPACITY)
+        if not self.opacity_slider.hasFocus():
+            self.opacity_slider.setValue(opacity)
 
     def _fill_triggers(self, rules: Mapping[str, object]) -> None:
         index = self.on_save_box.findData(rules.get("on_save", "notify"))
@@ -362,6 +430,8 @@ class SettingsPage(Page):
             "send_coach_notes": self.send_notes.check.isChecked(),
             "use_claude_chats": self.use_claude_chats.check.isChecked(),
             **{key: getattr(self, key).check.isChecked() for key in TOOL_KEYS},
+            "overlay_opacity": self.opacity_slider.value(),
+            "overlay_hotkey": self._hotkey_value(),
             "triggers": self._trigger_values(),
         }
 
@@ -377,11 +447,23 @@ class SettingsPage(Page):
             "send_coach_notes": _as_bool(settings.get("send_coach_notes"), True),
             "use_claude_chats": _as_bool(settings.get("use_claude_chats"), True),
             **{key: _as_bool(settings.get(key), True) for key in TOOL_KEYS},
+            "overlay_opacity": _as_int(settings.get("overlay_opacity"), DEFAULT_OVERLAY_OPACITY),
+            "overlay_hotkey": self._saved_hotkey(settings),
             "triggers": {
                 "on_save": rules.get("on_save", "notify"),
                 "quiet_in_instances": _as_bool(rules.get("quiet_in_instances"), True),
             },
         }
+
+    def _hotkey_value(self) -> str:
+        """The key in the box as text. An empty box means "no change" (a key is needed)."""
+        text = self.hotkey_edit.keySequence().toString(QKeySequence.SequenceFormat.PortableText)
+        return text or str(self._saved_values.get("overlay_hotkey", DEFAULT_OVERLAY_HOTKEY))
+
+    @staticmethod
+    def _saved_hotkey(settings: Mapping[str, object]) -> str:
+        hotkey = settings.get("overlay_hotkey")
+        return hotkey if isinstance(hotkey, str) and hotkey else DEFAULT_OVERLAY_HOTKEY
 
     def _trigger_values(self) -> dict[str, object]:
         return {
