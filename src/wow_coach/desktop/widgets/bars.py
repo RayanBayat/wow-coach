@@ -63,7 +63,7 @@ class OpenQuestionsBar(QFrame):
 
 
 class SignInCard(QFrame):
-    """Tells the player the coach needs a ChatGPT sign-in, with a button that goes to the page where that happens."""
+    """Tells the player the coach needs a ChatGPT sign-in, with a button to the page for it."""
 
     sign_in = Signal()
 
