@@ -25,6 +25,11 @@ All notable changes to this project are written here. The format follows
   you log in, after a `/reload` and after a level-up, and keeps the answer out of your chat
   window ([#9](https://github.com/RayanBayat/wow-coach/issues/9)).
 
+- `wow-coach watch` prints its start line to the error output instead of the normal output, and
+  without the game folder. Under Claude Code's Monitor, only real saves now reach the coach, so
+  restarting the watcher every 30 minutes no longer sends the coach a message
+  ([#10](https://github.com/RayanBayat/wow-coach/issues/10)).
+
 ### Fixed
 
 - Logging out or quitting no longer replaces your last good snapshot with an almost empty one

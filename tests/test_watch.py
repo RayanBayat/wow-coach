@@ -46,10 +46,11 @@ class Script:
             action()
 
 
-def run_watch(wow_dir: Path, sleep: Script) -> list[str]:
+def run_watch(wow_dir: Path, sleep: Script, status: io.StringIO | None = None) -> list[str]:
+    """Run the watcher and return the save lines it printed (the status line goes elsewhere)."""
     out = io.StringIO()
     with pytest.raises(KeyboardInterrupt):
-        watch(wow_dir, out=out, sleep=sleep, clock=lambda: START)
+        watch(wow_dir, out=out, status=status or io.StringIO(), sleep=sleep, clock=lambda: START)
     return out.getvalue().splitlines()
 
 
@@ -58,9 +59,13 @@ def write(path: Path, text: str, mtime: int) -> None:
     os.utime(path, (mtime, mtime))
 
 
-def test_first_line_names_folder_and_start_time(tmp_path: Path) -> None:
-    lines = run_watch(tmp_path, Script())
-    assert lines == [f"watching for /coach saves in {tmp_path} (started 12:00:00)"]
+def test_the_start_line_goes_to_the_status_stream_only(tmp_path: Path) -> None:
+    # Under a monitor every line on standard output is an event for the coach, so the
+    # start line (which is not a save) must not be one.
+    status = io.StringIO()
+    lines = run_watch(tmp_path, Script(), status)
+    assert lines == []
+    assert status.getvalue() == "watching for /coach saves (started 12:00:00)\n"
 
 
 def test_reports_a_save_with_name_level_and_reason(tmp_path: Path) -> None:
@@ -68,8 +73,7 @@ def test_reports_a_save_with_name_level_and_reason(tmp_path: Path) -> None:
     write(file, snapshot_file("Testchar", 7, 100), 1000)
     script = Script(lambda: write(file, snapshot_file("Testchar", 8, 200, "logout"), 2000))
     lines = run_watch(tmp_path, script)
-    assert lines[1] == "CoachLink saved at 12:00:00: Testchar level 8 (reason: logout)"
-    assert len(lines) == 2
+    assert lines == ["CoachLink saved at 12:00:00: Testchar level 8 (reason: logout)"]
 
 
 def test_an_unloaded_save_is_called_almost_empty(tmp_path: Path) -> None:
@@ -79,7 +83,7 @@ def test_an_unloaded_save_is_called_almost_empty(tmp_path: Path) -> None:
         '["reason"]', '["xpMax"] = 0,\n["reason"]'
     )
     lines = run_watch(tmp_path, Script(lambda: write(file, unloaded, 2000)))
-    assert lines[1].endswith("Testchar level 6 (reason: logout; almost empty, type /coach)")
+    assert lines[0].endswith("Testchar level 6 (reason: logout; almost empty, type /coach)")
 
 
 def test_polls_every_two_seconds_and_waits_one_second_after_a_change(tmp_path: Path) -> None:
@@ -93,13 +97,13 @@ def test_polls_every_two_seconds_and_waits_one_second_after_a_change(tmp_path: P
 def test_no_change_prints_nothing_more(tmp_path: Path) -> None:
     file = account_file(tmp_path)
     write(file, snapshot_file("Testchar", 7, 100), 1000)
-    assert len(run_watch(tmp_path, Script(None, None))) == 1
+    assert run_watch(tmp_path, Script(None, None)) == []
 
 
 def test_first_save_ever_is_reported(tmp_path: Path) -> None:
     (tmp_path / "WTF").mkdir()
     script = Script(lambda: write(account_file(tmp_path), snapshot_file("Testchar", 2, 5), 10))
-    assert "Testchar level 2" in run_watch(tmp_path, script)[1]
+    assert "Testchar level 2" in run_watch(tmp_path, script)[0]
 
 
 def test_newest_snapshot_by_saved_at_is_described(tmp_path: Path) -> None:
@@ -111,7 +115,7 @@ def test_newest_snapshot_by_saved_at_is_described(tmp_path: Path) -> None:
     )
     write(file, snapshot_file("Old", 20, 100), 1000)
     script = Script(lambda: write(file, both, 2000))
-    assert "New level 3" in run_watch(tmp_path, script)[1]
+    assert "New level 3" in run_watch(tmp_path, script)[0]
 
 
 def test_unreadable_file_is_reported_and_watching_continues(tmp_path: Path) -> None:
@@ -123,9 +127,9 @@ def test_unreadable_file_is_reported_and_watching_continues(tmp_path: Path) -> N
         lambda: write(file, snapshot_file("Testchar", 9, 300), 3000),
     )
     lines = run_watch(tmp_path, script)
-    assert lines[1].startswith("CoachLink saved at 12:00:00: (could not read the snapshot: ")
-    assert lines[1].endswith(")")
-    assert "Testchar level 9" in lines[2]
+    assert lines[0].startswith("CoachLink saved at 12:00:00: (could not read the snapshot: ")
+    assert lines[0].endswith(")")
+    assert "Testchar level 9" in lines[1]
 
 
 def test_every_line_is_flushed() -> None:
@@ -136,8 +140,8 @@ def test_every_line_is_flushed() -> None:
             self.flushes += 1
             super().flush()
 
-    out = Recorder()
+    status = Recorder()
     folder = Path(__file__).parent
     with pytest.raises(KeyboardInterrupt):
-        watch(folder, out=out, sleep=Script(), clock=lambda: START)
-    assert out.flushes >= 1
+        watch(folder, out=io.StringIO(), status=status, sleep=Script(), clock=lambda: START)
+    assert status.flushes >= 1

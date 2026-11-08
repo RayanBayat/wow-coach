@@ -130,7 +130,9 @@ def test_watch_exits_cleanly_on_ctrl_c(
 
     monkeypatch.setattr(cli.time, "sleep", interrupt)
     assert main(["watch", "--wow-dir", str(wow_dir)]) == 0
-    assert capsys.readouterr().out.startswith("watching for /coach saves in ")
+    printed = capsys.readouterr()
+    assert printed.out == ""  # standard output carries only saves
+    assert printed.err.startswith("watching for /coach saves (started ")
 
 
 def test_mcp_command_starts_the_server(wow_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:

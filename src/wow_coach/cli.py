@@ -182,7 +182,7 @@ def _watch(wow_dir_flag: Path | None) -> int:
     folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
     # Ctrl+C is how you are supposed to stop watching, so it is not an error.
     with contextlib.suppress(KeyboardInterrupt):
-        watch(folder, out=sys.stdout, sleep=time.sleep)
+        watch(folder, out=sys.stdout, status=sys.stderr, sleep=time.sleep)
     return 0
 
 

@@ -70,15 +70,19 @@ def watch(
     wow_dir: Path,
     *,
     out: TextIO,
+    status: TextIO,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], datetime] = datetime.now,
 ) -> None:
     """Watch forever; stop it with Ctrl+C (the caller handles ``KeyboardInterrupt``).
 
+    Only save lines go to ``out``: a program such as Claude Code's Monitor treats every
+    line there as an event to answer. The start line goes to ``status`` (standard error
+    on the command line), so restarting the watcher is not an event.
     ``sleep`` and ``clock`` are arguments so tests can run this without real waiting.
     """
     last_seen = change_times(wow_dir)
-    _say(out, f"watching for /coach saves in {wow_dir} (started {clock():%H:%M:%S})")
+    _say(status, f"watching for /coach saves (started {clock():%H:%M:%S})")
     while True:
         sleep(POLL_SECONDS)
         if change_times(wow_dir) == last_seen:

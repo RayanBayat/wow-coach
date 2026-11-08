@@ -77,7 +77,9 @@ CoachLink saved at 21:56:54: Testchar level 8 (reason: coach)
 ```
 
 Claude Code's **Monitor** tool runs a command in the background and shows each printed line to
-Claude as a message, so Claude reacts. Each line ends with the reason:
+Claude as a message, so Claude reacts. Only saves are printed there: the "watching for /coach
+saves" line at the start goes to the error output, so a restart of the watcher is not a
+message. Each line ends with the reason:
 
 - `coach`: you typed `/coach`. The coach reads your character, celebrates what changed, fixes
   problems, and gives your next 1-3 steps.
