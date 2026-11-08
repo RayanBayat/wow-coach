@@ -67,7 +67,7 @@ def test_update_applies_good_changes_and_keeps_old_values_for_bad_ones() -> None
 
 
 def test_the_file_lives_in_the_data_folder(tmp_path: Path) -> None:
-    environ = {"WOW_COACH_DATA_DIR": str(tmp_path)}
+    environ = {"XDG_DATA_HOME": str(tmp_path), "LOCALAPPDATA": str(tmp_path)}
     assert settings_path(environ=environ).name == "settings.json"
 
 

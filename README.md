@@ -17,12 +17,12 @@ to code.
 
 ## Pick your way
 
-| | Way 1: paste | Way 2: connect an AI app | Way 3: skill and live mode | Way 4: the Claude Code agent |
-|---|---|---|---|---|
-| For | Anyone, with any AI chat | People who use an AI app that supports MCP | People who use an AI agent such as Claude Code | People who use Claude Code (the easiest) |
-| Effort | Lowest: install the addon only | Medium: also install uv and edit one settings file | Medium: also copy one folder; live mode needs Claude Code | One setup command, then one start command |
-| What you get | You type `/coach copy`, paste the text into the chat | The AI reads your character itself and remembers each character | The AI answers on its own each time you type `/coach` | A coach that sets everything up, lets you pick which character to continue, takes your goal and plans how to reach it |
-| Guide | [Use with any AI chat](docs/use-with-any-ai-chat.md) | [Connect an AI app](docs/connect-an-ai-app.md) | [Skill and live mode](docs/coach-skill-and-live-mode.md) | [The Claude Code agent](docs/claude-code-agent.md) |
+| | Way 1: paste | Way 2: connect an AI app | Way 3: skill and live mode | Way 4: the Claude Code agent | Way 5: the coach window |
+|---|---|---|---|---|---|
+| For | Anyone, with any AI chat | People who use an AI app that supports MCP | People who use an AI agent such as Claude Code | People who use Claude Code (the easiest) | People with a ChatGPT plan (Plus or Pro) |
+| Effort | Lowest: install the addon only | Medium: also install uv and edit one settings file | Medium: also copy one folder; live mode needs Claude Code | One setup command, then one start command | Install uv, sign in with ChatGPT once, then one start command |
+| What you get | You type `/coach copy`, paste the text into the chat | The AI reads your character itself and remembers each character | The AI answers on its own each time you type `/coach` | A coach that sets everything up, lets you pick which character to continue, takes your goal and plans how to reach it | Your own coach in a small window: answers your questions from the game by itself, notifies you or reads answers aloud, and speaks up when you die, level up or need repairs, if you want |
+| Guide | [Use with any AI chat](docs/use-with-any-ai-chat.md) | [Connect an AI app](docs/connect-an-ai-app.md) | [Skill and live mode](docs/coach-skill-and-live-mode.md) | [The Claude Code agent](docs/claude-code-agent.md) | [The coach window](docs/coach-window.md) |
 
 You can start with Way 1 and add the others later.
 
@@ -127,6 +127,10 @@ In a terminal, `wow-coach characters` and `wow-coach progress` show the same lis
   mail (with the mail's subject) or attacked you just before you died. It does not contain your account name, password or email.
 - The addon only uses the normal addon interface. It does not read game memory, inject code or
   automate play. Addons that use the normal interface are allowed under Blizzard's rules.
+- With the coach window (Way 5), wow-coach's own coach sends your character's data and your
+  questions to OpenAI through your own Sign in with ChatGPT, using your ChatGPT plan. Other
+  players' names are replaced with "a player" first, unless you allow them. Details:
+  [privacy notice](docs/privacy.md).
 - The coach never needs you to close the game for it.
 
 ## FAQ

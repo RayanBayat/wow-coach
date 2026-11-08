@@ -21,6 +21,7 @@ and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
 | `wow-coach` program | `src/wow_coach/` | Python 3.14 | Finds and reads the saved file; commands `status`, `characters`, `progress`, `watch`, `check`, `mcp`, `wiki`; the MCP server; player notes and character journals; game lookups |
 | Coach skill | `src/wow_coach/assets/skills/wow-coach/SKILL.md` | Markdown | Tells an AI how to coach, including how to plan toward a goal |
 | Coach agent | `src/wow_coach/assets/agents/wow-coach.md` | Markdown | A Claude Code agent: runs a whole session (checks setup, starts live mode, asks which character to continue, greets, plans, says goodbye) and brings its own MCP server |
+| Companion | `src/wow_coach/` (`companion.py`, `engine/`, `app/`, `ai/`, `triggers/`, `alerts.py`) | Python | wow-coach's own coach with the player's ChatGPT plan: `wow-coach signin`, `ask`, `app` (0.9.0) |
 | Tests | `tests/`, `addon/tests/` | Python, Lua | Python tests, and a Lua test run with a fake WoW API |
 
 ## Settings, setup and the packaged Claude files
@@ -357,6 +358,49 @@ CoachLinkAdvice = {
   - `tests/test_advice_luajit.py` loads written files in LuaJIT.
   - `tests/test_panel_end_to_end.py` writes an answer with the tool and has the real panel
     code show it.
+
+## The companion: wow-coach's own coach (0.9.0)
+
+`wow-coach signin`, `ask` and `app` let wow-coach answer by itself, using the player's
+ChatGPT plan. The pieces (the plan, the rules and the reasons: `docs/plans/coach-panel.md`):
+
+| Piece | Code | Job |
+|---|---|---|
+| Sign-in | `ai/chatgpt_signin.py`, `keychain.py` | Sign in with ChatGPT: OAuth with PKCE, a one-shot loopback server on 127.0.0.1:1455, the refresh token in the system keychain (never a file), a refresh lock file, revoke on sign-out. Details and what a real sign-in showed: `docs/plans/chatgpt-signin-notes.md` |
+| The plan | `ai/chatgpt_plan.py`, `usage.py` | The Responses API with the plan token (`store: false`, streamed, JSON schema answers). Every attempt is counted in `usage.jsonl` before it is sent, against the player's caps |
+| The engine | `engine/` | The prompt (coaching rules from the skill, then fenced data blocks: status, history, journal, player notes, conversation, question). Other players' names are replaced with "a player". The answer is JSON (title, steps, text, warnings), written to the Coach panel's file. The conversation is kept per character |
+| Putting it together | `companion.py` | One builder for the CLI and the window: the same keychain entry, usage log and refresh lock. `LiveCoach` reads `settings.json` before every answer |
+| Settings | `app_settings.py` | `settings.json` in the data folder, no secrets. Every value is checked; a damaged file gives the defaults |
+| When to speak | `triggers/` | Two saves give events (death, level-up, quest ready, bags...). The player's rules per event (off, notify, coach), quiet hours, quiet in instances, a cooldown, a timer, and an optional triage step with the smallest plan model. One save never costs more than one unasked AI call |
+| The window | `app/` | A page on 127.0.0.1 (see below), and a watcher that answers the Coach panel's questions and runs the triggers |
+| Alerts | `alerts.py` | Desktop notifications and read-aloud through the system's own programs (`notify-send`, `spd-say` or `espeak-ng`, `osascript` and `say`, PowerShell) |
+
+**The window's safety rules** (`app/server.py`):
+- **Where it listens:** 127.0.0.1 only, on a random port. The Host header must be exactly
+  `127.0.0.1:<port>`, against DNS rebinding.
+- **The session:** the start link carries a one-time token in its `#fragment`. The page trades
+  it once for an `HttpOnly`, `SameSite=Strict` session cookie, and every `/api` call needs that
+  cookie.
+- **Changes:** every POST also needs the `X-Wow-Coach` header and a matching `Origin`,
+  against CSRF from other websites.
+- **Headers:** a strict Content-Security-Policy with no inline scripts, `nosniff`,
+  `no-referrer`, `no-store`, `DENY` frames.
+- **Files and sizes:** a fixed list of static files, and capped request sizes.
+- **AI text** reaches the page only through `textContent`. A test fails on `innerHTML` and
+  similar.
+
+**Alerts never use a shell.** AI text is passed as separate program arguments, on stdin, or
+in an environment variable that a fixed script reads, and is cut and cleaned first. A
+compliance test fails on `shell=True`, `os.system` and `os.popen`.
+
+**Sign in with ChatGPT rules** (OpenAI's terms and UI guidelines):
+- The app signs in under its own name, and uses only the official flow (never passwords or
+  cookies).
+- The privacy notice (`docs/privacy.md`) is shown before signing in.
+- The wording is "Continue with ChatGPT", "You're using your ChatGPT plan", "Using ChatGPT
+  plan" and "Manage usage".
+- Plan use is free in wow-coach, and security problems are also reported to OpenAI
+  (`SECURITY.md`).
 
 ## Logging out
 

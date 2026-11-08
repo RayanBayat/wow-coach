@@ -69,6 +69,9 @@ def test_signin_opens_openai_and_says_the_plan_is_used(
     assert "You're using your ChatGPT plan." in out
     assert "https://chatgpt.com/settings/usage" in out
     assert "https://auth.openai.com/authorize?fake" in out  # in case the browser didn't open
+    # OpenAI's terms: a privacy notice before any data is processed, so it comes first.
+    assert out.index("Privacy notice:") < out.index("Signed in")
+    assert "docs/privacy.md" in out
 
 
 def test_signout_reports_when_the_revoke_was_not_confirmed(

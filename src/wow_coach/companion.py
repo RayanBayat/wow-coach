@@ -28,6 +28,13 @@ WELCOME_TEXT: Final = (
 )
 MANAGE_USAGE_URL: Final = "https://chatgpt.com/settings/usage"
 REFRESH_LOCK_NAME: Final = "chatgpt-refresh.lock"
+PRIVACY_URL: Final = "https://github.com/RayanBayat/wow-coach/blob/main/docs/privacy.md"
+# Shown before signing in: OpenAI's terms ask for a privacy notice before any data is processed.
+PRIVACY_SUMMARY: Final = (
+    "When you sign in, wow-coach sends your character's data, your questions and the recent "
+    "conversation to OpenAI, using your ChatGPT plan. Other players' names are hidden unless "
+    "you allow them. Nothing else leaves this computer."
+)
 
 
 def build_sign_in(environ: Mapping[str, str], keychain: Keychain | None = None) -> ChatGPTSignIn:

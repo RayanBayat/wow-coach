@@ -20,6 +20,8 @@ from wow_coach.characters import pick_character
 from wow_coach.check import run_check
 from wow_coach.companion import (
     MANAGE_USAGE_URL,
+    PRIVACY_SUMMARY,
+    PRIVACY_URL,
     WELCOME_TEXT,
     WELCOME_TITLE,
     build_coach,
@@ -226,6 +228,8 @@ def _watch(wow_dir_flag: Path | None) -> int:
 def _signin() -> int:
     """Sign in with ChatGPT on OpenAI's own page (opens the browser)."""
     sign_in = build_sign_in(os.environ)
+    print(PRIVACY_SUMMARY)
+    print(f"Privacy notice: {PRIVACY_URL}\n")
     print("Opening your browser. Choose Continue with ChatGPT and sign in.")
 
     def show_address(url: str) -> None:

@@ -4,6 +4,32 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **The coach window** (`wow-coach app`): your own coach in a small page on your computer,
+  answering with your ChatGPT plan ([guide](docs/coach-window.md)).
+  - It answers questions from the game's Coach panel by itself as soon as the game saves them.
+  - The answer shows at once in the window, so no second reload is needed. It can also
+    notify you or read it aloud, and it is put in the panel for your next `/reload`.
+  - Ask in the window too: type a question, or click "What next?".
+- **Sign in with ChatGPT**: `wow-coach signin` and `wow-coach signout`, through OpenAI's own
+  page. The sign-in is kept in your computer's password store, never in a file.
+- **`wow-coach ask "..."`**: ask your coach in the terminal.
+- **When the coach speaks up** (Settings in the window):
+  - Per kind of event (you died, died again soon, levelled up, a quest is ready, bags nearly
+    full, a new zone, unspent talent points, a gear hint, gear needs repair, a timer), choose
+    off, a notification, or advice from the coach.
+  - There are quiet hours, quiet in dungeons, a cooldown, and an optional small model that
+    decides when the bigger one is worth asking, in your own words.
+  - It is manual by default.
+- **Limits that protect your plan:** calls per hour and per day (20 and 100 at first), and
+  "Manage usage" links to your ChatGPT settings.
+- **Privacy:** other players' names are replaced with "a player" before anything goes to the
+  AI, unless you allow them. See the [privacy notice](docs/privacy.md) and
+  [SECURITY.md](SECURITY.md).
+
 ## [0.8.0] - 2026-11-08
 
 The Coach panel: your coach's next steps and answers inside the game, and a box to ask a
