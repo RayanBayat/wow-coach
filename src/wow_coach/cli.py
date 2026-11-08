@@ -8,6 +8,7 @@ Without it we use the ``WOW_COACH_WOW_DIR`` variable, then the folder saved by
 import argparse
 import contextlib
 import importlib.metadata
+import importlib.util
 import os
 import sys
 import time
@@ -126,7 +127,23 @@ def _build_parser() -> argparse.ArgumentParser:
         parents=[shared],
         help="open the coach window: answers, notifications and read-aloud while you play",
     )
-    app.add_argument("--port", type=int, default=0, help="the port to use (default: a free one)")
+    app.add_argument(
+        "--browser",
+        action="store_true",
+        help="use the window in your browser, even when the desktop app is installed "
+        "(--port and --no-browser also choose the browser window)",
+    )
+    app.add_argument(
+        "--hidden",
+        action="store_true",
+        help="start in the tray without showing the window (the login shortcut uses it)",
+    )
+    app.add_argument(
+        "--port",
+        type=int,
+        default=0,
+        help="browser window: the port to use (default: a free one)",
+    )
     app.add_argument(
         "--no-browser",
         action="store_true",
@@ -279,10 +296,33 @@ def _ask(wow_dir_flag: Path | None, words: Sequence[str], character: str | None)
     return 0
 
 
-def _app(wow_dir_flag: Path | None, port: int, open_in_browser: bool) -> int:
+DESKTOP_MISSING = (
+    "The desktop app needs the desktop extra: uv tool install "
+    '"wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach". '
+    "Opening the browser window instead."
+)
+
+
+def _desktop_installed() -> bool:
+    """True when PySide6 (Qt for Python, the desktop app's toolkit) can be imported."""
+    return importlib.util.find_spec("PySide6") is not None
+
+
+def _app(arguments: argparse.Namespace, wow_dir_flag: Path | None) -> int:
+    """Open the desktop app, or the browser window when asked or when Qt is not installed."""
     folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
-    run_app(wow_dir=folder, port=port, open_in_browser=open_in_browser)
-    return 0
+    wants_browser = arguments.browser or arguments.no_browser or arguments.port != 0
+    if not wants_browser and not _desktop_installed():
+        print(DESKTOP_MISSING)
+        wants_browser = True
+    if wants_browser:
+        run_app(wow_dir=folder, port=arguments.port, open_in_browser=not arguments.no_browser)
+        return 0
+    # Imported only here, not at the top of the file: Qt is an optional extra, and people
+    # without it must still be able to use every other command (and the browser window).
+    from wow_coach.desktop.run import run_desktop  # noqa: PLC0415 - optional extra, see above
+
+    return run_desktop(wow_dir=folder, start_hidden=arguments.hidden)
 
 
 def _mcp(wow_dir_flag: Path | None) -> int:
@@ -319,7 +359,7 @@ def main(
         "signin": _signin,
         "signout": _signout,
         "ask": lambda: _ask(flag, arguments.question, arguments.character),
-        "app": lambda: _app(flag, arguments.port, not arguments.no_browser),
+        "app": lambda: _app(arguments, flag),
     }
     try:
         return commands[arguments.command]()

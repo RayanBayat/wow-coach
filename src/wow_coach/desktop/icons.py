@@ -52,7 +52,8 @@ _SHAPES: Final[dict[str, str]] = {
     "send": '<path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/>',
     # Status icons for the Setup page.
     "ok": '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/>',
-    "attention": '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18l.01 0"/>',
+    "attention": '<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>',
+    "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
     "problem": '<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
 }
 
