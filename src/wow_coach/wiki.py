@@ -13,7 +13,7 @@ fake one.
 
 import json
 import re
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from wow_coach.errors import LookupFailed
 from wow_coach.web import Fetch
@@ -257,3 +257,38 @@ def _finish(body: str, max_chars: int, cut_note: str) -> str:
         cut = body[:max_chars].rsplit("\n", 1)[0]
         body = f"{cut}\n\n[Cut off at {max_chars} characters. {cut_note}]"
     return f"{body}\n\n{SOURCE_LINE}"
+
+
+# ---- which pages an answer used (so the coach can name its sources) --------------------
+
+_WIKI_PAGE_PREFIX = f"{WIKI_HOME}/wiki/"
+
+
+def _title_of_url(url: str) -> str:
+    """The title in a wiki link: ``.../wiki/Camping_101:_Cooking`` is "Camping 101: Cooking"."""
+    return unquote(url.removeprefix(_WIKI_PAGE_PREFIX)).replace("_", " ")
+
+
+def source_from_page_output(output: str) -> tuple[str, str] | None:
+    """(title, link) of the page ``answer_read_wiki_page`` returned; None if it was no page.
+
+    Only the two header lines count ("# Title" then "Page: link"), never text further down,
+    and only links to the wiki itself.
+    """
+    lines = output.split("\n", 2)
+    if len(lines) < 2 or not lines[0].startswith("# ") or not lines[1].startswith("Page: "):
+        return None
+    url = lines[1].removeprefix("Page: ").strip()
+    if not url.startswith(_WIKI_PAGE_PREFIX):
+        return None
+    return lines[0].removeprefix("# ").strip(), url
+
+
+def sources_from_results_output(output: str) -> tuple[tuple[str, str], ...]:
+    """(title, link) of every page ``answer_search_wiki`` or ``answer_find_quest`` listed."""
+    found: list[tuple[str, str]] = []
+    for line in output.splitlines():
+        if line.startswith("   ") and line.strip().startswith(_WIKI_PAGE_PREFIX):
+            url = line.strip()
+            found.append((_title_of_url(url), url))
+    return tuple(found)
