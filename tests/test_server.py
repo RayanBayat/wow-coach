@@ -164,15 +164,18 @@ def test_server_registers_all_tools_and_instructions() -> None:
         "find_quest",
         "list_characters",
         "progress_summary",
+        "questions_from_game",
         "read_coach_notes",
         "read_wiki_page",
         "recent_history",
         "save_coach_notes",
         "save_player_notes",
         "search_wiki",
+        "send_advice_to_game",
     ]
     assert server.instructions is not None
     assert "character_status" in server.instructions
+    assert "questions_from_game" in server.instructions
     assert "save_coach_notes" in server.instructions
     assert "read_wiki_page" in server.instructions
 
@@ -318,3 +321,67 @@ def test_wiki_tool_descriptions_say_what_they_are_good_for() -> None:
     assert "vendor" in tools["read_wiki_page"]
     assert "Forever" in tools["read_wiki_page"]
     assert "search_wiki" in tools["read_wiki_page"]
+
+
+def panel_game(tmp_path: Path) -> Path:
+    """A game folder with a save holding one question asked in the Coach panel."""
+    folder = tmp_path / "WTF" / "Account" / "ACC" / "SavedVariables"
+    folder.mkdir(parents=True)
+    question = (
+        '["questions"] = {\n{\n["id"] = "9600-1",\n'
+        '["text"] = "Where is Brill?",\n["askedAt"] = 9600,\n},\n},\n'
+    )
+    data = DATA.replace(
+        '["Testchar-Testrealm"] = {\n', '["Testchar-Testrealm"] = {\n' + question, 1
+    )
+    (folder / "CoachLink.lua").write_text(data, encoding="utf-8")
+    (tmp_path / "Interface" / "AddOns").mkdir(parents=True)
+    return tmp_path
+
+
+def test_questions_from_game_lists_the_open_question(tmp_path: Path) -> None:
+    server = build_server(wow_dir_flag=panel_game(tmp_path), environ={})
+    text = call_tool(server, "questions_from_game", {"character": "Testchar"})
+    assert "id 9600-1" in text
+    assert "Where is Brill?" in text
+
+
+def test_send_advice_to_game_answers_the_question(tmp_path: Path) -> None:
+    game = panel_game(tmp_path)
+    server = build_server(wow_dir_flag=game, environ={})
+    reply = call_tool(
+        server,
+        "send_advice_to_game",
+        {
+            "character": "Testchar",
+            "title": "Brill",
+            "steps": ["Follow the road east from Deathknell."],
+            "question_id": "9600-1",
+        },
+    )
+    assert "/reload" in reply
+    advice = game / "Interface" / "AddOns" / "CoachLink_Advice" / "Advice.lua"
+    written = advice.read_text(encoding="utf-8")
+    assert "Follow the road east from Deathknell." in written
+    assert "Where is Brill?" in written  # the answer carries its question
+    assert '["basedOnSave"] = 9700' in written
+    assert "no open questions" in call_tool(server, "questions_from_game", {})
+
+
+def test_send_advice_to_game_for_an_unknown_character_explains(tmp_path: Path) -> None:
+    server = build_server(wow_dir_flag=panel_game(tmp_path), environ={})
+    reply = call_tool(
+        server, "send_advice_to_game", {"character": "Nobody", "title": "x", "steps": []}
+    )
+    assert "Nobody" in reply
+    assert not (tmp_path / "Interface" / "AddOns" / "CoachLink_Advice").exists()
+
+
+def test_send_advice_to_game_writes_but_destroys_nothing() -> None:
+    tools = {tool.name: tool for tool in asyncio.run(build_server().list_tools())}
+    annotations = tools["send_advice_to_game"].annotations
+    assert annotations is not None
+    assert annotations.read_only_hint is False
+    assert annotations.destructive_hint is False
+    assert tools["questions_from_game"].annotations is not None
+    assert tools["questions_from_game"].annotations.read_only_hint is True
