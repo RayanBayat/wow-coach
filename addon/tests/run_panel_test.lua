@@ -607,6 +607,23 @@ inCombat = false
 fire("PLAYER_REGEN_ENABLED")
 check(panel() and panel().shown == true, "it opens when the fight ends")
 
+
+
+-------------------------------------------------------------------------------
+-- Optional: show a real Advice.lua written by wow-coach (tests/test_panel_end_to_end.py)
+--   luajit addon/tests/run_panel_test.lua --advice-file PATH STEP_TEXT BODY_TEXT
+-------------------------------------------------------------------------------
+
+if arg and arg[1] == "--advice-file" then
+    startSession()
+    dofile(arg[2])   -- sets CoachLinkAdvice, as the game does when it loads CoachLink_Advice
+    fire("PLAYER_ENTERING_WORLD", true, false)
+    SlashCmdList.COACHLINK("panel")
+    check(panel() and panel().shown == true, "a real Advice.lua: the panel opens")
+    check(has(stepsText(), arg[3]), "a real Advice.lua: the panel shows the step")
+    check(has(bodyText(), arg[4]), "a real Advice.lua: the panel shows the text")
+end
+
 if failures > 0 then
     io.stdout:write(failures .. " check(s) FAILED\n")
     os.exit(1)
