@@ -87,7 +87,8 @@ def _clean_pasted_path(text: str) -> Path:
     return Path(text.strip().strip("\"'")).expanduser()
 
 
-def _has_wtf(folder: Path) -> bool:
+def has_wtf(folder: Path) -> bool:
+    """True when ``folder`` looks like the game folder (it holds a ``WTF`` folder)."""
     return (folder / "WTF").is_dir()
 
 
@@ -102,7 +103,7 @@ def _ask_for_folder(ask: Ask, say: Say) -> Path | None:
         if not answer.strip():
             return None
         folder = _clean_pasted_path(answer)
-        if _has_wtf(folder):
+        if has_wtf(folder):
             return folder
         say(f"  That folder has no WTF folder inside it: {folder}")
         say("  Make sure it is _forever_ itself, and that you started the game at least once.")
@@ -132,7 +133,7 @@ def _find_game_folder(choices: SetupChoices, world: SetupWorld, say: Say) -> Pat
         return None
     else:
         folder, how = found.path, found.how_found
-        if not _has_wtf(folder):
+        if not has_wtf(folder):
             say(f"  PROBLEM: {folder} has no WTF folder. Start the game once, then run setup.")
             return None
     save_wow_dir(settings, folder)
@@ -146,7 +147,8 @@ def _find_game_folder(choices: SetupChoices, world: SetupWorld, say: Say) -> Pat
 # ---------------------------------------------------------------------------
 
 
-def _installed_addon_version(addon: Path) -> str | None:
+def installed_addon_version(addon: Path) -> str | None:
+    """The version written in the installed addon's .toc file, or None when not installed."""
     toc = addon / f"{ADDON_FOLDER}.toc"
     if not toc.is_file():
         return None
@@ -213,7 +215,17 @@ def _swap_in(staged_addon: Path, addon: Path) -> None:
         shutil.rmtree(old_copy)
 
 
-def _install_addon(addons: Path, version: str, download: FetchBytes) -> None:
+def install_addon(addons: Path, version: str, download: FetchBytes) -> None:
+    """Download CoachLink ``version`` and swap it into the ``AddOns`` folder.
+
+    The new copy is unpacked next to the old one first, so a failed download never leaves
+    the player without a working addon. ``wow-coach setup`` and the desktop app both use it.
+
+    Raises:
+        LookupFailed: If the download fails.
+        SetupFailed: If the zip is not a valid CoachLink zip.
+        OSError: If the folder cannot be written.
+    """
     addons.mkdir(parents=True, exist_ok=True)
     staging = addons / _STAGING
     if staging.exists():
@@ -233,13 +245,13 @@ def _setup_addon(game: Path, world: SetupWorld, say: Say) -> bool:
         say(f"  OK: {addon} is a link (a developer's copy). I left it alone.")
         return True
     version = world.package_version
-    installed = _installed_addon_version(addon)
+    installed = installed_addon_version(addon)
     if installed == version:
         say(f"  OK: CoachLink {version} is already installed in {addon}.")
         return True
     say(f"  Installing CoachLink {version} (installed now: {installed or 'nothing'}) ...")
     try:
-        _install_addon(addons, version, world.download)
+        install_addon(addons, version, world.download)
     except (LookupFailed, SetupFailed, OSError) as error:
         say(f"  PROBLEM: could not install the addon: {error}")
         say("  You can install it by hand: download the zip from")
@@ -252,6 +264,19 @@ def _setup_addon(game: Path, world: SetupWorld, say: Say) -> bool:
     return True
 
 
+def create_advice_folder(addons: Path) -> bool:
+    """Create or refresh ``CoachLink_Advice`` in ``addons``. Returns True when it was new.
+
+    Raises:
+        WowCoachError: If the folder is unsafe (for example a link).
+        OSError: If the folder cannot be written.
+        ValueError: If the addon's Interface number is not valid.
+    """
+    existed = (addons / ADVICE_ADDON_NAME).is_dir()
+    install_advice_addon(addons, interface=interface_from_coachlink(addons))
+    return not existed
+
+
 def _setup_advice_folder(game: Path, say: Say) -> bool:
     """Create or refresh CoachLink_Advice, the folder where the coach's answers for the
     in-game Coach panel go (a tiny data-only addon that wow-coach writes, see advice/)."""
@@ -259,7 +284,7 @@ def _setup_advice_folder(game: Path, say: Say) -> bool:
     folder = addons / ADVICE_ADDON_NAME
     existed = folder.is_dir()
     try:
-        install_advice_addon(addons, interface=interface_from_coachlink(addons))
+        create_advice_folder(addons)
     except (WowCoachError, OSError, ValueError) as error:
         say(f"  PROBLEM: could not prepare {folder} for the Coach panel: {error}")
         return False
