@@ -4,7 +4,7 @@ Shared by ``wow-coach signin``, ``signout``, ``ask`` and the coach window, so al
 use the same sign-in (the system keychain), the same usage caps and the same settings.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Final
 
@@ -15,6 +15,7 @@ from wow_coach.app_settings import AppSettings, load_settings, settings_path
 from wow_coach.config import config_path
 from wow_coach.datafolder import data_folder
 from wow_coach.engine.coach import ChatCoach
+from wow_coach.engine.contract import CoachReply
 from wow_coach.engine.model import choose_model
 from wow_coach.gamedir import resolve_game_folder
 from wow_coach.keychain import Keychain
@@ -35,16 +36,20 @@ def build_sign_in(environ: Mapping[str, str], keychain: Keychain | None = None) 
     return ChatGPTSignIn(keychain or Keychain(), lock_path=lock)
 
 
-def build_plan(
-    sign_in: ChatGPTSignIn, settings: AppSettings, environ: Mapping[str, str]
-) -> ChatGPTPlan:
-    """The player's ChatGPT plan as an AI provider, with the player's usage caps."""
-    log = UsageLog(
+def build_usage_log(settings: AppSettings, environ: Mapping[str, str]) -> UsageLog:
+    """The usage log with the player's caps (calls per hour and per day)."""
+    return UsageLog(
         usage_log_path(data_folder(environ=environ)),
         max_calls_per_hour=settings.max_calls_per_hour,
         max_calls_per_day=settings.max_calls_per_day,
     )
-    return ChatGPTPlan(sign_in, usage_log=log)
+
+
+def build_plan(
+    sign_in: ChatGPTSignIn, settings: AppSettings, environ: Mapping[str, str]
+) -> ChatGPTPlan:
+    """The player's ChatGPT plan as an AI provider, with the player's usage caps."""
+    return ChatGPTPlan(sign_in, usage_log=build_usage_log(settings, environ))
 
 
 def pick_plan_model(plan: ChatGPTPlan, settings: AppSettings) -> str:
@@ -70,3 +75,55 @@ def build_coach(*, wow_dir_flag: Path | None, environ: Mapping[str, str]) -> Cha
         wow_dir_flag, environ=environ, config_file=config_path(environ=environ)
     ).path
     return ChatCoach(plan, model=model, wow_dir=wow_dir, environ=environ, settings=settings)
+
+
+type CoachFactory = Callable[..., ChatCoach]
+
+
+class LiveCoach:
+    """A coach that reads the settings again before every answer.
+
+    The coach window can change the settings at any time (the model, whether other players'
+    names are shared...). This builds a fresh ``ChatCoach`` for each answer with the newest
+    settings, and remembers the chosen model so the plan's model list is fetched only when
+    the player's choice changes.
+    """
+
+    def __init__(
+        self,
+        plan: ChatGPTPlan,
+        *,
+        wow_dir: Path,
+        environ: Mapping[str, str],
+        settings_file: Path,
+        make_coach: CoachFactory = ChatCoach,
+    ) -> None:
+        self._plan = plan
+        self._wow_dir = wow_dir
+        self._environ = environ
+        self._settings_file = settings_file
+        self._make_coach = make_coach
+        self._model_for: tuple[str | None, str] | None = None  # (the player's choice, model)
+
+    def _model(self, settings: AppSettings) -> str:
+        if self._model_for is None or self._model_for[0] != settings.model:
+            self._model_for = (settings.model, pick_plan_model(self._plan, settings))
+        return self._model_for[1]
+
+    def _coach(self) -> ChatCoach:
+        settings = load_settings(self._settings_file)
+        return self._make_coach(
+            self._plan,
+            model=self._model(settings),
+            wow_dir=self._wow_dir,
+            environ=self._environ,
+            settings=settings,
+        )
+
+    def ask(self, question: str, *, character: str | None = None) -> CoachReply:
+        """Answer a question typed outside the game."""
+        return self._coach().ask(question, character=character)
+
+    def answer_open_questions(self, *, character: str | None = None) -> list[CoachReply]:
+        """Answer the questions waiting in the game's Coach panel."""
+        return self._coach().answer_open_questions(character=character)

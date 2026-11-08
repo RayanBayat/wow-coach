@@ -15,6 +15,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from wow_coach.ai.chatgpt_signin import REVOKE_NOT_CONFIRMED
+from wow_coach.app.run import run_app
 from wow_coach.characters import pick_character
 from wow_coach.check import run_check
 from wow_coach.companion import (
@@ -118,6 +119,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     ask.add_argument("question", nargs="*", help="your question, for example: what next?")
     ask.add_argument("--character", metavar="NAME", help="character name (default: newest save)")
+    app = commands.add_parser(
+        "app",
+        parents=[shared],
+        help="open the coach window: answers, notifications and read-aloud while you play",
+    )
+    app.add_argument("--port", type=int, default=0, help="the port to use (default: a free one)")
+    app.add_argument(
+        "--no-browser", action="store_true", help="only print the link, don't open the browser"
+    )
     return parser
 
 
@@ -262,6 +272,12 @@ def _ask(wow_dir_flag: Path | None, words: Sequence[str], character: str | None)
     return 0
 
 
+def _app(wow_dir_flag: Path | None, port: int, open_in_browser: bool) -> int:
+    folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
+    run_app(wow_dir=folder, port=port, open_in_browser=open_in_browser)
+    return 0
+
+
 def _mcp(wow_dir_flag: Path | None) -> int:
     run_mcp_server(wow_dir_flag)
     return 0
@@ -296,6 +312,7 @@ def main(
         "signin": _signin,
         "signout": _signout,
         "ask": lambda: _ask(flag, arguments.question, arguments.character),
+        "app": lambda: _app(flag, arguments.port, not arguments.no_browser),
     }
     try:
         return commands[arguments.command]()

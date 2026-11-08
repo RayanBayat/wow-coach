@@ -20,7 +20,7 @@ from pathlib import Path
 from mcp.server import MCPServer
 from mcp.types import ToolAnnotations
 
-from wow_coach.advice.contract import ADVICE_ADDON_NAME, ADVICE_FILE_NAME
+from wow_coach.advice.paths import advice_file_path
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.advice.tools import answer_questions_from_game, answer_send_advice_to_game
 from wow_coach.characters import pick_character, snapshot_time
@@ -63,11 +63,6 @@ SERVER_INSTRUCTIONS = (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def advice_file_path(wow_dir: Path) -> Path:
-    """Where wow-coach writes the Coach panel's answers (the CoachLink_Advice addon)."""
-    return wow_dir / "Interface" / "AddOns" / ADVICE_ADDON_NAME / ADVICE_FILE_NAME
 
 
 def _saved_at(character: Character) -> int | None:

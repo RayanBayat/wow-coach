@@ -1,6 +1,7 @@
 """Tests for the commands that use wow-coach's own coach: signin, signout, ask."""
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
@@ -110,3 +111,17 @@ def test_an_ai_problem_is_one_plain_sentence(
     captured = capsys.readouterr()
     assert captured.err.strip() == "wow-coach: Your ChatGPT plan's limit is reached for now."
     assert "Traceback" not in captured.err
+
+
+def test_app_opens_the_window_for_the_game_folder(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (tmp_path / "WTF").mkdir()
+    started: list[tuple[Path, int, bool]] = []
+
+    def fake_run_app(*, wow_dir: Path, port: int, open_in_browser: bool) -> None:
+        started.append((wow_dir, port, open_in_browser))
+
+    monkeypatch.setattr(cli, "run_app", fake_run_app)
+    assert main(["app", "--wow-dir", str(tmp_path), "--port", "8765", "--no-browser"]) == 0
+    assert started == [(tmp_path, 8765, False)]

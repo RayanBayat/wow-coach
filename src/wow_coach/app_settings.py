@@ -9,11 +9,13 @@ import json
 import os
 import tempfile
 from collections.abc import Mapping
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import Final
 
 from wow_coach.datafolder import data_folder
+from wow_coach.triggers.contract import TriggerSettings
+from wow_coach.triggers.settings import trigger_settings_from_dict, trigger_settings_to_dict
 
 SETTINGS_FILE_NAME: Final = "settings.json"
 MAX_SETTINGS_BYTES: Final = 64_000
@@ -42,6 +44,8 @@ class AppSettings:
     # Send other players' names (group members, mail senders, killers) to the AI. Off:
     # they are replaced with "a player" before anything leaves the PC.
     share_other_player_names: bool = False
+    # When the coach speaks up by itself (deaths, level-ups, a timer...). Manual by default.
+    triggers: TriggerSettings = field(default_factory=TriggerSettings)
 
 
 DEFAULTS: Final = AppSettings()
@@ -88,7 +92,15 @@ def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
         share_other_player_names=_clean_flag(
             data.get("share_other_player_names"), DEFAULTS.share_other_player_names
         ),
+        triggers=trigger_settings_from_dict(data.get("triggers")),
     )
+
+
+def settings_to_dict(settings: AppSettings) -> dict[str, object]:
+    """The settings as plain JSON-ready data (also what the coach window shows)."""
+    data = asdict(settings)
+    data["triggers"] = trigger_settings_to_dict(settings.triggers)
+    return data
 
 
 def load_settings(path: Path) -> AppSettings:
@@ -105,7 +117,7 @@ def load_settings(path: Path) -> AppSettings:
 def save_settings(path: Path, settings: AppSettings) -> None:
     """Write the settings file in one step (a temp file, then a rename)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    text = json.dumps(asdict(settings), indent=2, sort_keys=True) + "\n"
+    text = json.dumps(settings_to_dict(settings), indent=2, sort_keys=True) + "\n"
     handle, temp_name = tempfile.mkstemp(dir=path.parent, prefix=".settings-", suffix=".part")
     try:
         with os.fdopen(handle, "w", encoding="utf-8") as file:
@@ -117,14 +129,23 @@ def save_settings(path: Path, settings: AppSettings) -> None:
 
 
 def update_settings(settings: AppSettings, changes: Mapping[str, object]) -> AppSettings:
-    """``settings`` with ``changes`` applied (unknown names ignored, bad values refused)."""
-    known = {item.name for item in fields(AppSettings)}
-    merged = {**asdict(settings), **{k: v for k, v in changes.items() if k in known}}
+    """``settings`` with ``changes`` applied (unknown names ignored, bad values refused).
+
+    ``changes["triggers"]`` may hold only some trigger fields; the others stay as they were.
+    """
+    simple = {item.name for item in fields(AppSettings)} - {"triggers"}
+    merged = {**settings_to_dict(settings), **{k: v for k, v in changes.items() if k in simple}}
     cleaned = settings_from_dict(merged)
     # A bad value in `changes` falls back to the default; keep the old value instead.
-    kept = {
+    kept: dict[str, object] = {
         name: getattr(settings, name)
-        for name in known
+        for name in simple
         if name in changes and getattr(cleaned, name) != changes[name]
     }
-    return replace(cleaned, **kept)
+    trigger_changes = changes.get("triggers")
+    if isinstance(trigger_changes, Mapping):
+        old = trigger_settings_to_dict(settings.triggers)
+        kept["triggers"] = trigger_settings_from_dict({**old, **trigger_changes})
+    else:
+        kept["triggers"] = settings.triggers
+    return replace(cleaned, **kept)  # type: ignore[arg-type]  # values come from the dataclass

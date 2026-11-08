@@ -13,8 +13,8 @@ import threading
 from pathlib import Path
 
 from wow_coach.advice.contract import AdviceAnswer
+from wow_coach.advice.paths import advice_file_path
 from wow_coach.advice.reader import read_advice_file
-from wow_coach.server import advice_file_path
 
 type AnswerId = tuple[str, int, str]  # (character key, answered_at, title)
 

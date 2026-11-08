@@ -55,6 +55,12 @@ class UsageLog:
         self._day_cap = max_calls_per_day
         self._clock = clock
 
+    def set_caps(self, *, max_calls_per_hour: int | None, max_calls_per_day: int | None) -> None:
+        """Change the caps (the coach window does this when the player saves new ones)."""
+        with _LOCK:
+            self._hour_cap = max_calls_per_hour
+            self._day_cap = max_calls_per_day
+
     def check_allowed(self) -> None:
         """Raise ``PlanLimitReached`` if one more call would go over a cap."""
         with _LOCK:

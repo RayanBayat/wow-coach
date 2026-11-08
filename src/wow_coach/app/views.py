@@ -5,17 +5,18 @@ describes them. Every function returns simple values (str, int, list, dict) so t
 can send them as JSON.
 """
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 from wow_coach.advice.contract import AdviceAnswer, AdviceFile, Question
+from wow_coach.advice.paths import advice_file_path
 from wow_coach.advice.questions import open_questions
 from wow_coach.advice.reader import read_advice_file
-from wow_coach.app_settings import AppSettings
+from wow_coach.app_settings import AppSettings, settings_to_dict
+from wow_coach.characters import pick_character
 from wow_coach.errors import CoachDataMissing, WowCoachError
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
-from wow_coach.server import advice_file_path, pick_character
 from wow_coach.usage import DAY_SECONDS, HOUR_SECONDS
 
 NO_SAVE_YET = "No saved game data yet. In the game, type /coach once, then come back."
@@ -71,7 +72,7 @@ def question_to_json(question: Question) -> dict[str, object]:
 
 def settings_to_json(settings: AppSettings) -> dict[str, object]:
     """The settings as plain values."""
-    return dict(asdict(settings))
+    return settings_to_dict(settings)
 
 
 def select_character(game: GameView, wanted: str | None) -> Character | None:

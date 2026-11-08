@@ -69,3 +69,27 @@ def test_update_applies_good_changes_and_keeps_old_values_for_bad_ones() -> None
 def test_the_file_lives_in_the_data_folder(tmp_path: Path) -> None:
     environ = {"WOW_COACH_DATA_DIR": str(tmp_path)}
     assert settings_path(environ=environ).name == "settings.json"
+
+
+def test_trigger_rules_are_saved_and_read_back(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    start = update_settings(
+        DEFAULTS, {"triggers": {"modes": {"died": "notify"}, "every_minutes": 30}}
+    )
+    save_settings(path, start)
+    loaded = load_settings(path)
+    assert loaded.triggers.modes["died"] == "notify"
+    assert loaded.triggers.every_minutes == 30
+    assert loaded.triggers.modes["asked"] == "coach"  # always: the player asked
+
+
+def test_a_partial_trigger_change_keeps_the_other_rules() -> None:
+    start = update_settings(DEFAULTS, {"triggers": {"cooldown_minutes": 5, "use_triage": True}})
+    changed = update_settings(start, {"triggers": {"use_triage": False}})
+    assert changed.triggers.cooldown_minutes == 5
+    assert changed.triggers.use_triage is False
+
+
+def test_by_default_the_coach_only_answers_when_asked() -> None:
+    modes = DEFAULTS.triggers.modes
+    assert {kind for kind, mode in modes.items() if mode != "off"} == {"asked"}

@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TextIO
 
-from wow_coach.advice.contract import ADVICE_ADDON_NAME, ADVICE_FILE_NAME
+from wow_coach.advice.paths import advice_file_path
 from wow_coach.advice.questions import open_questions
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.errors import WowCoachError
@@ -69,7 +69,7 @@ def describe_newest_snapshot(wow_dir: Path) -> str:
 
 def _open_questions_text(wow_dir: Path, character: Character) -> str:
     """``1 open question`` from the Coach panel (questions wow-coach hasn't answered yet)."""
-    advice_file = wow_dir / "Interface" / "AddOns" / ADVICE_ADDON_NAME / ADVICE_FILE_NAME
+    advice_file = advice_file_path(wow_dir)
     count = len(open_questions(character, read_advice_file(advice_file)))
     return f"{count} open question" + ("" if count == 1 else "s")
 
