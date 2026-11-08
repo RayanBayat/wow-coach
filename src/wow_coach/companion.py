@@ -32,8 +32,8 @@ PRIVACY_URL: Final = "https://github.com/RayanBayat/wow-coach/blob/main/docs/pri
 # Shown before signing in: OpenAI's terms ask for a privacy notice before any data is processed.
 PRIVACY_SUMMARY: Final = (
     "When you sign in, wow-coach sends your character's data, your questions, the recent "
-    "conversation and the coach's notes to OpenAI, using your ChatGPT plan. Other players' names are hidden unless "
-    "you allow them. Nothing else leaves this computer."
+    "conversation and the coach's notes to OpenAI, using your ChatGPT plan. Other players' "
+    "names are hidden unless you allow them. Nothing else leaves this computer."
 )
 
 
