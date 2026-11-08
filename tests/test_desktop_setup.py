@@ -293,6 +293,17 @@ def test_choosing_the_right_folder_saves_it_and_says_to_restart(
     assert "Restart WoW Coach" in page.message.text()
     assert page.game_card.sentence.text() == str(new)
     assert load_saved_wow_dir(tmp_path / "config.json") == new
+    # A button does the restart, so the player need not know that closing only hides the window.
+    assert not page.restart_button.isHidden()
+    with qtbot.waitSignal(page.restart_requested, timeout=1000):
+        page.restart_button.click()
+
+
+def test_the_restart_button_only_shows_after_a_folder_change(qtbot: QtBot, tmp_path: Path) -> None:
+    page = make_page(qtbot, make_services(tmp_path), make_game(tmp_path))
+    assert page.restart_button.isHidden()
+    page.addon_card.button.click()  # some other action
+    assert page.restart_button.isHidden()
 
 
 def test_cancelling_the_folder_dialog_changes_nothing(qtbot: QtBot, tmp_path: Path) -> None:

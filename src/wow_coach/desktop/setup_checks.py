@@ -52,6 +52,7 @@ class ActionResult:
 
     ok: bool
     sentence: str
+    needs_restart: bool = False  # the app must be started again for this to take effect
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,7 +152,7 @@ def change_game_folder(chosen: Path, config_file: Path) -> ActionResult:
         save_wow_dir(config_file, chosen)
     except OSError as error:
         return ActionResult(False, f"I could not save the folder: {error}. Please try again.")
-    return ActionResult(True, "Saved. Restart WoW Coach so it watches this folder.")
+    return ActionResult(True, "Saved. Restart WoW Coach so it watches this folder.", True)
 
 
 def install_or_update_addon(game_dir: Path, app_version: str, download: FetchBytes) -> ActionResult:

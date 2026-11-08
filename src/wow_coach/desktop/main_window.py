@@ -8,7 +8,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -39,6 +39,9 @@ NAV_ICON_SIZE: Final = 20
 
 class MainWindow(QMainWindow):
     """The app's one main window."""
+
+    # The player pressed "Restart WoW Coach" (on the Setup page). ``run.py`` does the restart.
+    restart_requested = Signal()
 
     def __init__(
         self,
@@ -86,6 +89,9 @@ class MainWindow(QMainWindow):
         for page in self.pages:
             if isinstance(page, SetupPage) and game_dir is not None:
                 page.set_game_dir(game_dir)
+        for page in self.pages:
+            if isinstance(page, SetupPage):
+                page.restart_requested.connect(self.restart_requested)
         if self.pages:
             self.show_page(self.pages[0].name)
         self._paint_nav_icons()

@@ -194,6 +194,8 @@ class SetupPage(Page):
     # Results come from a background thread; signals bring them to the window's thread.
     _snapshot_ready = Signal(object)
     _action_finished = Signal(object)
+    # The player pressed "Restart WoW Coach" (after changing the game folder).
+    restart_requested = Signal()
 
     def __init__(
         self,
@@ -222,6 +224,11 @@ class SetupPage(Page):
         self.message.setWordWrap(True)
         self.message.setTextFormat(Qt.TextFormat.PlainText)
         self.message.hide()
+        self.restart_button = QPushButton("Restart WoW Coach")
+        self.restart_button.setProperty("kind", "primary")
+        self.restart_button.setToolTip("Close WoW Coach and open it again, using the new folder.")
+        self.restart_button.clicked.connect(self.restart_requested)
+        self.restart_button.hide()
 
         self.game_card = SetupCard("Game folder")
         self.addon_card = SetupCard("CoachLink addon")
@@ -244,6 +251,7 @@ class SetupPage(Page):
         column.addWidget(heading)
         column.addWidget(intro)
         column.addWidget(self.message)
+        column.addWidget(self.restart_button, 0, Qt.AlignmentFlag.AlignLeft)
         for card in (self.game_card, self.addon_card, self.answers_card, self.key_card):
             column.addWidget(card)
         column.addWidget(self.menu_card)
@@ -457,8 +465,10 @@ class SetupPage(Page):
 
     def _on_action_finished(self, result: object) -> None:
         self._busy = False
+        self.restart_button.hide()
         if isinstance(result, ActionResult):
             self._show_message(result.sentence, error=not result.ok)
+            self.restart_button.setVisible(result.ok and result.needs_restart)
         self.refresh()
 
     def _apply_busy(self) -> None:
