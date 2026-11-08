@@ -28,8 +28,8 @@ class FakeChatCoach:
         del plan  # the fake never calls the AI
         FakeChatCoach.made.append(options)
 
-    def ask(self, question: str, *, character: str | None = None) -> str:
-        del character
+    def ask(self, question: str, *, character: str | None = None, source: str = "app") -> str:
+        del character, source
         return f"answer to {question}"
 
     def answer_open_questions(self, *, character: str | None = None) -> list[str]:
