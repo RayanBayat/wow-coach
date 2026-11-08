@@ -141,6 +141,7 @@ def test_a_save_shows_a_calm_note_that_fades_and_updates_the_pill(
 ) -> None:
     setup = start(qtbot, tmp_path, answers=[sample_answer("Old", answered_at=2_000)])
     before = setup.page.chat.message_count()
+    setup.page._save_notice_timer.setInterval(50)  # the real note stays about 3 seconds
     setup.core.raw_state = sample_state(
         last_save=2_599, answers=[sample_answer("Old", answered_at=2_000)]
     )
