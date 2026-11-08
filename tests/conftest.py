@@ -1,6 +1,7 @@
 """Shared test setup."""
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -20,3 +21,7 @@ def _isolated_settings(
     monkeypatch.setenv("WOW_COACH_NOTES_FILE", str(folder / "coach-notes.md"))
     # Everything else wow-coach keeps (settings, conversations, the usage log...) goes here.
     monkeypatch.setenv("WOW_COACH_DATA_DIR", str(folder / "data"))
+
+
+# jeepney (the D-Bus library behind the overlay hotkey) is only installed on Linux.
+collect_ignore = [] if sys.platform.startswith("linux") else ["test_desktop_portal_bus.py"]

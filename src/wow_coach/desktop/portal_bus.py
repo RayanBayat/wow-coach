@@ -1,30 +1,55 @@
-"""A very small client for the "global shortcuts" portal of a Linux desktop.
+"""A small client for the "global shortcuts" portal of a Linux desktop, using ``jeepney``.
 
 A *portal* is a service every modern Linux desktop offers over D-Bus (the system that lets
 programs talk to each other). The ``org.freedesktop.portal.GlobalShortcuts`` portal is the
 polite way to ask the desktop: "please tell me when the player presses this key, even while
 another program (the game) has the keyboard."
 
-Why not Qt's own D-Bus classes (``QtDBus``)? The call that registers a shortcut
-(``BindShortcuts``) needs a list of structures (``a(sa{sv})`` in D-Bus's type language), and
-Qt for Python cannot build one. Worse, a wrong guess makes libdbus abort the whole program.
-So this file talks to ``libdbus`` (the C library Qt's D-Bus support is built on) with
-``ctypes``, and only does what the portal needs:
+``jeepney`` is a D-Bus library written in plain Python (no C code), so a mistake in a message
+raises a normal Python error instead of crashing the whole program. We use its simple
+"blocking" style: the whole conversation runs in one background thread, one step after the
+other, so the code reads like the story:
 
-* ask for a session and bind one shortcut,
-* receive the portal's two kinds of messages (``Response`` and ``Activated``).
+1. connect to the session bus,
+2. ``CreateSession``, then wait for the portal's ``Response``,
+3. ``BindShortcuts``, then wait for its ``Response`` (the desktop may ask the player),
+4. listen for ``Activated`` until the app closes,
+5. ``Close`` the session and hang up.
 
-The rest of the app only sees the small ``PortalConnection`` interface, so tests use a fake
-and never touch a real D-Bus. This module is only loaded on Linux.
+Only that thread ever touches the connection, which keeps things simple and safe. Every
+failure becomes a ``PortalFailed`` report, never an exception that escapes the thread.
+
+This module imports ``jeepney``, which is only installed on Linux, so only import it on Linux.
 """
 
-import ctypes
-import ctypes.util
 import logging
+import secrets
+import threading
+import time
+from collections import deque
 from collections.abc import Callable, Mapping
-from typing import Any, Final, NamedTuple, Protocol
+from typing import Any, Final
 
-from PySide6.QtCore import QObject, QSocketNotifier
+from jeepney import (
+    DBusAddress,
+    DBusErrorResponse,
+    HeaderFields,
+    MatchRule,
+    Message,
+    MessageType,
+    message_bus,
+    new_method_call,
+)
+from jeepney.io.blocking import open_dbus_connection
+
+from wow_coach.desktop.portal_types import (
+    PortalActivated,
+    PortalBound,
+    PortalEvent,
+    PortalFailed,
+    PortalFailure,
+    ShortcutRequest,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -33,420 +58,326 @@ PORTAL_PATH: Final = "/org/freedesktop/portal/desktop"
 SHORTCUTS_INTERFACE: Final = "org.freedesktop.portal.GlobalShortcuts"
 REQUEST_INTERFACE: Final = "org.freedesktop.portal.Request"
 SESSION_INTERFACE: Final = "org.freedesktop.portal.Session"
-CALL_TIMEOUT_MS: Final = 3000  # the portal answers a call at once; the user's answer comes later
+PROPERTIES_INTERFACE: Final = "org.freedesktop.DBus.Properties"
 
-# D-Bus type letters, as numbers (libdbus wants the character code).
-_STRING = ord("s")
-_OBJECT_PATH = ord("o")
-_SIGNATURE = ord("g")
-_VARIANT = ord("v")
-_ARRAY = ord("a")
-_STRUCT = ord("r")
-_DICT_ENTRY = ord("e")
-_BASIC_NUMBERS: Final = {ord(letter): letter for letter in "ybnqiuxtd"}
-_BOOLEAN = ord("b")
+# How long to wait for each answer. The portal answers a call at once, but the *Response* to
+# BindShortcuts waits for the player: KDE shows a dialog the first time, so allow a minute.
+CALL_TIMEOUT: Final = 5.0
+RESPONSE_TIMEOUT: Final = 10.0
+BIND_RESPONSE_TIMEOUT: Final = 60.0
+CLOSE_TIMEOUT: Final = 1.0
+# While waiting we look up from the socket this often to see if the app wants to quit.
+POLL_SECONDS: Final = 0.2
+# How long ``close`` waits for the background thread to finish.
+JOIN_SECONDS: Final = 3.0
 
-_SESSION_BUS = 0
-_MESSAGE_ERROR = 3
-_MESSAGE_SIGNAL = 4
-
-
-class PortalError(Exception):
-    """The portal or the D-Bus connection could not be used. The text is for the log."""
+# Response codes from the portal.
+_RESPONSE_OK: Final = 0
+_RESPONSE_CANCELLED: Final = 1  # the player said no
 
 
-class PortalConnection(Protocol):
-    """What the hotkey needs from the portal. Real: ``LibDBusPortal``. Tests: a fake.
-
-    The two handlers are called later, when the portal sends a message:
-
-    * ``on_response(request_path, code, results)``: the answer to a request (code 0 = yes,
-      1 = the player said no, 2 = something else went wrong).
-    * ``on_activated(session_path, shortcut_id)``: the player pressed the key.
-    """
-
-    on_response: Callable[[str, int, Mapping[str, object]], None] | None
-    on_activated: Callable[[str, str], None] | None
-
-    def portal_version(self) -> int | None:
-        """The global-shortcuts portal's version, or None when this desktop has none."""
-
-    def create_session(self, handle_token: str, session_token: str) -> None:
-        """Ask for a session. The answer arrives through ``on_response``."""
-
-    def bind_shortcut(
-        self, session: str, shortcut_id: str, description: str, trigger: str, handle_token: str
-    ) -> None:
-        """Ask the desktop to bind one shortcut. The answer arrives through ``on_response``."""
-
-    def close_session(self, session: str) -> None:
-        """Tell the portal we are done (the shortcut stops working)."""
-
-    def close(self) -> None:
-        """Hang up."""
+class _StoppedError(Exception):
+    """The app asked us to stop while we were waiting (not an error)."""
 
 
-# ---- libdbus through ctypes ---------------------------------------------------------------
+class _TimedOutError(Exception):
+    """The desktop did not answer in time."""
 
 
-class _Error(ctypes.Structure):
-    """libdbus's ``DBusError``."""
+class _RefusedError(Exception):
+    """The portal said no. ``reason`` is what we report to the hotkey."""
 
-    _fields_ = (
-        ("name", ctypes.c_char_p),
-        ("message", ctypes.c_char_p),
-        ("dummy", ctypes.c_uint),
-        ("padding", ctypes.c_void_p),
+    def __init__(self, reason: PortalFailure) -> None:
+        super().__init__(reason.value)
+        self.reason = reason
+
+
+# ---- the messages we send ------------------------------------------------------------------
+
+
+def _text(value: str) -> tuple[str, str]:
+    """A D-Bus *variant* holding a string: jeepney writes a variant as (signature, value)."""
+    return ("s", value)
+
+
+def _portal_address(interface: str) -> DBusAddress:
+    return DBusAddress(PORTAL_PATH, bus_name=PORTAL_SERVICE, interface=interface)
+
+
+def read_version_message() -> Message:
+    """``Properties.Get(interface, "version")``: fails on desktops without this portal."""
+    return new_method_call(
+        _portal_address(PROPERTIES_INTERFACE), "Get", "ss", (SHORTCUTS_INTERFACE, "version")
     )
 
 
-class _Iter(ctypes.Structure):
-    """libdbus's ``DBusMessageIter``: a bookmark inside a message. Only libdbus looks inside."""
+def create_session_message(handle_token: str, session_token: str) -> Message:
+    """``CreateSession(a{sv} options)``."""
+    options = {"handle_token": _text(handle_token), "session_handle_token": _text(session_token)}
+    return new_method_call(
+        _portal_address(SHORTCUTS_INTERFACE), "CreateSession", "a{sv}", (options,)
+    )
 
-    _fields_ = (("opaque", ctypes.c_uint64 * 16),)
 
+def bind_shortcuts_message(session: str, request: ShortcutRequest, handle_token: str) -> Message:
+    """``BindShortcuts(o session, a(sa{sv}) shortcuts, s parent_window, a{sv} options)``.
 
-def load_libdbus() -> Any:
-    """Load libdbus and declare the C types of the functions used. Raises ``PortalError``."""
-    name = ctypes.util.find_library("dbus-1") or "libdbus-1.so.3"
-    try:
-        lib = ctypes.CDLL(name)
-    except OSError as error:
-        raise PortalError(f"libdbus is not installed ({error})") from error
-    pointer, string, integer = ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int
-    signatures: dict[str, tuple[Any, list[Any]]] = {
-        "dbus_error_init": (None, [ctypes.POINTER(_Error)]),
-        "dbus_error_free": (None, [ctypes.POINTER(_Error)]),
-        "dbus_bus_get_private": (pointer, [integer, ctypes.POINTER(_Error)]),
-        "dbus_bus_get_unique_name": (string, [pointer]),
-        "dbus_bus_add_match": (None, [pointer, string, ctypes.POINTER(_Error)]),
-        "dbus_connection_set_exit_on_disconnect": (None, [pointer, integer]),
-        "dbus_connection_get_unix_fd": (integer, [pointer, ctypes.POINTER(integer)]),
-        "dbus_connection_read_write": (integer, [pointer, integer]),
-        "dbus_connection_pop_message": (pointer, [pointer]),
-        "dbus_connection_send_with_reply_and_block": (
-            pointer,
-            [pointer, pointer, integer, ctypes.POINTER(_Error)],
-        ),
-        "dbus_connection_close": (None, [pointer]),
-        "dbus_connection_unref": (None, [pointer]),
-        "dbus_message_new_method_call": (pointer, [string, string, string, string]),
-        "dbus_message_unref": (None, [pointer]),
-        "dbus_message_get_type": (integer, [pointer]),
-        "dbus_message_get_path": (string, [pointer]),
-        "dbus_message_get_interface": (string, [pointer]),
-        "dbus_message_get_member": (string, [pointer]),
-        "dbus_message_iter_init": (integer, [pointer, ctypes.POINTER(_Iter)]),
-        "dbus_message_iter_init_append": (None, [pointer, ctypes.POINTER(_Iter)]),
-        "dbus_message_iter_append_basic": (integer, [ctypes.POINTER(_Iter), integer, pointer]),
-        "dbus_message_iter_open_container": (
-            integer,
-            [ctypes.POINTER(_Iter), integer, string, ctypes.POINTER(_Iter)],
-        ),
-        "dbus_message_iter_close_container": (
-            integer,
-            [ctypes.POINTER(_Iter), ctypes.POINTER(_Iter)],
-        ),
-        "dbus_message_iter_get_arg_type": (integer, [ctypes.POINTER(_Iter)]),
-        "dbus_message_iter_get_basic": (None, [ctypes.POINTER(_Iter), pointer]),
-        "dbus_message_iter_recurse": (None, [ctypes.POINTER(_Iter), ctypes.POINTER(_Iter)]),
-        "dbus_message_iter_next": (integer, [ctypes.POINTER(_Iter)]),
+    The shortcut list is an array of structures: a name and a dictionary of details. This is
+    the part Qt's own D-Bus classes cannot build.
+    """
+    details = {
+        "description": _text(request.description),
+        "preferred_trigger": _text(request.trigger),
     }
-    for function_name, (result, arguments) in signatures.items():
-        function = getattr(lib, function_name)
-        function.restype = result
-        function.argtypes = arguments
-    return lib
+    shortcuts = [(request.shortcut_id, details)]
+    # The empty parent window means "no window": the desktop asks in its own dialog.
+    body = (session, shortcuts, "", {"handle_token": _text(handle_token)})
+    return new_method_call(
+        _portal_address(SHORTCUTS_INTERFACE), "BindShortcuts", "oa(sa{sv})sa{sv}", body
+    )
 
 
-class _Writer:
-    """Fills in the arguments of one outgoing D-Bus message."""
-
-    def __init__(self, lib: Any, message: Any) -> None:
-        self._lib = lib
-        self._root = _Iter()
-        lib.dbus_message_iter_init_append(message, ctypes.byref(self._root))
-
-    def text(self, kind: int, value: str, into: _Iter | None = None) -> None:
-        """Add a string (``kind`` is the type letter: ``s`` or ``o``)."""
-        raw = ctypes.c_char_p(value.encode("utf-8"))
-        target = self._root if into is None else into
-        self._lib.dbus_message_iter_append_basic(
-            ctypes.byref(target), kind, ctypes.cast(ctypes.byref(raw), ctypes.c_void_p)
-        )
-
-    def open(self, kind: int, signature: bytes | None, into: _Iter | None = None) -> _Iter:
-        """Start an array, structure, dictionary entry or variant. Close it with ``close``."""
-        parent = self._root if into is None else into
-        child = _Iter()
-        self._lib.dbus_message_iter_open_container(
-            ctypes.byref(parent), kind, signature, ctypes.byref(child)
-        )
-        return child
-
-    def close(self, child: _Iter, into: _Iter | None = None) -> None:
-        parent = self._root if into is None else into
-        self._lib.dbus_message_iter_close_container(ctypes.byref(parent), ctypes.byref(child))
-
-    def text_options(self, options: Mapping[str, str], into: _Iter | None = None) -> None:
-        """Add an ``a{sv}`` dictionary whose values are all strings."""
-        array = self.open(_ARRAY, b"{sv}", into)
-        for key, value in options.items():
-            entry = self.open(_DICT_ENTRY, None, array)
-            self.text(_STRING, key, entry)
-            variant = self.open(_VARIANT, b"s", entry)
-            self.text(_STRING, value, variant)
-            self.close(variant, entry)
-            self.close(entry, array)
-        self.close(array, into)
+def close_session_message(session: str) -> Message:
+    """``Session.Close()`` on the session object."""
+    address = DBusAddress(session, bus_name=PORTAL_SERVICE, interface=SESSION_INTERFACE)
+    return new_method_call(address, "Close")
 
 
-class _Entry(NamedTuple):
-    """One ``key: value`` pair of a D-Bus dictionary (kept apart from a two-field structure)."""
-
-    key: object
-    value: object
+# ---- reading what comes back ---------------------------------------------------------------
 
 
-def _read_value(lib: Any, bookmark: _Iter) -> object:
-    """The value the bookmark points at, as Python data.
+def request_path(unique_name: str, handle_token: str) -> str:
+    """Where the portal will announce the answer to our request.
 
-    Dictionaries become ``dict``, other arrays ``list``, structures ``tuple`` and variants are
-    opened. Kinds we never need (file handles and so on) give None.
+    The portal builds it from our connection's name (":1.42" becomes "1_42") and the
+    ``handle_token`` we chose, so we know it before we ask and never miss a fast answer.
     """
-    kind = lib.dbus_message_iter_get_arg_type(ctypes.byref(bookmark))
-    if kind in (_STRING, _OBJECT_PATH, _SIGNATURE):
-        raw = ctypes.c_char_p()
-        lib.dbus_message_iter_get_basic(
-            ctypes.byref(bookmark), ctypes.cast(ctypes.byref(raw), ctypes.c_void_p)
-        )
-        return (raw.value or b"").decode("utf-8", errors="replace")
-    if kind in _BASIC_NUMBERS:
-        number = ctypes.c_uint64()
-        lib.dbus_message_iter_get_basic(
-            ctypes.byref(bookmark), ctypes.cast(ctypes.byref(number), ctypes.c_void_p)
-        )
-        return _fit(kind, number.value)
-    if kind == _BOOLEAN:
-        flag = ctypes.c_uint32()
-        lib.dbus_message_iter_get_basic(
-            ctypes.byref(bookmark), ctypes.cast(ctypes.byref(flag), ctypes.c_void_p)
-        )
-        return bool(flag.value)
-    if kind not in (_VARIANT, _STRUCT, _ARRAY, _DICT_ENTRY):
-        return None
-    inner = _Iter()
-    lib.dbus_message_iter_recurse(ctypes.byref(bookmark), ctypes.byref(inner))
-    items = _read_all(lib, inner)
-    if kind == _VARIANT:
-        return items[0] if items else None
-    if kind == _DICT_ENTRY:
-        return _Entry(items[0], items[1]) if len(items) == 2 else None
-    if kind == _STRUCT:
-        return tuple(items)
-    entries = [item for item in items if isinstance(item, _Entry)]
-    if entries and len(entries) == len(items):
-        return {str(entry.key): entry.value for entry in entries}
-    return items
+    sender = unique_name.lstrip(":").replace(".", "_")
+    return f"/org/freedesktop/portal/desktop/request/{sender}/{handle_token}"
 
 
-def _fit(kind: int, raw: int) -> int:
-    """A number read into 64 bits, as the signed or unsigned value its D-Bus type means."""
-    sizes = {"y": 8, "b": 32, "n": 16, "q": 16, "i": 32, "u": 32, "x": 64, "t": 64}
-    letter = _BASIC_NUMBERS[kind]
-    bits = sizes.get(letter, 64)
-    value = raw & ((1 << bits) - 1)
-    if letter in "nix" and value >= 1 << (bits - 1):
-        value -= 1 << bits
-    return value
+def trigger_description(results: Mapping[str, Any]) -> str:
+    """The key the desktop says it bound, from the ``shortcuts`` entry of a Response.
+
+    Variants arrive as (signature, value), so the entry looks like
+    ``("a(sa{sv})", [("toggle-overlay", {"trigger_description": ("s", "Ctrl+Alt+O")})])``.
+    Returns "" when the desktop did not say.
+    """
+    try:
+        description = results["shortcuts"][1][0][1]["trigger_description"][1]
+    except KeyError, IndexError, TypeError:
+        return ""
+    return description if isinstance(description, str) else ""
 
 
-def _read_all(lib: Any, bookmark: _Iter) -> list[object]:
-    """Every value from the bookmark to the end of its container."""
-    values: list[object] = []
-    while lib.dbus_message_iter_get_arg_type(ctypes.byref(bookmark)) != 0:
-        values.append(_read_value(lib, bookmark))
-        if not lib.dbus_message_iter_next(ctypes.byref(bookmark)):
-            break
-    return values
+def _is_our_press(message: Message, session: str, shortcut_id: str) -> bool:
+    """True when an ``Activated`` signal is for our session and our shortcut."""
+    body = message.body
+    return len(body) >= 2 and body[0] == session and body[1] == shortcut_id
 
 
-def message_arguments(lib: Any, message: Any) -> list[object]:
-    """All the arguments of a received message, as Python data."""
-    bookmark = _Iter()
-    if not lib.dbus_message_iter_init(message, ctypes.byref(bookmark)):
-        return []
-    return _read_all(lib, bookmark)
+def _new_token(prefix: str) -> str:
+    """A name only this run knows, safe to use as part of a D-Bus object path."""
+    return f"{prefix}_{secrets.token_hex(6)}"
 
 
-class LibDBusPortal(QObject):
-    """The real portal connection: its own private connection to the user's session bus.
+# ---- the client ----------------------------------------------------------------------------
 
-    It fits the ``PortalConnection`` interface.
+
+class JeepneyPortal:
+    """The real portal client. It fits the ``PortalConnection`` interface.
+
+    Creating it does nothing yet; ``start`` begins the conversation in a background thread.
     """
 
-    def __init__(self, lib: Any | None = None) -> None:
-        """Connect to the session bus. Raises ``PortalError`` when that is not possible."""
-        super().__init__()
-        self.on_response: Callable[[str, int, Mapping[str, object]], None] | None = None
-        self.on_activated: Callable[[str, str], None] | None = None
-        self._lib = lib if lib is not None else load_libdbus()
-        error = _Error()
-        self._lib.dbus_error_init(ctypes.byref(error))
-        connection = self._lib.dbus_bus_get_private(_SESSION_BUS, ctypes.byref(error))
-        if not connection:
-            text = (error.message or b"no session bus").decode("utf-8", errors="replace")
-            self._lib.dbus_error_free(ctypes.byref(error))
-            raise PortalError(text)
-        self._connection: Any = connection
-        # libdbus would otherwise end the whole program if the bus went away.
-        self._lib.dbus_connection_set_exit_on_disconnect(connection, 0)
-        self._notifier: QSocketNotifier | None = None
-        self._watch_for_messages()
-
-    # ---- receiving -------------------------------------------------------------------------
-
-    def _watch_for_messages(self) -> None:
-        """Wake up when the bus sends something, so nothing polls and nothing freezes."""
-        descriptor = ctypes.c_int()
-        if self._lib.dbus_connection_get_unix_fd(self._connection, ctypes.byref(descriptor)):
-            self._notifier = QSocketNotifier(descriptor.value, QSocketNotifier.Type.Read, self)
-            self._notifier.activated.connect(self._on_readable)
-        for member, interface in (
-            ("Response", REQUEST_INTERFACE),
-            ("Activated", SHORTCUTS_INTERFACE),
-        ):
-            self._add_match(f"type='signal',interface='{interface}',member='{member}'")
-
-    def _add_match(self, rule: str) -> None:
-        error = _Error()
-        self._lib.dbus_error_init(ctypes.byref(error))
-        self._lib.dbus_bus_add_match(self._connection, rule.encode(), ctypes.byref(error))
-        self._lib.dbus_error_free(ctypes.byref(error))
-
-    def _on_readable(self) -> None:
-        self._lib.dbus_connection_read_write(self._connection, 0)
-        self.drain()
-
-    def drain(self) -> None:
-        """Handle every message that is waiting."""
-        while True:
-            message = self._lib.dbus_connection_pop_message(self._connection)
-            if not message:
-                return
-            try:
-                self._handle(message)
-            except Exception:  # a handler must never break the app's event loop
-                _log.exception("Could not handle a portal message")
-            finally:
-                self._lib.dbus_message_unref(message)
-
-    def _handle(self, message: Any) -> None:
-        if self._lib.dbus_message_get_type(message) != _MESSAGE_SIGNAL:
-            return
-        interface = (self._lib.dbus_message_get_interface(message) or b"").decode()
-        member = (self._lib.dbus_message_get_member(message) or b"").decode()
-        arguments = message_arguments(self._lib, message)
-        if interface == REQUEST_INTERFACE and member == "Response" and len(arguments) >= 2:
-            path = (self._lib.dbus_message_get_path(message) or b"").decode()
-            results = arguments[1] if isinstance(arguments[1], dict) else {}
-            code = arguments[0] if isinstance(arguments[0], int) else 2
-            if self.on_response is not None:
-                self.on_response(path, code, results)
-        elif (
-            interface == SHORTCUTS_INTERFACE
-            and member == "Activated"
-            and len(arguments) >= 2
-            and self.on_activated is not None
-        ):
-            self.on_activated(str(arguments[0]), str(arguments[1]))
-
-    # ---- calling ---------------------------------------------------------------------------
-
-    def _call(
+    def __init__(
         self,
-        interface: str,
-        method: str,
-        path: str,
-        fill: Callable[[_Writer], None] | None = None,
-    ) -> list[object]:
-        """Call a portal method and wait for its (quick) reply. Raises ``PortalError``."""
-        message = self._lib.dbus_message_new_method_call(
-            PORTAL_SERVICE.encode(), path.encode(), interface.encode(), method.encode()
-        )
-        if not message:
-            raise PortalError("could not build the D-Bus message")
-        try:
-            if fill is not None:
-                fill(_Writer(self._lib, message))
-            error = _Error()
-            self._lib.dbus_error_init(ctypes.byref(error))
-            reply = self._lib.dbus_connection_send_with_reply_and_block(
-                self._connection, message, CALL_TIMEOUT_MS, ctypes.byref(error)
-            )
-        finally:
-            self._lib.dbus_message_unref(message)
-        if not reply:
-            text = (error.message or b"no answer").decode("utf-8", errors="replace")
-            self._lib.dbus_error_free(ctypes.byref(error))
-            raise PortalError(text)
-        try:
-            if self._lib.dbus_message_get_type(reply) == _MESSAGE_ERROR:
-                raise PortalError("the portal answered with an error")
-            return message_arguments(self._lib, reply)
-        finally:
-            self._lib.dbus_message_unref(reply)
-
-    def portal_version(self) -> int | None:
-        """Read the portal's ``version`` property (it is missing on desktops without it)."""
-
-        def fill(writer: _Writer) -> None:
-            writer.text(_STRING, SHORTCUTS_INTERFACE)
-            writer.text(_STRING, "version")
-
-        try:
-            reply = self._call("org.freedesktop.DBus.Properties", "Get", PORTAL_PATH, fill)
-        except PortalError:
-            return None
-        return reply[0] if reply and isinstance(reply[0], int) else None
-
-    def create_session(self, handle_token: str, session_token: str) -> None:
-        def fill(writer: _Writer) -> None:
-            writer.text_options(
-                {"handle_token": handle_token, "session_handle_token": session_token}
-            )
-
-        self._call(SHORTCUTS_INTERFACE, "CreateSession", PORTAL_PATH, fill)
-        self.drain()  # a quick Response may already be waiting
-
-    def bind_shortcut(
-        self, session: str, shortcut_id: str, description: str, trigger: str, handle_token: str
+        open_connection: Callable[[], Any] | None = None,
+        *,
+        response_timeout: float = RESPONSE_TIMEOUT,
+        bind_timeout: float = BIND_RESPONSE_TIMEOUT,
     ) -> None:
-        def fill(writer: _Writer) -> None:
-            writer.text(_OBJECT_PATH, session)
-            shortcuts = writer.open(_ARRAY, b"(sa{sv})")
-            entry = writer.open(_STRUCT, None, shortcuts)
-            writer.text(_STRING, shortcut_id, entry)
-            writer.text_options({"description": description, "preferred_trigger": trigger}, entry)
-            writer.close(entry, shortcuts)
-            writer.close(shortcuts)
-            writer.text(_STRING, "")  # no parent window: the desktop asks in its own dialog
-            writer.text_options({"handle_token": handle_token})
+        """Create it.
 
-        self._call(SHORTCUTS_INTERFACE, "BindShortcuts", PORTAL_PATH, fill)
-        self.drain()
+        Args:
+            open_connection: Opens a jeepney connection to the session bus. Tests pass a
+                function that returns a fake one, so no real bus is ever used.
+            response_timeout: Seconds to wait for the answer to ``CreateSession``.
+            bind_timeout: Seconds to wait for the answer to ``BindShortcuts`` (the player may
+                have to confirm a dialog).
+        """
+        self._open_connection = open_connection or open_dbus_connection
+        self._response_timeout = response_timeout
+        self._bind_timeout = bind_timeout
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        # jeepney fills these with the signals we asked for (see ``_converse``).
+        self._responses: deque[Message] = deque()
+        self._presses: deque[Message] = deque()
 
-    def close_session(self, session: str) -> None:
-        try:
-            self._call(SESSION_INTERFACE, "Close", session)
-        except PortalError:
-            _log.debug("The portal session was already gone")
+    def start(self, request: ShortcutRequest, report: Callable[[PortalEvent], None]) -> None:
+        """Begin the conversation in a background thread and return at once."""
+        if self._thread is not None:
+            raise RuntimeError("a JeepneyPortal serves one registration only")
+        # A daemon thread cannot keep the app alive if something goes wrong while quitting.
+        self._thread = threading.Thread(
+            target=self._run, args=(request, report), name="wow-coach-portal", daemon=True
+        )
+        self._thread.start()
 
     def close(self) -> None:
-        if self._notifier is not None:
-            self._notifier.setEnabled(False)
-            self._notifier = None
-        connection, self._connection = self._connection, None
-        if connection:
-            self._lib.dbus_connection_close(connection)
-            self._lib.dbus_connection_unref(connection)
+        """Ask the thread to give the shortcut back and hang up, and wait for it."""
+        self._stop.set()
+        thread, self._thread = self._thread, None
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(JOIN_SECONDS)
+
+    # ---- the background thread -------------------------------------------------------------
+
+    def _run(self, request: ShortcutRequest, report: Callable[[PortalEvent], None]) -> None:
+        """The whole conversation. It never raises: every problem becomes a report."""
+        connection: Any = None
+        session: list[str] = []  # filled in as soon as we have one, so ``finally`` can close it
+        try:
+            connection = self._open_connection()
+            self._converse(connection, request, report, session)
+        except _StoppedError:
+            pass  # the app is quitting; nobody wants a report
+        except _TimedOutError:
+            self._report_failure(report, PortalFailure.TIMED_OUT)
+        except _RefusedError as refusal:
+            self._report_failure(report, refusal.reason)
+        except Exception as error:  # a broken bus must never crash the app, whatever jeepney raises
+            _log.info("The portal hotkey could not start: %s", error)
+            self._report_failure(report, PortalFailure.UNAVAILABLE)
+        finally:
+            self._hang_up(connection, session)
+
+    def _report_failure(self, report: Callable[[PortalEvent], None], reason: PortalFailure) -> None:
+        """Report a failure, unless the app already asked us to stop."""
+        if not self._stop.is_set():
+            report(PortalFailed(reason))
+
+    def _converse(
+        self,
+        connection: Any,
+        request: ShortcutRequest,
+        report: Callable[[PortalEvent], None],
+        session: list[str],
+    ) -> None:
+        """Subscribe, create the session, bind the shortcut, then report key presses."""
+        # Subscribe *before* the first call, so an answer that comes quickly is not missed.
+        responses = MatchRule(type="signal", interface=REQUEST_INTERFACE, member="Response")
+        presses = MatchRule(type="signal", interface=SHORTCUTS_INTERFACE, member="Activated")
+        self._call(connection, message_bus.AddMatch(responses))
+        self._call(connection, message_bus.AddMatch(presses))
+        with (
+            connection.filter(responses, queue=self._responses),
+            connection.filter(presses, queue=self._presses),
+        ):
+            self._call(connection, read_version_message())  # fails on desktops without the portal
+            session.append(self._create_session(connection))
+            self._bind(connection, session[0], request, report)
+            self._listen(connection, session[0], request, report)
+
+    def _create_session(self, connection: Any) -> str:
+        """``CreateSession`` and its Response. Returns the session's object path."""
+        token = _new_token("create")
+        self._call(connection, create_session_message(token, _new_token("session")))
+        path = request_path(connection.unique_name, token)
+        results = self._wait_for_response(connection, path, self._response_timeout)
+        session = results.get("session_handle", (None, None))[1]
+        if not isinstance(session, str):
+            raise _RefusedError(PortalFailure.UNAVAILABLE)
+        return session
+
+    def _bind(
+        self,
+        connection: Any,
+        session: str,
+        request: ShortcutRequest,
+        report: Callable[[PortalEvent], None],
+    ) -> None:
+        """``BindShortcuts`` and its Response (the player may be asked first)."""
+        token = _new_token("bind")
+        try:
+            self._call(connection, bind_shortcuts_message(session, request, token))
+        except DBusErrorResponse as error:
+            # Most often "App info not found": the desktop does not know our .desktop file.
+            _log.info("The portal refused BindShortcuts: %s", error)
+            raise _RefusedError(PortalFailure.REFUSED) from error
+        path = request_path(connection.unique_name, token)
+        results = self._wait_for_response(connection, path, self._bind_timeout, binding=True)
+        report(PortalBound(trigger_description(results)))
+
+    def _listen(
+        self,
+        connection: Any,
+        session: str,
+        request: ShortcutRequest,
+        report: Callable[[PortalEvent], None],
+    ) -> None:
+        """Report every press of our key until the app asks us to stop."""
+        while not self._stop.is_set():
+            try:
+                message = connection.recv_until_filtered(self._presses, timeout=POLL_SECONDS)
+            except TimeoutError:
+                continue  # nothing yet: look at the stop flag, then wait again
+            if _is_our_press(message, session, request.shortcut_id):
+                report(PortalActivated())
+
+    def _hang_up(self, connection: Any, session: list[str]) -> None:
+        """Give the session back and close the connection. Best effort: we are leaving."""
+        if connection is None:
+            return
+        try:
+            if session:
+                connection.send_and_get_reply(
+                    close_session_message(session[0]), timeout=CLOSE_TIMEOUT
+                )
+        except Exception as error:  # the session may be gone already; nothing more to do
+            _log.debug("Could not close the portal session: %s", error)
+        try:
+            connection.close()
+        except Exception as error:  # the socket may be gone already
+            _log.debug("Could not close the D-Bus connection: %s", error)
+
+    # ---- small helpers ---------------------------------------------------------------------
+
+    def _call(self, connection: Any, message: Message) -> tuple[Any, ...]:
+        """Send a call and wait for its quick reply. Raises ``DBusErrorResponse`` on an error."""
+        reply = connection.send_and_get_reply(message, timeout=CALL_TIMEOUT)
+        if reply.header.message_type is MessageType.error:
+            raise DBusErrorResponse(reply)
+        return tuple(reply.body)
+
+    def _wait_for_response(
+        self, connection: Any, path: str, timeout: float, *, binding: bool = False
+    ) -> dict[str, Any]:
+        """Wait for the ``Response`` signal sent from ``path`` and return its results.
+
+        Raises ``_RefusedError`` when the code is not "yes", ``_TimedOutError`` when time runs
+        out and ``_StoppedError`` when the app wants to quit.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            if self._stop.is_set():
+                raise _StoppedError
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise _TimedOutError
+            try:
+                message = connection.recv_until_filtered(
+                    self._responses, timeout=min(POLL_SECONDS, remaining)
+                )
+            except TimeoutError:
+                continue
+            if message.header.fields.get(HeaderFields.path) != path:
+                continue  # an answer to somebody else's request
+            code, results = message.body
+            if code == _RESPONSE_OK:
+                return dict(results)
+            if code == _RESPONSE_CANCELLED:
+                raise _RefusedError(PortalFailure.DECLINED)
+            # Any other code while binding usually means the desktop does not know our app.
+            raise _RefusedError(PortalFailure.REFUSED if binding else PortalFailure.UNAVAILABLE)
