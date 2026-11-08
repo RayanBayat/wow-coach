@@ -38,7 +38,7 @@ local _, ns = ...
 
 local ADDON_NAME = "CoachLink"
 local FORMAT_VERSION = 1    -- bump when the saved format changes in a way old readers can't handle
-local MAX_HISTORY = 300     -- keep only the newest history events
+local MAX_HISTORY = 500     -- keep only the newest history events
 local MAX_PROGRESS = 500    -- keep only the newest progress points
 -- A new progress point that looks the same as the last one, and comes this soon
 -- after it, is skipped (quick /reload series would otherwise fill the log).
@@ -741,8 +741,8 @@ end
 
 -- Run reader() safely. Failures are kept for the next snapshot (not printed in
 -- chat: the bank is re-read on every bag change, and chat spam helps nobody).
-local function rememberSafely(name, reader)
-    local ok, err = pcall(reader)
+local function rememberSafely(name, reader, ...)
+    local ok, err = pcall(reader, ...)
     if ok then
         seenErrors[name] = nil
     else
@@ -1279,6 +1279,178 @@ end
 
 
 -------------------------------------------------------------------------------
+-- Items you get: loot, quest rewards, vendors and mail
+-------------------------------------------------------------------------------
+
+-- Items you get go into the history with where they came from, so the coach can
+-- say things like "that quest let you choose; next time take the cloth one". To
+-- keep the history short, loot and purchases are only kept for things you can
+-- wear and for green or better items. Quest rewards and mail are always kept.
+
+local GREEN_QUALITY = 2
+local WHITE_QUALITY = 1
+local QUALITY_COLORS = { [0] = "gray", "white", "green", "blue", "purple", "orange" }
+
+-- Turn a chat line format such as "You receive loot: %s." into a Lua pattern that
+-- captures the %s and %d parts: "^You receive loot: (.+)%.$".
+local function chatPattern(format)
+    local escaped = format:gsub("[%^%$%(%)%%%.%[%]%*%+%-%?]", "%%%0")  -- match these literally
+    escaped = escaped:gsub("%%%%s", "(.+)"):gsub("%%%%d", "(%%d+)")
+    return "^" .. escaped .. "$"
+end
+
+-- The "you looted something" chat lines, in the game's language. The one with a
+-- count comes first: the plain one would also match "[Linen Cloth]x3".
+local lootPatterns = nil
+local function lootPatternList()
+    if not lootPatterns then
+        lootPatterns = {
+            chatPattern(gameText("LOOT_ITEM_SELF_MULTIPLE") or "You receive loot: %sx%d."),
+            chatPattern(gameText("LOOT_ITEM_SELF") or "You receive loot: %s."),
+        }
+    end
+    return lootPatterns
+end
+
+-- "Frayed Cloak (green)", "Copper Ore x4" (white, the usual quality, gets no word).
+local function itemText(name, count, quality)
+    local text = name
+    if count and count > 1 then
+        text = text .. " x" .. count
+    end
+    if quality ~= WHITE_QUALITY and QUALITY_COLORS[quality] then
+        text = text .. " (" .. QUALITY_COLORS[quality] .. ")"
+    end
+    return text
+end
+
+-- "1g 23s 45c". The money formatter lives in CoachLinkText.lua.
+local function coinText(copper)
+    if ns.moneyText then
+        return ns.moneyText(copper)
+    end
+    return tostring(copper) .. "c"
+end
+
+-- Loot and purchases worth a history line: gear, and green or better items.
+local function isWorthNoting(item)
+    return item.equipSlot ~= nil or (item.quality or 0) >= GREEN_QUALITY
+end
+
+-- One "item" history event. `fields` must include `source` and `item` (the name).
+local function addItemEvent(text, fields)
+    addHistory("item", text, fields)
+end
+
+-- A chat line said you looted something.
+local function noteLoot(message)
+    for _, pattern in ipairs(lootPatternList()) do
+        local link, count = string.match(message, pattern)
+        if link then
+            local item = describeItem(link)
+            count = tonumber(count) or 1
+            if isWorthNoting(item) then
+                addItemEvent("Looted: " .. itemText(item.name, count, item.quality), {
+                    source = "loot", item = item.name, itemID = item.itemID,
+                    quality = item.quality, count = count,
+                })
+            end
+            return
+        end
+    end
+end
+
+-- The names of the quest window's items of one kind: "choice" (pick one) or
+-- "reward" (you get all of them). Index i is the i-th item in the window.
+local function questItemNames(kind, count)
+    local names = {}
+    for index = 1, count or 0 do
+        local link = GetQuestItemLink(kind, index)
+        names[index] = link and describeItem(link).name or ("item " .. index)
+    end
+    return names
+end
+
+-- "chose Apprentice's Robe over Frayed Cloak; also got Tough Jerky"
+local function questRewardText(choices, choice, rewards)
+    local parts = {}
+    local chosen = choices[choice]
+    if chosen then
+        local others = {}
+        for index, name in ipairs(choices) do
+            if index ~= choice then
+                table.insert(others, name)
+            end
+        end
+        local text = "chose " .. chosen
+        if #others > 0 then
+            text = text .. " over " .. table.concat(others, ", ")
+        end
+        table.insert(parts, text)
+    end
+    if #rewards > 0 then
+        table.insert(parts, (chosen and "also got " or "got ") .. table.concat(rewards, ", "))
+    end
+    return table.concat(parts, "; ")
+end
+
+-- You clicked Complete Quest. `choice` is the reward you picked (0 or nil: none to pick).
+local function noteQuestReward(choice)
+    local choices = questItemNames("choice", GetNumQuestChoices())
+    local rewards = questItemNames("reward", GetNumQuestRewards())
+    if #choices == 0 and #rewards == 0 then
+        return  -- a quest that gives no items
+    end
+    local quest = GetTitleText() or "a quest"
+    addItemEvent("Quest reward (" .. quest .. "): " .. questRewardText(choices, choice, rewards), {
+        source = "quest", quest = quest, item = choices[choice], choices = choices, rewards = rewards,
+    })
+end
+
+-- You bought `quantity` of the vendor's item number `index` (nil: one stack).
+local function noteBought(index, quantity)
+    local link = GetMerchantItemLink(index)
+    if not link then
+        return
+    end
+    local item = describeItem(link)
+    if not isWorthNoting(item) then
+        return
+    end
+    local info = C_MerchantFrame and C_MerchantFrame.GetItemInfo and C_MerchantFrame.GetItemInfo(index)
+    local stack = (info and info.stackCount and info.stackCount > 0) and info.stackCount or 1
+    local count = quantity or stack
+    -- The vendor's price is for one stack (`stackCount` items).
+    local price = info and info.price and math.floor(info.price * count / stack + 0.5)
+    local text = "Bought: " .. itemText(item.name, count, item.quality)
+    if price then
+        text = text .. " for " .. coinText(price)
+    end
+    addItemEvent(text, {
+        source = "vendor", item = item.name, itemID = item.itemID, quality = item.quality,
+        count = count, price = price,
+    })
+end
+
+-- You took attachment `attachIndex` of letter `mailIndex` (nil: every attachment).
+local function noteTakenFromMail(mailIndex, attachIndex)
+    local _, _, sender = GetInboxHeaderInfo(mailIndex)
+    local first = attachIndex or 1
+    local last = attachIndex or MAX_MAIL_ATTACHMENTS
+    for attachment = first, last do
+        local name, itemID, _, count, quality = GetInboxItem(mailIndex, attachment)
+        if name then
+            addItemEvent("From the mail (" .. (sender or "unknown sender") .. "): "
+                .. itemText(name, count, quality), {
+                source = "mail", item = name, itemID = itemID, quality = quality,
+                count = count, from = sender,
+            })
+        end
+    end
+end
+
+
+-------------------------------------------------------------------------------
 -- Game events
 -------------------------------------------------------------------------------
 
@@ -1370,6 +1542,11 @@ function handlers.QUEST_TURNED_IN(questID, xpReward)
     addHistory("quest", text)
 end
 
+-- A loot line in chat. Only lines about your own loot match.
+function handlers.CHAT_MSG_LOOT(message)
+    rememberSafely("loot", function() noteLoot(message) end)
+end
+
 -- The bank window: read it when it opens, and again after every change while open.
 function handlers.BANKFRAME_OPENED()
     bankIsOpen = true
@@ -1451,17 +1628,29 @@ eventFrame:SetScript("OnEvent", function(_, eventName, ...)
     end
 end)
 
+-- Some things only show as a call to one of the game's functions. hooksecurefunc
+-- runs our function right after the game's own, with the same arguments, without
+-- changing what the game's function does. Our function runs protected: if it
+-- fails, the error goes into the next snapshot and the game carries on.
+local function runAfter(functionName, ourFunction)
+    if type(_G[functionName]) ~= "function" then
+        return  -- not in this game version
+    end
+    hooksecurefunc(functionName, function(...)
+        rememberSafely(functionName, ourFunction, ...)
+    end)
+end
+
 -- In an inn or a city the logout is instant, with no countdown event. The game
 -- menu's Log Out and Exit Game buttons and /logout, /camp and /quit all call the
--- game's Logout() or Quit(). hooksecurefunc runs our function right after the
--- game's own, without changing what it does.
-for _, functionName in ipairs({ "Logout", "Quit" }) do
-    if type(_G[functionName]) == "function" then
-        hooksecurefunc(functionName, function()
-            pcall(readBeforeLogout)  -- never let our reading get in the way of logging out
-        end)
-    end
-end
+-- game's Logout() or Quit().
+runAfter("Logout", readBeforeLogout)
+runAfter("Quit", readBeforeLogout)
+-- The quest window's Complete Quest button, buying from a vendor, taking mail.
+runAfter("GetQuestReward", noteQuestReward)
+runAfter("BuyMerchantItem", noteBought)
+runAfter("TakeInboxItem", noteTakenFromMail)
+runAfter("AutoLootMailItem", noteTakenFromMail)
 
 
 -------------------------------------------------------------------------------

@@ -600,6 +600,9 @@ end
 
 -- snapshot: the table CoachLink builds. history: list of events (may be empty).
 -- now: Unix time, used for "5 min ago". Returns one string with "\n" line breaks.
+-- CoachLink.lua uses this for the prices in the history ("Bought: ... for 2s 50c").
+ns.moneyText = moneyText
+
 function ns.formatSnapshotText(snapshot, history, now)
     local out = {}
     local made = (date and now) and (", " .. date("%Y-%m-%d %H:%M", now)) or ""

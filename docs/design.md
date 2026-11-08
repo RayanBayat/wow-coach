@@ -69,7 +69,7 @@ CoachLinkDB = {
   ["characters"] = {
     ["Testchar-SomeRealm"] = {         -- key is "Name-Realm"
       ["snapshot"] = { ... },          -- see the table below
-      ["history"] = { {event}, ... },  -- oldest first, at most 300 entries
+      ["history"] = { {event}, ... },  -- oldest first, at most 500 entries (300 before 0.7.0)
       ["progress"] = { {point}, ... }, -- oldest first, at most 500 points (added in 0.5.0)
     },
   },
@@ -151,13 +151,26 @@ and saves from older addons simply lack them.
 | Field | Type | Meaning |
 |---|---|---|
 | `time` | number | Unix time (seconds) |
-| `kind` | string | `"level"`, `"death"`, `"quest"`, `"login"` |
+| `kind` | string | `"level"`, `"death"`, `"quest"`, `"login"`, `"item"` (added in 0.7.0) |
 | `text` | string | A sentence, for example `"Reached level 7"`, `"Died in Brill (level 6)"`. A death adds what is known: `"Died in Brill (level 6). Attacked by 2 enemies: Scarlet Warrior (level 9, elite), Scarlet Friar (level 8). Killing blow: Scarlet Warrior (melee, 45 damage). 40 s after coming back to life."` |
 | `level` | number | Character level at the time. For a `"level"` event it is the level reached (saves from addon 0.6.0 and older store the level before it) |
 | `zone` | string | Zone at the time |
 | `attackers` | list | Death only (added in 0.7.0): the enemies seen attacking in the last 10 seconds, strongest first: `{ name, level, classification, isPlayer }`. `level` -1 means "??" (far above yours); `classification` is the game's word (`"normal"`, `"elite"`, `"rareelite"`, `"rare"`, `"worldboss"`...). Missing when none was seen |
 | `killer` | table | Death only: the killing blow from the game's death recap, `{ name, spell, amount }`. `spell` is `"melee"` for a plain hit, or the cause for environment damage (`"falling"`, then without `name`). Missing when the game had no recap |
+| `source` | string | Item only: where it came from: `"loot"`, `"quest"` (a quest reward), `"vendor"` (bought) or `"mail"` |
+| `item`, `itemID`, `quality`, `count` | | Item only: the item's name, id, quality (0 gray ... 5 orange) and how many. For a quest reward `item` is the reward the player chose (missing when there was nothing to choose) |
+| `quest`, `choices`, `rewards` | | Quest reward only: the quest's title, the names of every reward offered to choose from (in the window's order) and of the rewards everyone gets |
+| `price` | number | Vendor only: what it cost, in copper |
+| `from` | string | Mail only: who sent the letter |
 | `secondsSinceRevive` | number | Death only: seconds since the character came back to life, when that was 5 minutes or less ago (a "death loop": coming back next to the same enemies) |
+
+**Where items came from.** Loot comes from the chat line the game prints for your own loot
+(`CHAT_MSG_LOOT` matching `LOOT_ITEM_SELF` / `LOOT_ITEM_SELF_MULTIPLE`, so other players'
+loot lines don't match). The rest comes from `hooksecurefunc` on the game function the window
+calls: `GetQuestReward(choice)` (the quest window's Complete Quest button), `BuyMerchantItem`
+and `TakeInboxItem` / `AutoLootMailItem`. Loot and purchases are only kept for things you can
+wear and for green or better items; quest rewards and mail are always kept. The hook runs on
+the click, so a purchase the game then refuses (not enough gold, full bags) is still recorded.
 
 **How a death is explained.** Since game version 12, addons can't read the combat log in
 Forever: `COMBAT_LOG_EVENT_UNFILTERED` is marked restricted, and `GetCurrentEventInfo` only

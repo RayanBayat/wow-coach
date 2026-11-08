@@ -14,6 +14,11 @@ All notable changes to this project are written here. The format follows
   addon notes the enemies that have you as their target while you fight.)
   ([#4](https://github.com/RayanBayat/wow-coach/issues/4))
 
+- The history records where new items came from: green or better loot and gear you loot, quest
+  rewards (with the choice you made and the other choices), gear and bags you buy (with the
+  price), and items you take from the mail. The history now keeps the newest 500 events
+  instead of 300 ([#5](https://github.com/RayanBayat/wow-coach/issues/5)).
+
 ### Changed
 
 - Play time stays up to date without typing `/played`: the addon asks the game for it after

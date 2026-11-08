@@ -452,6 +452,20 @@ local function installFakeGame()
         RegisterEvent = function(_, eventName) chatEvents[eventName] = true end,
         UnregisterEvent = function(_, eventName) chatEvents[eventName] = nil end,
     }
+    -- Getting items: the loot chat line, the quest reward window, vendors and mail.
+    LOOT_ITEM_SELF = "You receive loot: %s."
+    LOOT_ITEM_SELF_MULTIPLE = "You receive loot: %sx%d."
+    GetTitleText = function() return "Fields of Grief" end
+    GetNumQuestChoices = function() return 2 end
+    GetNumQuestRewards = function() return 1 end
+    local questItems = { choice = { "item:4689", "item:56" }, reward = { "item:117" } }
+    GetQuestItemLink = function(kind, index) return questItems[kind] and questItems[kind][index] end
+    GetQuestReward = function() end
+    GetMerchantItemLink = function(index) return index == 3 and "item:4689" or "item:117" end
+    C_MerchantFrame = { GetItemInfo = function() return { price = 250, stackCount = 1 } end }
+    BuyMerchantItem = function() end
+    TakeInboxItem = function() end
+    AutoLootMailItem = function() end
     hooksecurefunc = function(name, hook)
         local original = _G[name]
         _G[name] = function(...)
@@ -1018,7 +1032,55 @@ check(lastDeath().killer == nil and lastDeath().secondsSinceRevive == nil,
 
 
 -------------------------------------------------------------------------------
--- Test 7: a real logout, when the game has already unloaded the character
+-- Test 7: where new items came from
+-------------------------------------------------------------------------------
+
+installFakeGame()
+loadAddon()
+local function itemEvents()
+    local found = {}
+    for _, event in ipairs(CoachLinkDB.characters["Testchar-Testrealm"].history) do
+        if event.kind == "item" then
+            table.insert(found, event)
+        end
+    end
+    return found
+end
+fire("PLAYER_ENTERING_WORLD", true, false)   -- creates the history
+fire("CHAT_MSG_LOOT", "You receive loot: item:4689.", "Testchar")     -- a green cloak
+fire("CHAT_MSG_LOOT", "You receive loot: item:2589x3.", "Testchar")   -- white cloth: not kept
+fire("CHAT_MSG_LOOT", "Somebody receives loot: item:4689.", "Somebody")
+local items = itemEvents()
+check(#items == 1 and items[1].source == "loot" and items[1].item == "Frayed Cloak"
+    and items[1].itemID == 4689 and items[1].quality == 2, "looting a green item is recorded")
+check(items[1].text == "Looted: Frayed Cloak (green)", "loot text: " .. tostring(items[1].text))
+
+GetQuestReward(2)                        -- the player picks the robe and completes the quest
+items = itemEvents()
+local reward = items[2]
+check(reward and reward.source == "quest" and reward.quest == "Fields of Grief"
+    and reward.item == "Apprentice's Robe", "a quest reward is recorded with the quest")
+check(reward.choices[1] == "Frayed Cloak" and reward.choices[2] == "Apprentice's Robe"
+    and reward.rewards[1] == "Tough Jerky", "the reward keeps every choice offered and the fixed rewards")
+check(reward.text == "Quest reward (Fields of Grief): chose Apprentice's Robe over Frayed Cloak; "
+    .. "also got Tough Jerky", "quest reward text: " .. tostring(reward.text))
+
+BuyMerchantItem(3, 1)                    -- buys the cloak for 2s 50c
+BuyMerchantItem(5, 4)                    -- buys food: not kept
+items = itemEvents()
+check(#items == 3 and items[3].source == "vendor" and items[3].price == 250
+    and items[3].text == "Bought: Frayed Cloak (green) for 2s 50c", "buying gear is recorded with the price")
+
+TakeInboxItem(1, 1)                      -- takes the ore from the auction house letter
+items = itemEvents()
+check(#items == 4 and items[4].source == "mail" and items[4].item == "Copper Ore" and items[4].count == 4
+    and items[4].text == "From the mail (Auction House): Copper Ore x4", "an item taken from mail is recorded")
+AutoLootMailItem(1)                      -- "take all" on the same letter
+check(#itemEvents() == 5, "taking everything from a letter is recorded too")
+
+
+-------------------------------------------------------------------------------
+-- Test 8: a real logout, when the game has already unloaded the character
 -------------------------------------------------------------------------------
 
 local function savedCharacter() return CoachLinkDB.characters["Testchar-Testrealm"] end

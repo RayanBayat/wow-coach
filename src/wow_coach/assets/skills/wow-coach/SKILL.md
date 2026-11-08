@@ -189,6 +189,7 @@ Tailoring", "run Deadmines"), do these seven things. This works in any AI, not o
 | Buffs: no class buff (Arcane Intellect, for a mage) | Remind them to buff themselves |
 | No `restedXP` and they play long sessions | Log out in an inn or a capital city |
 | `hearth` is far from where they quest | Set the Hearthstone at the local inn |
+| Item events in `recent_history` ("Looted:", "Quest reward (...): chose X over Y", "Bought:", "From the mail") | Say where a new item came from. When a quest reward choice didn't suit the class (a mage choosing mail armor), explain which kind to pick next time and why |
 | Deaths in `recent_history` | Find the cause and teach the fix. The death line names the enemies that were attacking (with level and elite), the killing blow when the game gave one, and "N s after coming back to life" for a death loop. 2+ attackers: pull one at a time, Frost Nova and step back; an elite or a much higher level: skip it or bring a group; a death loop: come back to life farther away, or wait for the enemies to walk off |
 | Gear: white/gray items at level 10+ | Point to quest rewards or crafting upgrades |
 | Gold far below what level 40 needs | Gold tips (sell cloth, a gathering profession) |
