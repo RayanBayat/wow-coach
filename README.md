@@ -108,6 +108,8 @@ a progress log per character. The tools the AI uses:
 - `character_status`, `recent_history`, `progress_summary`: where a character is, what it did, and how it progressed lately.
 - `read_coach_notes`, `save_coach_notes`, `save_player_notes`: read both kinds of notes, save one character's journal, save the player notes.
 - `search_wiki`, `read_wiki_page`, `find_quest`: game facts from the Warcraft Wiki. `find_quest` finds a quest's page from its quest ID (shown in the status).
+- `questions_from_game`, `send_advice_to_game`: read the questions you asked in the game's
+  [Coach panel](docs/coach-panel.md), and show the coach's answers and next steps there.
 
 In a terminal, `wow-coach characters` and `wow-coach progress` show the same lists.
 

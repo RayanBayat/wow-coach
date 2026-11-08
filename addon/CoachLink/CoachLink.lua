@@ -1884,6 +1884,7 @@ SlashCmdList.COACHLINK = function(argument)
     if command == "help" then
         say("/coach: save your character for the coach on this PC (reloads the UI, a few seconds).")
         say("/coach panel: open the Coach panel with your coach's advice; you can ask there too.")
+        say("A key for the panel: Options > Keybindings > CoachLink.")
         say("/coach ask <question>: ask your coach (saves and reloads the UI).")
         say("/coach copy (or /coach export): show your character as text to copy into any AI chat. No reload.")
         say("/coach help: show this list.")

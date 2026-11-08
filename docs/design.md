@@ -320,6 +320,42 @@ CoachLinkAdvice = {
 `ns.togglePanel`, which `/coach panel` calls. The `.toc` names
 `CoachLink_OnAddonCompartmentClick` for the minimap's addon list.
 
+**The panel** (`CoachLinkPanel.lua`, `Bindings.xml`):
+- **Opening it:** `/coach panel`, the minimap's addon list, or a key binding (Options, then
+  Keybindings, then CoachLink).
+- **What it shows:** the newest answer's steps (or the plan's), its text and warnings, the
+  open questions, and a footer. The footer gives who wrote it, when, and the save it was based
+  on, and ends with "AI can be wrong".
+- **Combat:** it hides in combat and comes back after. Ask is disabled in combat.
+- **Advice text:** it type-checks and cuts every advice field again. It removes any single
+  `|` (doubled `||` from wow-coach stay, and WoW draws them as a plain `|`).
+- **Settings:** remembered in `CoachLinkDB.settings.panel`: `point`, `relPoint`, `x`, `y`,
+  `width`, `height`, `fontSize`, `open` and `lastSeenAnswerAt`. After a reload, a single chat
+  line says when there is advice the player hasn't opened yet.
+
+**Writing the advice** (`src/wow_coach/advice/`):
+- **Where:** `writer.py` writes only inside `<AddOns>/CoachLink_Advice/`.
+  - It refuses symlinks and junctions for the folder, the `.toc` and `Advice.lua`.
+  - It never creates the game's own folders.
+  - It replaces `Advice.lua` atomically, through a temp file in the same folder
+    (`.tmp-*.part`).
+- **The `.toc`:** `## Interface:` (copied from `CoachLink.toc` each time, else 16001),
+  `## Title`, `## Notes`, `## Version` (wow-coach's), then `Advice.lua`. No SavedVariables.
+- **Limits** (`limits.py`) are enforced by cutting:
+  - Blank steps are dropped, and the first 5 steps and 5 warnings are kept, in the order to
+    act in.
+  - The newest 10 answers are kept, and a new answer to the same `questionId` replaces the
+    old one.
+  - The file is refused above 200,000 bytes.
+- **Reading back:** the reader turns `||` back into `|`.
+- **The coach's tools:** `questions_from_game` and `send_advice_to_game` (`advice/tools.py`)
+  are the MCP tools. `wow-coach setup` creates the folder after installing the addon. The
+  watcher adds "N open question(s)" to a save with `reason: ask`.
+- **Tests:**
+  - `tests/test_advice_luajit.py` loads written files in LuaJIT.
+  - `tests/test_panel_end_to_end.py` writes an answer with the tool and has the real panel
+    code show it.
+
 ## Logging out
 
 Because of the unloaded character at `PLAYER_LOGOUT` (above), the addon works like this
