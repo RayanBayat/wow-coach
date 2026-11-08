@@ -147,7 +147,7 @@ def test_player_like_names() -> None:
 
 
 def test_conversation_path_is_file_safe(tmp_path: Path) -> None:
-    path = conversation_path("A/b:c-Realm", environ={"XDG_DATA_HOME": str(tmp_path)})
+    path = conversation_path("A/b:c-Realm", environ={"WOW_COACH_DATA_DIR": str(tmp_path)})
     assert path.parent.name == "conversations"
     assert path.name == "A_b_c-Realm.jsonl"
 

@@ -219,7 +219,13 @@ def test_bad_questions_get_a_plain_sentence(client: Client, body: dict, fragment
 
 
 def test_a_huge_body_is_refused(client: Client) -> None:
-    status, reply = client.json("POST", "/api/ask", {"question": "x" * (MAX_BODY_BYTES + 10)})
+    # The server answers 413 and closes the connection without reading the rest. Depending on
+    # the system, the client sees the 413, or (Windows) the connection breaks while it is
+    # still sending. Both mean the body was refused.
+    try:
+        status, reply = client.json("POST", "/api/ask", {"question": "x" * (MAX_BODY_BYTES + 10)})
+    except ConnectionError:
+        return
     assert status == 413 and "too large" in reply["error"]
 
 

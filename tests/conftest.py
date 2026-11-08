@@ -13,3 +13,5 @@ def _isolated_settings(
     folder: Path = tmp_path_factory.mktemp("settings")
     monkeypatch.setenv("WOW_COACH_CONFIG_FILE", str(folder / "config.json"))
     monkeypatch.setenv("WOW_COACH_NOTES_FILE", str(folder / "coach-notes.md"))
+    # Everything else wow-coach keeps (settings, conversations, the usage log...) goes here.
+    monkeypatch.setenv("WOW_COACH_DATA_DIR", str(folder / "data"))

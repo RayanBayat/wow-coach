@@ -33,6 +33,10 @@ and hands it to an AI app (MCP), or an agent runs `wow-coach status`.
   leaves symbolic links (developer copies) alone, and keeps a `.bak` of a different file it
   replaces. It writes only to the game's `Interface/AddOns/CoachLink`, the data folder and
   `~/.claude`.
+- wow-coach's own files (settings, notes, journals, conversations, the usage log) live in the
+  data folder: `~/.local/share/wow-coach` on Linux, `~/Library/Application Support/wow-coach` on
+  macOS, `%LOCALAPPDATA%\wow-coach` on Windows, or the folder in `WOW_COACH_DATA_DIR`. The
+  tests always set that variable, so they never touch real files.
 - The game folder is picked in this order: `--wow-dir`, the `WOW_COACH_WOW_DIR` variable, the
   folder saved in `config.json` (data folder, override with `WOW_COACH_CONFIG_FILE`), then
   auto-detect.

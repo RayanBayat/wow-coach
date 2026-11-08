@@ -77,5 +77,5 @@ def make_world(tmp_path: Path, *, save: str = SAVE) -> World:
     addons.mkdir(parents=True)
     (addons / "CoachLink.toc").write_text("## Interface: 11507\n", encoding="utf-8")
     data = tmp_path / "data"
-    environ = {"XDG_DATA_HOME": str(data), "LOCALAPPDATA": str(data)}
+    environ = {"WOW_COACH_DATA_DIR": str(data / "wow-coach")}
     return World(wow_dir=wow_dir, environ=environ)

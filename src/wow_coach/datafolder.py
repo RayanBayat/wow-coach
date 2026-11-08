@@ -13,6 +13,8 @@ from collections.abc import Mapping
 from pathlib import Path
 
 _FOLDER = "wow-coach"
+# Set this to use another folder (any system). Tests set it, so they never touch real files.
+ENV_DATA_DIR = "WOW_COACH_DATA_DIR"
 
 
 def data_folder(
@@ -28,6 +30,9 @@ def data_folder(
         platform: ``sys.platform`` value to pretend to be on (default: the real one).
         home: The user's home folder (default: the real one).
     """
+    override = environ.get(ENV_DATA_DIR, "").strip()
+    if override:
+        return Path(override).expanduser()
     platform = sys.platform if platform is None else platform
     home = Path.home() if home is None else home
     if platform == "win32":

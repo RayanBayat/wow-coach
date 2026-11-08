@@ -101,7 +101,7 @@ def test_state_round_trip(tmp_path: Path) -> None:
 
 
 def test_state_path_is_in_the_data_folder(tmp_path: Path) -> None:
-    path = state_path(environ={"XDG_DATA_HOME": str(tmp_path)})
+    path = state_path(environ={"WOW_COACH_DATA_DIR": str(tmp_path / "wow-coach")})
     assert path.name == "triggers-state.json"
     assert path.parent.parent == tmp_path
 
