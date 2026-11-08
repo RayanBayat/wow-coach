@@ -120,11 +120,11 @@ so too).
   `response.completed` is a failure. Server-sent events (lines `event:` / `data:` + blank line).
 - Models: `GET /v1/models` returns `{"models": [{"slug", "display_name", "visibility"}]}`; show
   entries with `visibility == "list"`, keep the server's order, reload after an account switch.
-- **UNVERIFIED (docs silent):** JSON output. The standard Responses API option is
+- **Verified 2026-11-08 (section 10), docs silent:** JSON output. The standard Responses API option is
   `text: {format: {type: "json_schema", name, schema, strict}}`; we send that, and the coach
   engine must still validate the JSON. If the route rejects it we get
   `subscription_sharing_unsupported_capability` (400, `error.param`), which we report plainly.
-- **UNVERIFIED:** the shape of usage numbers. The standard `response.completed` event has
+- **Verified 2026-11-08 (section 10):** the shape of usage numbers. The standard `response.completed` event has
   `response.usage.input_tokens` / `output_tokens`; we read those and fall back to 0.
 
 ## 6. Errors
@@ -191,3 +191,25 @@ No numeric rate limits are published; the plan's own usage limit applies.
   revoked at once. A new sign-in revokes the old refresh token. A different account than the
   saved one is refused until the player signs out (or uses `forget_registration()`).
 - Usage: every ATTEMPT is counted before sending; a cap of 0 means no calls.
+
+## 10. Checked with a real account (2026-11-08)
+
+The spike (`scripts/chatgpt_signin_spike.py`) ran against the real OpenAI on a ChatGPT plan
+account, on Linux with KDE Wallet as the keychain.
+
+- **Sign-in works:** registration through `dynamic_agent_client`, the loopback callback on
+  127.0.0.1:1455, the code exchange and the plan scope.
+- **ID token:** `aud` is a ONE-item list holding the issued client id (`oaiapp_...`), and
+  there is no `azp`. The first run refused it, because the check wanted `azp` for any list.
+  Fixed: `azp` is only required with several audiences, and must still match when present.
+  The claims are `at_hash`, `aud`, `auth_time`, `email`, `email_verified`, `exp`,
+  `https://api.openai.com/auth`, `iat`, `iss`, `jti`, `name`, `nonce`, `sid`, `sub`.
+- **Models:** `/v1/models` lists the plan's models (eight GPT-6.x and GPT-5.6 models on this
+  plan).
+- **Answers and usage:** a streamed answer works, and the usage numbers arrive as
+  `input_tokens` and `output_tokens`.
+- **JSON output:** a `text.format` JSON schema works (tested with `gpt-6-luna`), and the reply
+  was valid JSON for the schema.
+- **Saved sign-in:** reused on the next run without the browser.
+- **Still not checked:** `Retry-After` on a plan limit, the meaning of
+  `earliest_refresh_at`, a first registration on another port, and Windows.
