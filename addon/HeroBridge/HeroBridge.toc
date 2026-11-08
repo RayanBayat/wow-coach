@@ -2,7 +2,7 @@
 ## Title: HeroBridge
 ## Notes: Saves your character so an AI coach can read it. Type /coach help (or /herobridge help).
 ## Author: Rayan Bayat
-## Version: 0.10.0
+## Version: 0.11.0
 ## X-Website: https://github.com/RayanBayat/wow-coach
 ## X-License: MIT
 ## SavedVariables: HeroBridgeDB

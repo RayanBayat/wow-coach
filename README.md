@@ -6,6 +6,8 @@ helps you decide what to do next.
 
 ## How it works: one addon, many ways in
 
+HeroBridge was called CoachLink before 0.11.0.
+
 The heart of wow-coach is a small in-game addon, **HeroBridge**. It is the gateway between the
 game and any AI:
 
@@ -97,9 +99,9 @@ Start with any one of them and add the others later. They all share the same add
 
 Shortcut: if you have [uv](https://docs.astral.sh/uv/getting-started/installation/), this line
 does steps 1 to 3 for you:
-`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup`
+`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach setup`
 
-1. Download `HeroBridge-0.10.0.zip` from the
+1. Download `HeroBridge-0.11.0.zip` from the
    [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest).
 2. Unzip it into the game's `Interface\AddOns` folder, so this file exists:
    `World of Warcraft\_forever_\Interface\AddOns\HeroBridge\HeroBridge.toc`.
@@ -113,7 +115,7 @@ does steps 1 to 3 for you:
 7. Optional but better: save the [coach instructions](docs/use-with-any-ai-chat.md) in your
    chatbot once, so it knows how to teach you.
 
-In game, `/coach` saves your character (the screen reloads for a few seconds) and `/coach help`
+In game, `/coach` (or `/herobridge`, the same thing) saves your character (the screen reloads for a few seconds) and `/coach help`
 lists the commands.
 
 ## Way 5: the Claude Code agent (the easiest alternative if you use Claude Code)
@@ -124,7 +126,7 @@ lists the commands.
    player notes file and installs the coach into Claude Code:
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup --claude-code
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach setup --claude-code
    ```
 
 3. Restart the game completely if the setup told you to, then start your coach:

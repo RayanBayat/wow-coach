@@ -64,7 +64,10 @@ its AI provider, like anything else you type there.
 
 ## Data contract: `HeroBridge.lua` (formatVersion 1)
 
-The addon owns this format. The Python reader must accept everything below and must not
+The addon owns this format. Before 0.11.0 the same data lived in `CoachLink.lua` as
+`CoachLinkDB` (same layout). The reader still understands it: with only that file it reads
+that, and with both files each character comes from the newer `savedAt`. See "Moving from
+CoachLink" below. The Python reader must accept everything below and must not
 crash on missing fields: every field except `savedAt` and `name` is optional, because any
 game call can fail in a new game build.
 
@@ -286,6 +289,8 @@ question and does nothing in combat (`InCombatLockdown()`).
 **Advice (wow-coach to game).** wow-coach writes a small data-only addon of its own into the
 game folder: `Interface/AddOns/HeroBridge_Advice/` with `HeroBridge_Advice.toc` and
 `Advice.lua`.
+- With only the old CoachLink addon installed, wow-coach keeps writing `CoachLink_Advice` with
+  the global `CoachLinkAdvice`, so the old addon still shows answers (`advice_addon_for`).
 - It is not part of the HeroBridge zip, so addon managers (the CurseForge app) never overwrite
   it.
 - `HeroBridge.toc` lists it under `## OptionalDeps`, so it loads first when it is there.
@@ -745,3 +750,29 @@ revisited.
   character journals.
 - The addon uploads nothing. The program never sends your character anywhere. Its only
   internet use is the wiki lookups above, which send just the words being looked up.
+
+## Moving from CoachLink (0.11.0)
+
+The addon was renamed from CoachLink to HeroBridge. Nobody loses a saved character:
+
+- **Reading** (`savedvars.py`): `HeroBridge.lua` (`HeroBridgeDB`) is read; a character that only
+  has `CoachLink.lua` (`CoachLinkDB`) is read from that. If both exist, each character comes
+  from the file with the newer `savedAt` (a tie prefers HeroBridge). `watch` and `check` know
+  both file names.
+- **Answers** (`advice/paths.py`): `HeroBridge_Advice` is written when HeroBridge (or nothing)
+  is installed. Only when just the old `CoachLink` folder is installed does wow-coach keep
+  writing `CoachLink_Advice` / `CoachLinkAdvice`.
+- **Moving the save** (`migrate.py`, used by `wow-coach setup` and the Setup page): for each
+  account, `CoachLink.lua` is copied to `HeroBridge.lua` with only the first top-level
+  `CoachLinkDB =` renamed. The result is read back with the Lua-table reader and must hold
+  the same data. It is written atomically, the old file stays as it is, and nothing is done
+  if `HeroBridge.lua` already exists. Old answers are carried over the same way, then the old
+  `CoachLink` and `CoachLink_Advice` folders are removed (never a link or junction: those are
+  left alone and reported).
+- **Only with WoW closed** (`game_running.py`): the game rewrites its save files when it exits.
+  A best-effort check looks for a WoW program by name (`/proc` on Linux, `tasklist` on Windows,
+  `ps` on macOS; no extra library). If it finds one, the move refuses with a plain sentence and
+  changes nothing. If the program list cannot be read, the check says "not running", and the
+  Setup card has already told the player to close WoW.
+- The addon itself starts with an empty `HeroBridgeDB` on first load (it cannot read the old
+  addon's file); the move above brings the data over.

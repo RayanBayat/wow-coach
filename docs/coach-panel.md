@@ -27,7 +27,7 @@ the HeroBridge addon from version 0.8.0.
    writes its answers (`Interface/AddOns/HeroBridge_Advice`):
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach setup
    ```
 
    **You should see:** "Setup finished", and a line that says it created `HeroBridge_Advice`.

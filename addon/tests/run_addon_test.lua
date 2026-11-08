@@ -587,6 +587,7 @@ fire("TIME_PLAYED_MSG", 7200, 1800)   -- ...and types /played
 bankContents[6][2] = { "item:2589", 1 }   -- changed after the bank was closed:
 fire("BAG_UPDATE_DELAYED")                -- not seen, so not saved
 SlashCmdList.HEROBRIDGE("")   -- the player types /coach
+check(SLASH_HEROBRIDGE1 == "/coach" and SLASH_HEROBRIDGE2 == "/herobridge", "/coach and /herobridge are two names for the same command")
 
 local character = HeroBridgeDB and HeroBridgeDB.characters["Testchar-Testrealm"]
 check(HeroBridgeDB.formatVersion == 1, "formatVersion is 1")

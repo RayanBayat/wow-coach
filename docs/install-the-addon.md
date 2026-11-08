@@ -3,6 +3,12 @@
 HeroBridge is a small add-on for World of Warcraft: Forever. It saves your character so an AI
 can read it. You do this once.
 
+HeroBridge was called CoachLink before 0.11.0.
+
+**Already have CoachLink?** Close WoW completely, then run setup or click **Update HeroBridge** in
+the app. Your saved character is copied to HeroBridge, and the old CoachLink folders are removed.
+A folder that is a link (a developer's copy) is left alone.
+
 An **addon** is a folder of files that the game loads when it starts. Installing one means
 putting its folder in the right place.
 
@@ -23,7 +29,7 @@ line finds your game folder, downloads the addon, installs it and remembers wher
 (it asks you to paste the folder if it cannot find it):
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach setup
 ```
 
 **You should see:** five steps, each with an `OK:` line. Quit the game completely and start
@@ -33,9 +39,9 @@ or old. If you prefer to do it by hand, read on.
 ## Step 1: Download the addon
 
 1. Open https://github.com/RayanBayat/wow-coach/releases/latest
-2. Under **Assets**, click `HeroBridge-0.10.0.zip` (the number may be newer).
+2. Under **Assets**, click `HeroBridge-0.11.0.zip` (the number may be newer).
 
-**You should see:** a file called `HeroBridge-0.10.0.zip` in your Downloads folder.
+**You should see:** a file called `HeroBridge-0.11.0.zip` in your Downloads folder.
 
 **If it didn't work:** if your browser says the file is unsafe, check that you came from the
 link above. The zip holds only text files.
@@ -78,7 +84,7 @@ in most file managers the shortcut is Ctrl+H.
 
 ## Step 4: Unzip HeroBridge into AddOns
 
-1. Open your Downloads folder and unzip `HeroBridge-0.10.0.zip`.
+1. Open your Downloads folder and unzip `HeroBridge-0.11.0.zip`.
    - Windows: right-click the zip, **Extract All...**.
    - macOS: double-click the zip.
    - Linux: right-click, Extract, or run `unzip` in a terminal.

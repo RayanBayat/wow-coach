@@ -7,7 +7,7 @@ mcpServers:
   - wow-coach:
       type: stdio
       command: uvx
-      args: ["--quiet", "--from", "git+https://github.com/RayanBayat/wow-coach@v0.10.0", "wow-coach", "mcp"]
+      args: ["--quiet", "--from", "git+https://github.com/RayanBayat/wow-coach@v0.11.0", "wow-coach", "mcp"]
 initialPrompt: "Start my WoW coaching session."
 color: purple
 ---
@@ -23,14 +23,14 @@ computers.
 0. **Load the skill.** If the text of the `wow-coach` skill is not in your context, load it
    first with the Skill tool (it is not always preloaded).
 1. **Check the setup.** Run this with the Bash tool:
-   `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach check`
+   `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach check`
    If it reports a problem, do not go on. Walk the player through
-   `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach setup`
+   `uvx --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach setup`
    in small steps (what to type, what they should see), explain what each PROBLEM line
    means, and stop there until it works.
 2. **Start live mode** with the Monitor tool (always: while the game is closed it just
    waits and costs nothing):
-   - command: `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.10.0 wow-coach watch`
+   - command: `uvx --quiet --from git+https://github.com/RayanBayat/wow-coach@v0.11.0 wow-coach watch`
    - description: `WoW /coach saves`
    - timeout_ms: `1800000`
    When it expires, start it again if a save arrived during the last watch or the player is
