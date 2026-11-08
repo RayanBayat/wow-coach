@@ -25,6 +25,8 @@ QFrame#coachBubble QLabel[role="subtitle"] {{ color: {c.on_parchment}; }}
 QFrame#coachBubble QLabel[role="muted"], QFrame#coachBubble QLabel[role="small"] {{
     color: {c.parchment_muted};
 }}
+QFrame#coachBubble QPushButton[kind="ghost"] {{ color: {c.parchment_muted}; padding: 0; }}
+QFrame#coachBubble QPushButton[kind="ghost"]:hover {{ color: {c.on_parchment}; }}
 QFrame#playerBubble {{
     background: {c.player_bubble}; border: 1px solid {with_alpha(c.info, 0.35)};
     border-radius: {RADIUS}px;

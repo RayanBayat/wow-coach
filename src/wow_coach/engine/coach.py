@@ -24,12 +24,22 @@ from wow_coach.advice.merge import add_answer
 from wow_coach.advice.questions import open_questions
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.advice.writer import interface_from_coachlink, update_advice
+from wow_coach.ai.base import Answer as AIAnswer
 from wow_coach.ai.base import Provider
 from wow_coach.app_settings import AppSettings
 from wow_coach.characters import pick_character
 from wow_coach.engine.answer import ANSWER_SCHEMA, parse_answer
 from wow_coach.engine.contract import CoachReply
-from wow_coach.engine.conversation import Turn, append_turns, conversation_path, load_turns
+from wow_coach.engine.conversation import (
+    ChatAnswer,
+    ChatMessage,
+    Source,
+    append_messages,
+    conversation_path,
+    new_message_id,
+    now_iso,
+    read_messages,
+)
 from wow_coach.engine.memory import LocalMemory
 from wow_coach.engine.prompt import PromptData, build_messages
 from wow_coach.engine.redact import other_player_names, without_own_names
@@ -39,6 +49,7 @@ from wow_coach.report import format_history, format_status
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
 
 MAX_OUTPUT_TOKENS: Final = 800
+CONTEXT_MESSAGES: Final = 60  # newest chat messages read for the prompt (it keeps what fits)
 HISTORY_EVENTS: Final = 10
 _WRITE_ERRORS: Final = (WowCoachError, OSError, ValueError, OverflowError, RecursionError)
 
@@ -58,6 +69,14 @@ def _read_text_or_empty(path: Path) -> str:
 def _saved_at(character: Character) -> int | None:
     value = character.snapshot.get("savedAt")
     return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def provider_id(name: str) -> str:
+    """A short id for a provider's display name: "ChatGPT (your plan)" becomes "chatgpt"."""
+    words = "".join(c if c.isalnum() else " " for c in name.lower()).split()
+    if words[:1] == ["chatgpt"]:
+        return "chatgpt"
+    return "-".join(words) or "unknown"
 
 
 def _answer_as_text(answer: AdviceAnswer) -> str:
@@ -122,14 +141,16 @@ class ChatCoach:
         self._own_characters = frozenset(key.split("-", 1)[0] for key in characters)
         return found
 
-    def _prompt_data(self, found: Character, question: str, turns: list[Turn]) -> PromptData:
+    def _prompt_data(
+        self, found: Character, question: str, history: list[ChatMessage]
+    ) -> PromptData:
         now = self._now()
         return PromptData(
             status=format_status(found.snapshot, now=now),
             history=format_history(found.history, limit=HISTORY_EVENTS, now=now),
             journal=self._coach_notes(journal_path(found.key, environ=self._environ)),
             player_notes=self._coach_notes(notes_path(environ=self._environ)),
-            turns=turns,
+            messages=history,
             question=question,
         )
 
@@ -149,9 +170,9 @@ class ChatCoach:
         )
 
     def _answer(self, found: Character, question: str, asked: Question | None) -> CoachReply:
-        turns = load_turns(conversation_path(found.key, environ=self._environ))
+        history = self._chat_history(found.key)
         hidden = self._names_to_hide(found)
-        messages = build_messages(self._prompt_data(found, question, turns), hidden_names=hidden)
+        messages = build_messages(self._prompt_data(found, question, history), hidden_names=hidden)
         reply = self._provider.ask(
             messages,
             model=self._model,
@@ -164,7 +185,9 @@ class ChatCoach:
             with contextlib.suppress(OSError):
                 self._memory.add_answered(found.key, asked.id)
         written, note = self._write(found, answer)
-        self._remember(found.key, question, answer)
+        self._remember(
+            found.key, question, answer, reply, source="game" if asked else "app", asked=asked
+        )
         return CoachReply(
             character_key=found.key, answer=answer, written_to_game=written, note=note
         )
@@ -208,8 +231,41 @@ class ChatCoach:
             )
         return True, "In the game after your next /reload."
 
-    def _remember(self, character_key: str, question: str, answer: AdviceAnswer) -> None:
-        """Keep the question and answer for follow-ups. A failure here is not worth an error."""
-        turns = [Turn("user", question), Turn("assistant", _answer_as_text(answer))]
+    def _chat_history(self, character_key: str) -> list[ChatMessage]:
+        """The newest chat messages, from every source. Claude chats only if the player allows."""
+        found = read_messages(
+            conversation_path(character_key, environ=self._environ), limit=CONTEXT_MESSAGES
+        )
+        if self._settings.use_claude_chats:
+            return found
+        return [item for item in found if item.source != "claude-code"]
+
+    def _remember(
+        self,
+        character_key: str,
+        question: str,
+        answer: AdviceAnswer,
+        reply: AIAnswer,
+        *,
+        source: Source,
+        asked: Question | None,
+    ) -> None:
+        """Keep the question and answer in the chat history. A failure here is not an error."""
+        asked_at = self._now()
+        answered_at = max(float(answer.answered_at), asked_at)
+        question_id = new_message_id("app") if asked is None else f"game:{asked.id}"
+        messages = [
+            ChatMessage("user", question, question_id, now_iso(asked_at), source),
+            ChatMessage(
+                "assistant",
+                _answer_as_text(answer),
+                new_message_id(),
+                now_iso(answered_at),
+                source,
+                provider=provider_id(self._provider.name),
+                model=reply.model,
+                answer=ChatAnswer(answer.title, answer.steps, answer.text, answer.warnings),
+            ),
+        ]
         with contextlib.suppress(OSError):
-            append_turns(conversation_path(character_key, environ=self._environ), turns)
+            append_messages(conversation_path(character_key, environ=self._environ), messages)

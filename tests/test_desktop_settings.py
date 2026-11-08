@@ -240,3 +240,11 @@ def test_the_same_edit_is_not_sent_twice(qtbot: QtBot) -> None:
     page.send_notes.check.setChecked(False)
     page.save_now()
     assert core.changes == [{"share_other_player_names": True}, {"send_coach_notes": False}]
+
+
+def test_the_claude_chats_toggle_shows_and_saves_the_setting(qtbot: QtBot) -> None:
+    page, _bridge, core = make_page(qtbot, **settings_state(AppSettings(use_claude_chats=False)))
+    assert not page.use_claude_chats.check.isChecked()
+    page.use_claude_chats.check.setChecked(True)
+    page.save_now()
+    assert core.changes == [{"use_claude_chats": True}]

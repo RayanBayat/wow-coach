@@ -19,6 +19,7 @@ from wow_coach.desktop.widgets.bubbles import (
     MessageRow,
     Notice,
     PlayerBubble,
+    ReplyBubble,
     TypingBubble,
 )
 
@@ -53,7 +54,7 @@ class ChatView(QScrollArea):
         self._column.setContentsMargins(SPACE_SMALL, SPACE, SPACE_SMALL, SPACE)
         self._column.setSpacing(SPACE)
         self._rows: list[MessageRow] = []
-        self._coach_bubbles: list[CoachBubble] = []
+        self._coach_bubbles: list[CoachBubble | ReplyBubble] = []
         # Layout order: all message rows, then the typing dots, then a spring.
         self._typing_row = MessageRow(TypingBubble(), on_right=False)
         self._typing_row.hide()
@@ -109,6 +110,20 @@ class ChatView(QScrollArea):
     ) -> MessageRow:
         """Add an answer from the coach (on the left)."""
         bubble = CoachBubble(answer, note=note, written_to_game=written_to_game, now=now)
+        self._coach_bubbles.append(bubble)
+        return self._add(bubble, on_right=False, animate=animate)
+
+    def add_reply(
+        self,
+        text: str,
+        *,
+        tag: str | None,
+        seconds: float | None,
+        now: float,
+        animate: bool = True,
+    ) -> MessageRow:
+        """Add a coach reply that is plain text (on the left)."""
+        bubble = ReplyBubble(text, tag=tag, seconds=seconds, now=now)
         self._coach_bubbles.append(bubble)
         return self._add(bubble, on_right=False, animate=animate)
 

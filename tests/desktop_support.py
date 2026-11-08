@@ -7,6 +7,7 @@ window did (``asked``, ``changes``...).
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from wow_coach.app.events import EventBus
 from wow_coach.app_settings import AppSettings, update_settings
@@ -36,6 +37,30 @@ def sample_answer(
     }
 
 
+def sample_message(
+    content: str,
+    *,
+    role: str = "user",
+    message_id: str,
+    seconds: int,
+    source: str = "app",
+    provider: str | None = None,
+    answer: dict[str, object] | None = None,
+) -> dict[str, object]:
+    """One chat history message, shaped like ``views.message_to_json``."""
+    moment = datetime.fromtimestamp(seconds, tz=UTC)
+    return {
+        "id": message_id,
+        "at": moment.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+        "role": role,
+        "content": content,
+        "source": source,
+        "provider": provider,
+        "model": None,
+        "answer": answer,
+    }
+
+
 def sample_state(**changes: object) -> dict[str, object]:
     """A full state dict, shaped like ``AppCore.state()``, with optional changes."""
     state: dict[str, object] = {
@@ -45,6 +70,7 @@ def sample_state(**changes: object) -> dict[str, object]:
         "characters": [KEY],
         "selected": KEY,
         "answers": [sample_answer()],
+        "conversation": [],
         "open_questions": [],
         "usage": {"last_hour": 1, "last_day": 3},
         "last_save": 1_000,

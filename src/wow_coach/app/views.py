@@ -5,6 +5,7 @@ describes them. Every function returns simple values (str, int, list, dict) so t
 can send them as JSON.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -15,6 +16,7 @@ from wow_coach.advice.questions import open_questions
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.app_settings import AppSettings, settings_to_dict
 from wow_coach.characters import pick_character
+from wow_coach.engine.conversation import ChatMessage
 from wow_coach.errors import CoachDataMissing, WowCoachError
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
 from wow_coach.usage import DAY_SECONDS, HOUR_SECONDS
@@ -62,6 +64,28 @@ def answer_to_json(answer: AdviceAnswer) -> dict[str, object]:
         "answered_at": answer.answered_at,
         "question": answer.question,
         "question_id": answer.question_id,
+    }
+
+
+def message_to_json(message: ChatMessage) -> dict[str, object]:
+    """One chat history message as the window shows it (the stored format v1, plus nothing)."""
+    answer = message.answer
+    return {
+        "id": message.id,
+        "at": message.at,
+        "role": message.role,
+        "content": message.content,
+        "source": message.source,
+        "provider": message.provider,
+        "model": message.model,
+        "answer": None
+        if answer is None
+        else {
+            "title": answer.title,
+            "steps": list(answer.steps),
+            "text": answer.text,
+            "warnings": list(answer.warnings),
+        },
     }
 
 
@@ -151,6 +175,7 @@ def build_state(
     settings: AppSettings,
     counter: CallCounter,
     alerts_available: dict[str, bool],
+    conversation_of: Callable[[str], list[ChatMessage]] = lambda _key: [],
 ) -> dict[str, object]:
     """Everything the page needs to draw itself, in one dict."""
     character = select_character(game, wanted)
@@ -161,6 +186,7 @@ def build_state(
         "characters": sorted(game.characters),
         "selected": key,
         "answers": answers_for(game, key),
+        "conversation": [] if key is None else [message_to_json(m) for m in conversation_of(key)],
         "open_questions": [question_to_json(q) for q in open_questions_for(game, character)],
         "usage": usage_counts(counter),
         "last_save": saved_at(character),

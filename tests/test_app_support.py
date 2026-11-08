@@ -194,6 +194,7 @@ def make_rig(
     signed_in: bool = True,
     triage_provider: Provider | None = None,
     small_model: str | None = "model-luna",
+    claude_projects_dir: Path | None = None,
 ) -> Rig:
     wow_dir = tmp_path / "wow"
     wow_dir.mkdir()
@@ -212,6 +213,7 @@ def make_rig(
         usage=FakeUsage(),
         triage_provider=triage_provider,
         small_model=lambda: small_model,
+        claude_projects_dir=claude_projects_dir,
     )
     return Rig(core, coach, signin, alerts, wow_dir, settings_file)
 

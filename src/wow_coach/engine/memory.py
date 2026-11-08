@@ -14,12 +14,12 @@ import contextlib
 import json
 import os
 import tempfile
-import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Final
 
 from wow_coach.datafolder import data_folder
+from wow_coach.filelock import locked
 
 ANSWERED_FILE: Final = "answered-questions.json"
 NAMES_FILE: Final = "hidden-names-v2.json"
@@ -31,9 +31,6 @@ MAX_NAMES_PER_CHARACTER: Final = 200
 MAX_CHARACTERS: Final = 50
 MAX_FILE_BYTES: Final = 1_200_000  # 50 characters x 200 names x 100 characters, at most
 MAX_ITEM_CHARS: Final = 100
-LOCK_WAIT_SECONDS: Final = 2.0
-LOCK_STALE_SECONDS: Final = 30.0
-LOCK_POLL_SECONDS: Final = 0.05
 
 
 def _load(path: Path) -> dict[str, list[str]]:
@@ -75,52 +72,13 @@ def _save(path: Path, data: dict[str, list[str]]) -> None:
         raise
 
 
-def _lock_is_stale(lock: Path) -> bool:
-    try:
-        return time.time() - lock.stat().st_mtime > LOCK_STALE_SECONDS
-    except OSError:
-        return False
-
-
-@contextlib.contextmanager
-def _locked(path: Path) -> Iterator[None]:
-    """Hold ``<file>.lock`` (made with O_EXCL, so only one program gets it) while running.
-
-    Waits about 2 seconds, takes over a lock older than 30 seconds (a crashed program), and
-    always removes its own lock. If the lock can't be had in time we go on without it: a
-    rare lost update of a small list is better than blocking the coach.
-    """
-    lock = path.with_name(path.name + ".lock")
-    lock.parent.mkdir(parents=True, exist_ok=True)
-    deadline = time.monotonic() + LOCK_WAIT_SECONDS
-    held = False
-    while not held:
-        try:
-            os.close(os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
-            held = True
-        except FileExistsError:
-            if _lock_is_stale(lock):
-                with contextlib.suppress(OSError):
-                    lock.unlink()
-            elif time.monotonic() > deadline:
-                break
-            else:
-                time.sleep(LOCK_POLL_SECONDS)
-    try:
-        yield
-    finally:
-        if held:
-            with contextlib.suppress(OSError):
-                lock.unlink()
-
-
 def _add(path: Path, key: str, items: set[str] | list[str], cap: int) -> None:
     """Add items to a character's list (newest last), keeping the newest ``cap``."""
-    with _locked(path):
-        _add_locked(path, key, items, cap)
+    with locked(path):
+        _addlocked(path, key, items, cap)
 
 
-def _add_locked(path: Path, key: str, items: set[str] | list[str], cap: int) -> None:
+def _addlocked(path: Path, key: str, items: set[str] | list[str], cap: int) -> None:
     data = _load(path)
     old = data.pop(key, [])  # popped and re-added, so this character moves to the end
     fresh = [i[:MAX_ITEM_CHARS] for i in sorted(items) if i] if isinstance(items, set) else items

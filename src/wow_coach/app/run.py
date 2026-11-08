@@ -19,6 +19,7 @@ from wow_coach.app.watcher import Watcher
 from wow_coach.app_settings import settings_path
 from wow_coach.companion import LiveCoach, build_sign_in, build_usage_log
 from wow_coach.engine.model import choose_small_model
+from wow_coach.importers.claude_code import claude_projects_dir
 
 SNAP_HINT = "If your browser shows an error or does not open, paste the link above into it."
 
@@ -97,6 +98,7 @@ def build_core(wow_dir: Path, environ: Mapping[str, str]) -> AppCore:
         usage=usage,
         triage_provider=plan,
         small_model=_small_model_finder(plan),
+        claude_projects_dir=claude_projects_dir(environ),
     )
 
 

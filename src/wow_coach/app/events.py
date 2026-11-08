@@ -13,7 +13,10 @@ from dataclasses import dataclass
 from typing import Final
 
 # The only event names the page understands.
-EVENT_KINDS: Final = ("answer", "question", "save", "error", "signin", "decision", "info")
+# "history" = new chat messages were imported; the browser page ignores it, the app redraws.
+EVENT_KINDS: Final = (
+    "answer", "question", "save", "error", "signin", "decision", "info", "history",
+)  # fmt: skip
 MAILBOX_SIZE: Final = 200
 
 

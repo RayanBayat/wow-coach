@@ -5,13 +5,14 @@ call at a time". The web server (``server.py``) and the save-file watcher (``wat
 are thin layers on top of it, so the rules live in exactly one place.
 """
 
+import hashlib
 import logging
 import threading
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Protocol
 
-from wow_coach.advice.contract import AdviceAnswer
+from wow_coach.advice.contract import MAX_TITLE_CHARS, AdviceAnswer
 from wow_coach.ai.base import AIError, PlanLimitReached, Provider
 from wow_coach.app.baseline import AdviceBaseline
 from wow_coach.app.contract import Alerts, SignIn
@@ -33,11 +34,21 @@ from wow_coach.app_settings import (
     update_settings,
 )
 from wow_coach.engine.contract import Coach, CoachReply
+from wow_coach.engine.conversation import (
+    ChatAnswer,
+    ChatMessage,
+    append_messages,
+    conversation_file,
+    now_iso,
+    read_messages,
+)
 from wow_coach.errors import WowCoachError
+from wow_coach.importers.claude_code import import_claude_chats
 from wow_coach.triggers.state import STATE_FILE_NAME
 
 _log = logging.getLogger(__name__)
 
+SHOWN_MESSAGES = 200  # the newest chat messages sent to the window
 ALERT_TITLE = "Your coach answered"
 NOTICE_TITLE = "wow-coach"
 UNEXPECTED_ERROR = (
@@ -82,6 +93,7 @@ class AppCore:
         triage_provider: Provider | None = None,
         small_model: Callable[[], str | None] | None = None,
         trigger_state_file: Path | None = None,
+        claude_projects_dir: Path | None = None,
     ) -> None:
         """Create the core.
 
@@ -96,6 +108,8 @@ class AppCore:
             triage_provider: The AI used for the optional triage step (None = no triage).
             small_model: Gives the small model's name for triage (None = no triage).
             trigger_state_file: Where cooldowns are remembered (default: next to settings).
+            claude_projects_dir: Claude Code's ``projects`` folder, where the player's Claude
+                coach chats are read from (None = do not import them).
         """
         self.coach = coach
         self.signin = signin
@@ -107,6 +121,8 @@ class AppCore:
         self.ai_lock = threading.Lock()
         self._list_models = list_models
         self._settings_file = settings_file
+        self._claude_projects_dir = claude_projects_dir
+        self._data_dir = settings_file.parent  # where conversations/ and the other files live
         self._settings = load_settings(settings_file)
         self._settings_lock = threading.Lock()
         self._usage = usage
@@ -150,6 +166,7 @@ class AppCore:
             settings=self.settings,
             counter=self._usage,
             alerts_available=self.alerts_available(),
+            conversation_of=self.conversation,
         )
         state["welcome_pending"] = signed_in and not self._welcome_file.exists()
         if keychain_problem is not None:
@@ -157,6 +174,35 @@ class AppCore:
                 filter(None, [str(state["problem"] or ""), keychain_problem])
             )
         return state
+
+    def conversation(self, character_key: str) -> list[ChatMessage]:
+        """The newest chat messages with this character, oldest first.
+
+        Claude coach chats are left out when the player turned "Use my Claude coach chats" off.
+        """
+        found = read_messages(
+            conversation_file(self._data_dir, character_key), limit=SHOWN_MESSAGES
+        )
+        if self.settings.use_claude_chats:
+            return found
+        return [item for item in found if item.source != "claude-code"]
+
+    def import_claude_chats(self) -> int:
+        """Add new Claude coach chats to the chat history; returns how many messages were new.
+
+        Does nothing when the player turned "Use my Claude coach chats" off. It reads files,
+        so call it from a background thread, never from the window's thread.
+        """
+        if self._claude_projects_dir is None or not self.settings.use_claude_chats:
+            return 0
+        result = import_claude_chats(
+            projects_dir=self._claude_projects_dir,
+            data_dir=self._data_dir,
+            characters=self.game().characters,
+        )
+        if result.imported:
+            self.bus.publish("history", {"characters": list(result.character_keys)})
+        return result.imported
 
     def _read_signed_in(self) -> tuple[bool, str | None]:
         """(signed in?, a sentence when the keychain could not be read, e.g. it is locked)."""
@@ -303,7 +349,8 @@ class AppCore:
         )
 
     def publish_outside_answer(self, character_key: str, answer: AdviceAnswer) -> None:
-        """Send an answer that someone else wrote into ``Advice.lua``."""
+        """Send an answer that someone else wrote into ``Advice.lua``, and keep it in the chat."""
+        self._remember_outside_answer(character_key, answer)
         self.bus.publish(
             "answer",
             {
@@ -313,6 +360,38 @@ class AppCore:
                 "written_to_game": True,
             },
         )
+
+    def _remember_outside_answer(self, character_key: str, answer: AdviceAnswer) -> None:
+        """Add an answer written by another app (for example the Claude coach) to the chat.
+
+        The id comes from the answer itself, so seeing the same answer twice stores it once.
+        """
+        digest = hashlib.sha1(
+            f"{character_key}|{answer.answered_at}|{answer.title[:MAX_TITLE_CHARS]}".encode(),
+            usedforsecurity=False,
+        ).hexdigest()[:16]
+        at = now_iso(float(answer.answered_at))
+        steps = "; ".join(answer.steps)
+        text = " ".join(part for part in (answer.title + ".", steps, answer.text) if part)
+        messages = [
+            ChatMessage(
+                "assistant",
+                text,
+                f"outside:{digest}",
+                at,
+                "outside",
+                provider=None,
+                answer=ChatAnswer(answer.title, answer.steps, answer.text, answer.warnings),
+            )
+        ]
+        if answer.question:
+            messages.insert(
+                0, ChatMessage("user", answer.question, f"outside-q:{digest}", at, "outside")
+            )
+        try:
+            append_messages(conversation_file(self._data_dir, character_key), messages)
+        except OSError:
+            _log.exception("Could not keep an outside answer in the chat history")
 
     def publish_questions(self, character_key: str, game: GameView) -> None:
         """Tell the window which questions from the game are still open."""
