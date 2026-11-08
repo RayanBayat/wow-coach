@@ -1,6 +1,7 @@
 # Plan: the in-game Coach panel and the wow-coach companion app
 
-Status: **draft for the owner's review** (2026-11-08). Nothing here is built yet. Based on
+Status: **draft for the owner's review** (2026-11-08; updated the same day: **Sign in with
+ChatGPT is the only AI connection for now**). Nothing here is built yet. Based on
 release 0.7.0. Facts marked *verified* were checked in Blizzard's Forever UI source
 (github.com/Gethe/wow-ui-source, branch `forever`) or on the official page linked. Everything
 else is a design choice, and open choices are listed in "Decisions for the owner" near the end.
@@ -12,12 +13,17 @@ else is a design choice, and open choices are listed in "Decisions for the owner
 2. **A companion app on the PC** (the `wow-coach` program, grown up). It reads the save, asks
    the AI the player chose and writes the answer back for the panel. It also shows answers in
    its own window right away, so there is no need to wait for a reload.
-3. **Any AI.** Sign in with ChatGPT, or an API key from OpenAI, Anthropic, Google or OpenRouter,
-   or a local model through Ollama. The player's existing AI app (Claude Code, ChatGPT,
-   anything with MCP) keeps working too.
+3. **Sign in with ChatGPT is the only AI connection** (the owner's decision, 2026-11-08). The
+   player signs in on OpenAI's own page, and the answers use their ChatGPT plan.
+   - There are no API keys and no other providers in the companion for now.
+   - The code keeps a small provider interface (C5), so others can be added later without a
+     rewrite.
+   - The player's own AI apps (Claude Code, anything with MCP) keep working as today. wow-coach
+     makes no AI calls for them: they only read the save and can write to the panel.
 4. **The player decides when the coach speaks.** By hand (the default), on events such as a
-   death, a level-up or full bags, on a timer, or through a small local model that only wakes
-   the expensive model when it is worth it. There is a spending cap.
+   death, a level-up or full bags, on a timer, or through a smaller, faster model on the same
+   ChatGPT plan that only wakes the bigger model when it is worth it. A usage cap protects the
+   plan's limits.
 
 **Not goals:**
 - A live chat box inside the game. It is impossible, see 2.1.
@@ -93,13 +99,16 @@ https://legal.overwolf.com/docs/curseforge/mod-authors-terms):
 
 **AI companies:**
 - OpenAI: Sign in with ChatGPT is OpenAI's program for open-source apps that run on the user's
-  machine (https://github.com/openai/sign-in-with-chatgpt-devkit). API keys are fine too.
-- Anthropic: API keys only. Its policy forbids offering a Claude.ai login or routing requests
-  through Free, Pro, Max or Ultra plan credentials
-  (https://code.claude.com/docs/en/legal-and-compliance).
-- Google: Gemini API keys only. Never a consumer Google login: accounts were suspended for
-  that.
-- Local models: the player downloads them through Ollama under each model's own license.
+  machine (https://github.com/openai/sign-in-with-chatgpt-devkit). It is **the only connection
+  for now**. Follow its documentation exactly: OpenAI's own sign-in page, a loopback redirect
+  on 127.0.0.1, the requested scopes, and the plan's limits.
+- For later, if other connections are ever added:
+  - Anthropic: API keys only. Its policy forbids offering a Claude.ai login or routing requests
+    through Free, Pro, Max or Ultra plan credentials
+    (https://code.claude.com/docs/en/legal-and-compliance).
+  - Google: Gemini API keys only, never a consumer Google login (accounts were suspended for
+    that).
+  - Local models through Ollama, under each model's own license.
 
 **Licenses:**
 - New dependencies must have licenses compatible with MIT.
@@ -130,7 +139,7 @@ flowchart LR
         T["triggers + budget"]
         Q["triage<br/>(optional local model)"]
         E["coach engine<br/>(prompt, redaction,<br/>answer parsing)"]
-        AI["AI providers<br/>ChatGPT sign-in, API keys,<br/>Ollama"]
+        AI["Sign in with ChatGPT<br/>(the only AI connection)"]
         W["advice writer"]
         UI["app window<br/>(local web page)"]
         MCP["MCP server<br/>(exists, + 2 tools)"]
@@ -143,7 +152,7 @@ flowchart LR
     E --> W --> AF -->|"read at next /reload"| D --> P
     MCP <--> R
     MCP --> W
-    AI <-->|internet| Cloud["AI company<br/>(the player's choice)"]
+    AI <-->|internet| Cloud["OpenAI<br/>(the player's ChatGPT plan)"]
 ```
 
 ### 4.1 Why a separate data addon
@@ -210,16 +219,17 @@ CoachLinkAdvice = {
 - Chosen provider and model, privacy switches, trigger rules, quiet hours and budget caps.
 
 **C4. Secrets** (the operating system's keychain through `keyring`, service `wow-coach`):
-- API keys and the ChatGPT refresh token.
+- The ChatGPT refresh token and the client id OpenAI issued. The one-hour access token stays
+  in memory only.
 - Never in files, logs, SavedVariables or the advice file. Without a keychain (some Linux
-  setups), keys live in memory for the session and the app says so. There is no plain-text
-  fallback.
+  setups), the sign-in lasts for that session only and the app says so. There is no
+  plain-text fallback.
 
 **C5. Provider interface** (Python `Protocol`, in `src/wow_coach/ai/base.py`):
 
 ```python
 class Provider(Protocol):
-    name: str                       # "OpenAI (API key)", "ChatGPT (your plan)", "Ollama"...
+    name: str                       # "ChatGPT (your plan)", the only one for now
     def ask(self, messages: list[Message], *, model: str, max_output_tokens: int,
             json_schema: dict[str, object] | None = None) -> Answer: ...
     def check(self) -> str: ...     # "ok" or a plain sentence about what is wrong
@@ -230,7 +240,8 @@ class Answer:
     usage: Usage                    # input/output tokens, as the provider reported them
 ```
 
-- Tests use a `FakeProvider`, and no test touches the network.
+- There is one real implementation (`ChatGPTPlan`). Tests use a `FakeProvider`, and no test
+  touches the network.
 
 **C6. Events for triggers** (`src/wow_coach/triggers/contract.py`):
 - `Event(kind, character, at, details)` with kinds such as `saved`, `asked`, `died`,
@@ -288,15 +299,15 @@ class Answer:
 | `advice/serialize.py`, `advice/writer.py`, `advice/install.py` | The safe Lua serializer and atomic writer (C2); create or refresh the `CoachLink_Advice` folder |
 | `advice/questions.py` | Read the questions not yet answered from the save (C1) |
 | `ai/base.py` | The contracts (C5), `FakeProvider` |
-| `ai/providers/openai_key.py`, `anthropic_key.py`, `gemini_key.py`, `openrouter.py`, `ollama.py` | One small class each. OpenRouter and Ollama use OpenAI-compatible endpoints |
 | `ai/chatgpt_signin.py` | Sign in with ChatGPT: OAuth PKCE with a 127.0.0.1 loopback and a fixed port; the access token in memory, the refresh token in the keychain; sign out revokes |
-| `ai/pricing.py`, `budget.py` | A dated price table (the player can edit it), a usage ledger (`usage.jsonl`), daily and monthly caps; stops at plan limits (HTTP 429) |
+| `ai/chatgpt_plan.py` | The `ChatGPTPlan` provider: the Responses API on `api.openai.com` with the plan token, through the existing `httpx2`. Lists the models on the plan |
+| `usage.py` | A usage log (`usage.jsonl`: time, model, tokens) and the player's caps (calls per hour and per day). Stops politely at the plan's limit (HTTP 429) and says when it resets. No money is involved: it all comes out of the ChatGPT plan |
 | `secrets.py` | Keychain access (C4) with redaction helpers |
 | `coach_engine.py` | Build the prompt: coaching rules from SKILL.md, the status report, history, journal, player notes and the question. Redact other players' names. Ask for a JSON answer (steps, text, warnings). Store the conversation (`conversations/<Name-Realm>.jsonl`). Write the advice |
-| `triggers/` | Snapshot diff into events (C6), rules, cooldowns, quiet hours, timer; triage through any `Provider` (Ollama on the CPU by default) |
+| `triggers/` | Snapshot diff into events (C6), rules, cooldowns, quiet hours, timer; triage through the `Provider` interface (the smallest model on the ChatGPT plan) |
 | `app/` | `wow-coach app`: a local web page (section 7) |
 | `server.py` (exists) | Two new MCP tools: `questions_from_game(character)` and `send_advice_to_game(character, title, steps, text)`, so today's Claude Code coach can fill the panel |
-| `cli.py` (exists) | `wow-coach ask "..."`, `wow-coach app`, `wow-coach signin chatgpt`, `wow-coach keys` |
+| `cli.py` (exists) | `wow-coach signin` / `signout`, `wow-coach ask "..."`, `wow-coach app` |
 
 **Prompt injection:**
 - Mail subjects, other players' names and wiki text are untrusted. They are fenced in tagged
@@ -304,12 +315,13 @@ class Answer:
 - The model has no tools that act: it only returns text, which only the player sees. So the
   worst case is a bad answer, never an action.
 
-**Local triage model:**
-- Optional and off by default, through Ollama.
-- Runs on the CPU by default, so it never takes video memory from the game. On an 8 GB card a
-  4B model takes about 6 GB.
-- A 1B-4B model answers WAKE or SKIP in a few seconds. If it fails or times out, the plain
-  rules decide.
+**Triage model:**
+- Optional and off by default.
+- It uses the smallest, fastest model on the player's own ChatGPT plan: a short WAKE or SKIP
+  answer costs little of the plan.
+- If it fails or the plan is at its limit, the plain rules decide.
+- A local model (Ollama, on the CPU so it never takes video memory from the game) is a later
+  option, not in this plan.
 
 ## 7. The app window (security matters here)
 
@@ -321,12 +333,12 @@ class Answer:
   - A session cookie (`SameSite=Strict`, `HttpOnly`) plus a CSRF header on every request that
     changes something.
   - No CORS, and a strict Content-Security-Policy with no inline scripts.
-  - Keys are typed into a form and go straight to the keychain. They are never echoed back.
+  - Signing in opens OpenAI's own page in the browser, and the app never sees a password.
 - **Screens:**
   - Coach: chat and the next steps.
-  - Connect an AI: sign in, keys, test buttons.
+  - ChatGPT: sign in, sign out, the account and models, and a test button.
   - When to speak: triggers, the triage model, quiet hours.
-  - Spending: the ledger and the caps.
+  - Usage: the log and the caps.
   - Privacy: what is sent where.
 - **Later options:** desktop notifications ("Your coach answered") and text-to-speech
   (decision D8).
@@ -335,8 +347,8 @@ class Answer:
 
 | Release | Scope | Done when |
 |---|---|---|
-| **0.8.0 Coach panel** | The panel, Ask in game, the advice file and data addon, `setup` creating it, MCP tools `questions_from_game` and `send_advice_to_game`, the live-mode agent answering `reason: ask`, `wow-coach ask` with one API-key provider | In game: ask, then Claude Code (or `wow-coach ask`) answers, then after `/reload` the panel shows it. Restart once after the update. All tests pass, and the compliance tests (9) pass |
-| **0.9.0 Companion app** | `wow-coach app`, all providers, Sign in with ChatGPT, keychain, budget and ledger, conversation history | A player with no terminal knowledge (beyond one install line) can connect an AI and get answers in the window and the panel |
+| **0.8.0 Coach panel** | The panel, Ask in game, the advice file and data addon, `setup` creating it, MCP tools `questions_from_game` and `send_advice_to_game`, the live-mode agent answering `reason: ask`. Built alongside but not shipped: the Sign in with ChatGPT spike (D5) | In game: ask, then the Claude Code coach answers, then after `/reload` the panel shows it. Restart once after the update. All tests pass, and the compliance tests (9) pass. The spike proves sign-in plus one answer on the owner's account |
+| **0.9.0 Companion app** | Sign in with ChatGPT, keychain, `wow-coach ask`, `wow-coach app`, the usage log and caps, conversation history | A player with no terminal knowledge (beyond one install line) can sign in with ChatGPT and get answers in the window and the panel |
 | **0.10.0 When to speak** | Triggers, rules, the timer, quiet hours, optional triage, notifications | Defaults are manual only. Each automatic rule respects cooldowns and caps, shown by tests |
 | **1.0.0 Easy install + CurseForge** | Installers (decision D4), CurseForge "Forever" listing for CoachLink, privacy page, user guide with screenshots | Listed on CurseForge. A fresh Windows PC goes from zero to an answer in about 10 minutes |
 
@@ -344,7 +356,9 @@ class Answer:
 
 - **Python:**
   - pytest, mypy --strict and ruff, as now.
-  - Provider tests use recorded responses, not the network.
+  - Sign-in and ChatGPT tests run against a fake `auth.openai.com` and recorded API answers,
+    never the network. The fact checker's TypeScript tests show the shapes; its code isn't
+    copied.
   - The serializer gets property tests (`hypothesis`): any string survives the round trip,
     and no output ever has more than one top-level statement.
 - **Lua:** the panel gets its own harness, `addon/tests/run_panel_test.lua`, so it never
@@ -359,7 +373,8 @@ class Answer:
     `OnUpdate` handler.
   - The Python code never imports input or screen tools (`pyautogui`, `pynput`, `keyboard`,
     `mss`, `PIL.ImageGrab`, `win32api`/`SendInput`) or reads another process's memory.
-  - No code mentions consumer OAuth endpoints of Claude.ai or Google.
+  - No code mentions consumer OAuth endpoints of Claude.ai or Google, and no code reads or
+    reuses ChatGPT web-session cookies (only the official sign-in).
   - The advice writer refuses any path outside `AddOns/CoachLink_Advice/`.
   - Secrets never appear in files written by the app (tests with fake keys).
 - **In game** (the owner, because agents can't run the game): a short checklist per release.
@@ -395,8 +410,7 @@ class Answer:
 | 0 | Contracts, dependency pins, .toc lines, CI job for the panel test, `FakeProvider`, compliance test skeleton | shared files, `ai/base.py`, `advice/contract.py`, `triggers/contract.py`, `tests/test_compliance.py` | Opus (lead) | 0 |
 | A | Coach panel (Lua) | `addon/CoachLink/CoachLinkPanel.lua`, `addon/CoachLink/Bindings.xml`, `addon/tests/run_panel_test.lua` | Sonnet | 1 |
 | B | Advice serializer, writer, data addon install, questions reader | `src/wow_coach/advice/*` except `contract.py`, `tests/test_advice_*.py` | Sonnet | 1 |
-| C | API-key providers, pricing, budget | `src/wow_coach/ai/providers/*`, `ai/pricing.py`, `budget.py`, their tests | Sonnet | 1 (0.8.0 needs one provider; the rest in 0.9.0) |
-| D | Sign in with ChatGPT, keychain | `ai/chatgpt_signin.py`, `secrets.py`, their tests | Sonnet, then an Opus security review | 2 (0.9.0) |
+| D | Sign in with ChatGPT, the `ChatGPTPlan` provider, keychain, usage caps | `ai/chatgpt_signin.py`, `ai/chatgpt_plan.py`, `secrets.py`, `usage.py`, their tests | Sonnet, then an Opus security review | 1 (built during 0.8.0 as a spike, shipped in 0.9.0) |
 | F | Coach engine (prompt, redaction, JSON answers, conversations) | `coach_engine.py`, `tests/test_coach_engine.py` | Sonnet | 2 |
 | G | App window | `src/wow_coach/app/*`, `tests/test_app_*.py` | Sonnet, then an Opus security review | 2 (after F's API is merged) |
 | E | Triggers, rules, triage | `src/wow_coach/triggers/*` except `contract.py`, their tests | Sonnet | 3 (0.10.0) |
@@ -404,8 +418,8 @@ class Answer:
 | M | Mechanical chores: version pins, link checks, fixture trimming, CurseForge text, doc tidy | as assigned per task | **Haiku** | any |
 
 **What runs in parallel:**
-- 0.8.0: A, B and C1 (one provider).
-- 0.9.0: C (the rest), D and F, then G.
+- 0.8.0: A, B and D (the sign-in spike, which tests the riskiest part early).
+- 0.9.0: F and the rest of D, then G.
 - 0.10.0: E alone.
 
 These sets never share a file, and each depends only on the phase 0 contracts. That's why the
@@ -422,8 +436,8 @@ contracts come first.
    - Security-sensitive branches (B, D, G) get a fresh-context Opus review that sees the code,
      not the author's conclusions.
    - Findings go back to the same agent (SendMessage), which keeps its context.
-4. **Merge (lead):** in dependency order (B, then C, then A for 0.8.0), with `--no-ff`. All
-   gates run after each merge, then the end-to-end test.
+4. **Merge (lead):** in dependency order (B, then A for 0.8.0; D stays on its branch until
+   0.9.0), with `--no-ff`. All gates run after each merge, then the end-to-end test.
 5. **Shared files (lead):** design.md, the CHANGELOG, README and skill. Haiku does the
    mechanical parts.
 6. **Owner's in-game check**, then release: tag `v0.X.0`, and the release workflow builds the
@@ -436,8 +450,8 @@ contracts come first.
   integration.
 - One agent per workstream, at most 3 or 4 at once.
 - Briefs point at files instead of pasting them.
-- The repo's own AI calls (the providers) are never exercised for real in tests. A real-key
-  smoke test happens only by hand, with the owner's OK.
+- The repo's own AI calls are never exercised for real in tests. A real sign-in test happens
+  only by hand, on the owner's account and with the owner's OK.
 
 ## 11. Risks
 
@@ -446,19 +460,19 @@ contracts come first.
 | Two reloads per in-game question feel slow | The app window shows answers at once. The panel says clearly what to do |
 | A patch changes an API | Every reader runs protected (as now). The compliance and harness tests catch API use in one place |
 | CurseForge rejects the companion link | Link the GitHub page, not a file. Ask CurseForge support before 1.0 |
-| AI costs surprise the player | Caps on by default, the ledger is visible, manual-only by default |
+| The coach uses up the player's ChatGPT plan | Caps on by default (calls per hour and per day), the usage log is visible, manual-only by default, short answers |
 | Wrong advice | Every answer says which AI wrote it and "can be wrong". Wiki facts carry their source link |
 | Being seen as "AI slop" | Open code, tests and CI, an honest changelog and privacy page. Say openly that AI helped build it |
 | Linux keychain missing | Keys in memory only, with a clear message. Never plain text |
-| Sign in with ChatGPT access is gated or changes | API keys always work. Test with the owner's account before 0.9.0 |
+| Sign in with ChatGPT access is gated or changes. It is now the only connection, so this is the biggest risk | The spike runs during 0.8.0, on the owner's account, before anything depends on it. 0.8.0 works without it (the Claude Code coach fills the panel). If it fails, adding API keys is the fallback, behind the existing provider interface |
 
 ## 12. Decisions for the owner
 
 | # | Question | Recommendation |
 |---|---|---|
 | D1 | App window technology | A local web page in the browser (0.9.0). A native window (`pywebview`) can come later |
-| D2 | AI client code | The official SDKs: `openai` (also for OpenRouter and Ollama), `anthropic`, `google-genai`. They are maintained and typed. The alternative is small hand-written `httpx2` clients |
-| D3 | Providers in 0.8.0 | One: OpenAI API key (simplest to test). Everything else in 0.9.0 |
+| D2 | AI client code | With one connection: a small client on the existing `httpx2`, so there are no new AI dependencies. Only `keyring` gets added |
+| D3 | Which AI connections | **Decided 2026-11-08: Sign in with ChatGPT only, for now** |
 | D4 | Installers for 1.0.0 | Start with the `uvx` one-liner (free). Signed Windows and macOS installers cost money each year for code signing; decide before 1.0 |
 | D5 | Sign in with ChatGPT license | Implement from OpenAI's protocol docs, never copy DevKit code. Check the docs' terms and test with your account first |
 | D6 | Ask Blizzard's UI team for a written view before CurseForge | Yes, before 1.0.0 (the address is in the addon policy) |
