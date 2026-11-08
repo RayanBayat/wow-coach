@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from desktop_support import sample_state
-from PySide6.QtCore import QPoint, QSettings, Qt
+from PySide6.QtCore import QAbstractAnimation, QPoint, QPropertyAnimation, QSettings, Qt
 from PySide6.QtWidgets import QPlainTextEdit
 from pytestqt.qtbot import QtBot
 
@@ -14,6 +14,7 @@ from wow_coach.app.views import character_summary
 from wow_coach.desktop.compact import POSITION_KEY, CompactCard
 from wow_coach.desktop.quick_actions import QUICK_ACTIONS, suggestions
 from wow_coach.desktop.state import AnswerView, read_state
+from wow_coach.desktop.widgets.chat_view import ChatView
 from wow_coach.desktop.widgets.composer import COUNTER_FROM, Composer
 from wow_coach.desktop.widgets.formatting import (
     age_words,
@@ -319,3 +320,23 @@ def test_the_picker_shows_name_and_realm_but_hands_back_the_key() -> None:
 def test_very_old_or_broken_times_read_as_over_a_year() -> None:
     assert relative_time(400 * 86_400) == "over a year ago"
     assert relative_time(2 * 86_400) == "2 days ago"
+
+
+def test_scroll_glides_replace_each_other_and_clean_up(qtbot: QtBot) -> None:
+    chat = ChatView()
+    qtbot.addWidget(chat)
+    chat.resize(400, 300)
+    chat.show()
+    for number in range(40):
+        chat.add_notice(f"Message {number}", animate=False)
+    bar = chat.verticalScrollBar()
+    for _ in range(10):
+        chat.scroll_to_newest()
+    # Overlapping glides must not fight: at most one is running at a time.
+    running = [
+        a
+        for a in bar.findChildren(QPropertyAnimation)
+        if a.state() == QAbstractAnimation.State.Running
+    ]
+    assert len(running) == 1
+    qtbot.waitUntil(lambda: not bar.findChildren(QPropertyAnimation), timeout=3_000)

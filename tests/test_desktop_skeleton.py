@@ -1,8 +1,11 @@
 """The desktop app's foundations: the typed state, the bridge, the window and the theme."""
 
+from collections.abc import Callable
+
 from desktop_support import KEY, FakeCore, make_bridge, sample_state
 from pytestqt.qtbot import QtBot
 
+from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.main_window import MainWindow
 from wow_coach.desktop.run import platform_arguments
 from wow_coach.desktop.state import StateView, read_state
@@ -84,6 +87,40 @@ def test_bridge_asks_about_the_selected_character() -> None:
     assert bridge.ask("Where next?") is True
     assert core.asked == [("Where next?", "Other-Realm")]
     assert core.state_reads[-1] == "Other-Realm"
+
+
+def test_bridge_asks_for_the_character_it_was_given_even_after_a_switch() -> None:
+    bridge, core = make_bridge()
+    bridge.select_character("Other-Realm")
+    assert bridge.ask("Typed earlier", "First-Realm") is True
+    assert core.asked == [("Typed earlier", "First-Realm")]
+
+
+def test_answer_now_reads_the_game_in_the_background() -> None:
+    jobs: list[Callable[[], None]] = []
+    core = FakeCore()
+    bridge = CoreBridge(core, runner=jobs.append)
+    results: list[str] = []
+    bridge.open_questions_answered.connect(results.append)
+    bridge.answer_open_questions()
+    # Nothing ran yet: the window's own thread never touched the core.
+    assert core.answered_open_for == []
+    assert results == []
+    jobs.pop()()
+    assert core.answered_open_for == [None]
+    assert results == ["started"]
+
+
+def test_answer_now_reports_a_failure_instead_of_raising() -> None:
+    class Broken(FakeCore):
+        def start_answer_open(self, character: str | None) -> str:  # noqa: ARG002
+            raise RuntimeError("disk on fire")
+
+    bridge, _core = make_bridge(Broken())
+    results: list[str] = []
+    bridge.open_questions_answered.connect(results.append)
+    bridge.answer_open_questions()
+    assert results == ["failed"]
 
 
 def test_bridge_says_when_the_coach_is_busy() -> None:

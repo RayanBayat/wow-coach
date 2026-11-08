@@ -35,7 +35,10 @@ class QuestionView:
 
 @dataclass(frozen=True, slots=True)
 class UsageView:
-    """How many AI calls were made recently, and the player's own limits (0 = no limit)."""
+    """How many AI calls were made recently, and the player's own limits.
+
+    A cap of 0 does not mean "no limit": it allows no calls at all.
+    """
 
     last_hour: int = 0
     last_day: int = 0

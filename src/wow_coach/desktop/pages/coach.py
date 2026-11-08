@@ -7,12 +7,15 @@ empty) and the box where the player types.
 This file holds the *behavior* (what happens when a question is sent, when a save arrives,
 when the coach is busy...). The look of each part lives in ``desktop/widgets/``.
 
-The page never reads the game folder or the network. It talks only to the ``CoreBridge``.
+The page never reads the game folder or the network itself. It talks only to the
+``CoreBridge``, which does every slow thing (reading the game's files, "Answer now") in a
+background thread and sends the result back as a signal.
 """
 
 import time
+from collections import deque
 from collections.abc import Callable, Mapping
-from typing import Final
+from typing import Final, NamedTuple
 
 from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import QApplication, QPushButton, QStackedWidget, QVBoxLayout, QWidget
@@ -36,6 +39,7 @@ from wow_coach.desktop.widgets.styles import chat_style
 from wow_coach.desktop.widgets.welcome import WelcomeView
 
 BUSY_TEXT: Final = "The coach is still answering. Your question goes next."
+MAX_TYPED_REMEMBERED: Final = 50  # typed questions kept to avoid showing them twice
 WAITING_FOR_SAVE_TEXT: Final = "Waiting for fresh game data…"
 CANCELLED_TEXT: Final = "Okay, asking with the game data I already have."
 LIMIT_QUEUE_TEXT: Final = "Your waiting questions were not sent. Try them again when you can."
@@ -43,11 +47,19 @@ DEFAULT_ERROR: Final = "Something went wrong. Please try again in a moment."
 OPEN_BUSY_TEXT: Final = "The coach is still answering. Try again in a moment."
 OPEN_NONE_TEXT: Final = "There are no questions from the game waiting right now."
 TICK_MS: Final = 30_000  # how often "12 min old" is recomputed (no disk reads)
+QUEUE_RETRY_MS: Final = 1_500  # how often a waiting question tries the busy coach again
 
 type AnswerKey = tuple[int, str, str | None]
 
 _CHAT_PAGE: Final = 0
 _WELCOME_PAGE: Final = 1
+
+
+class WaitingQuestion(NamedTuple):
+    """A question that is not sent yet, and the character it was typed for."""
+
+    text: str
+    character: str | None
 
 
 def answer_key(answer: AnswerView) -> AnswerKey:
@@ -73,6 +85,7 @@ class CoachPage(Page):
         *,
         now: Callable[[], float] = time.time,
         card_settings: QSettings | None = None,
+        queue_retry_ms: int = QUEUE_RETRY_MS,
     ) -> None:
         """Build the page.
 
@@ -81,6 +94,7 @@ class CoachPage(Page):
             parent: The parent widget.
             now: The clock in seconds since 1970. Tests pass one they control.
             card_settings: Where the small card remembers its place (tests pass a temp file).
+            queue_retry_ms: How often a waiting question tries the busy coach again.
         """
         super().__init__(bridge, parent)
         self._now = now
@@ -91,9 +105,12 @@ class CoachPage(Page):
         self._character: str | None = None
         self._seen: set[AnswerKey] = set()  # answers already in the chat
         self._game_questions_seen: set[str] = set()  # ids of questions from the game shown
-        self._typed_questions: list[str] = []  # typed here, whose answer is still to come
-        self._queued: list[str] = []  # waiting for the coach to finish its current answer
-        self._fresh_questions: list[str] = []  # waiting for the next save
+        # Questions typed here, remembered so their answer does not show them a second time.
+        # The newest MAX_TYPED_REMEMBERED are kept, so this can never grow without end.
+        self._typed_questions: deque[str] = deque(maxlen=MAX_TYPED_REMEMBERED)
+        self._queued: list[WaitingQuestion] = []  # waiting for the coach to be free, oldest first
+        self._busy_notice_shown = False  # "goes next" is said once per waiting spell
+        self._fresh_questions: list[WaitingQuestion] = []  # waiting for the next save
         self._fresh_notice: MessageRow | None = None
         self._newest: AnswerView | None = None
 
@@ -104,6 +121,11 @@ class CoachPage(Page):
         self._timer.setInterval(TICK_MS)
         self._timer.timeout.connect(self._tick)
         self._timer.start()
+        # The coach can stay busy for a while after it published an answer (alerts, speech),
+        # and no event says when it is free again. So a waiting question asks again by itself.
+        self._queue_timer = QTimer(self)
+        self._queue_timer.setInterval(queue_retry_ms)
+        self._queue_timer.timeout.connect(self._retry_queue)
         app = QApplication.instance()
         if app is not None:
             app.aboutToQuit.connect(self._close_card)
@@ -162,6 +184,7 @@ class CoachPage(Page):
         self.refresh_banner.cancelled.connect(self._refresh_cancelled)
         self.refresh_banner.closed.connect(self._refresh_closed)
         self.questions_bar.answer_now.connect(self.answer_open_questions)
+        self.bridge.open_questions_answered.connect(self._on_open_questions_answered)
         self.sign_in_card.sign_in.connect(lambda: self.navigate.emit("chatgpt"))
         self.composer.submitted.connect(self.send_question)
         self.welcome.chosen.connect(self.use_action)
@@ -192,9 +215,7 @@ class CoachPage(Page):
         elif kind == "error":
             self._on_error(data)
         elif kind == "info":
-            text = data.get("text")
-            if isinstance(text, str) and text:
-                self.chat.add_notice(text)
+            self._on_info(data)
         elif kind == "signin" and data.get("state") == "signed_in":
             self.composer.focus_input()
         self._sync_stack()
@@ -231,35 +252,72 @@ class CoachPage(Page):
             return
         self._typed_questions.append(question)
         self.chat.add_player(question)
+        waiting = WaitingQuestion(question, self._character)
         if self.refresh_banner.state == "waiting":
-            self._fresh_questions.append(question)
+            self._fresh_questions.append(waiting)
             if self._fresh_notice is None:
                 self._fresh_notice = self.chat.add_notice(WAITING_FOR_SAVE_TEXT)
         else:
-            self._dispatch(question)
+            self._dispatch(waiting)
         self._sync_stack()
 
-    def _dispatch(self, question: str) -> None:
-        """Hand the question to the bridge, or queue it when the coach is busy."""
-        if self.bridge.ask(question):
-            self.chat.set_typing(True)
-        else:
-            self._queued.append(question)
+    def _dispatch(self, waiting: WaitingQuestion) -> None:
+        """Hand a question to the bridge, or put it last in the queue when the coach is busy."""
+        if len(self._queued) == 0 and self._try_to_ask(waiting):
+            return
+        self._queued.append(waiting)
+        if not self._busy_notice_shown:
+            self._busy_notice_shown = True
             self.chat.add_notice(BUSY_TEXT)
+        self._queue_timer.start()
+
+    def _try_to_ask(self, waiting: WaitingQuestion) -> bool:
+        """Ask the coach now. True when it took the question (then its dots show)."""
+        accepted = self.bridge.ask(waiting.text, waiting.character)
+        if accepted:
+            self.chat.set_typing(True)
+        return accepted
 
     def _release_queue(self) -> None:
-        """The coach finished (or failed): send the next waiting question, if any."""
+        """The coach finished (or failed): its dots go, and the next waiting question tries."""
         self.chat.set_typing(False)
-        if self._queued:
-            self._dispatch(self._queued.pop(0))
+        self._retry_queue()
+
+    def _retry_queue(self) -> None:
+        """Try to send the oldest waiting question.
+
+        Only that one is tried, and it leaves the queue only once the coach took it, so the
+        questions always go out in the order they were typed. Once the coach has one it is
+        busy again, so the others wait for the next try.
+        """
+        if self._queued and self._try_to_ask(self._queued[0]):
+            self._queued.pop(0)
+        if not self._queued:
+            self._queue_timer.stop()
+            self._busy_notice_shown = False
+
+    def _drop_waiting_questions(self) -> None:
+        """Forget every question that has not been sent (another character was chosen)."""
+        self._queued.clear()
+        self._fresh_questions.clear()
+        self._queue_timer.stop()
+        self._busy_notice_shown = False
 
     def answer_open_questions(self) -> None:
-        """ "Answer now" was pressed: answer the questions typed in the game."""
-        result = self.bridge.answer_open_questions()
+        """ "Answer now" was pressed: answer the questions typed in the game.
+
+        The bridge looks in the background; ``_on_open_questions_answered`` shows the result.
+        """
+        self.bridge.answer_open_questions()
+
+    def _on_open_questions_answered(self, result: str) -> None:
+        """The bridge says what "Answer now" did: started, busy, none or failed."""
         if result == "started":
             self.chat.set_typing(True)
         elif result == "busy":
             self.chat.add_notice(OPEN_BUSY_TEXT)
+        elif result == "failed":
+            self.chat.add_notice(DEFAULT_ERROR)
         else:
             self.chat.add_notice(OPEN_NONE_TEXT)
         self._sync_stack()
@@ -322,6 +380,13 @@ class CoachPage(Page):
             if isinstance(item, Mapping):
                 self._show_game_question(item.get("id"), item.get("text"))
 
+    def _on_info(self, data: Mapping[str, object]) -> None:
+        """A plain note from the core. It ends the wait too ("nothing new to answer")."""
+        text = data.get("text")
+        if isinstance(text, str) and text:
+            self.chat.add_notice(text)
+        self._release_queue()
+
     def _on_error(self, data: Mapping[str, object]) -> None:
         message = data.get("message")
         text = message if isinstance(message, str) and message else DEFAULT_ERROR
@@ -355,6 +420,8 @@ class CoachPage(Page):
         self._seen.clear()
         self._game_questions_seen.clear()
         self._typed_questions.clear()
+        self._drop_waiting_questions()
+        self.chat.set_typing(False)
         self._newest = None
         self._fresh_notice = None
         self.chat.clear()

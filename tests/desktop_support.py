@@ -61,6 +61,7 @@ class FakeCore:
 
     raw_state: dict[str, object] = field(default_factory=sample_state)
     busy: bool = False
+    open_result: str | None = None  # force what "Answer now" reports (for example "none")
     bus: EventBus = field(default_factory=EventBus)
     settings: AppSettings = field(default_factory=AppSettings)
     asked: list[tuple[str, str | None]] = field(default_factory=list)
@@ -82,6 +83,8 @@ class FakeCore:
         return True
 
     def start_answer_open(self, character: str | None) -> str:
+        if self.open_result is not None:
+            return self.open_result
         if self.busy:
             return "busy"
         self.answered_open_for.append(character)

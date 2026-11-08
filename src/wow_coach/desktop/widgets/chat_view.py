@@ -155,8 +155,19 @@ class ChatView(QScrollArea):
     def scroll_to_newest(self) -> None:
         """Glide to the bottom."""
         self._new_pill.hide()
+        if self._glide is not None:
+            self._glide.stop()  # two glides at once would fight over the scrollbar
         bar = self.verticalScrollBar()
-        self._glide = glide(bar, bar.maximum())
+        animation = glide(bar, bar.maximum())
+        self._glide = animation
+        # The animation deletes itself when it stops; forget it first so we never touch
+        # a deleted object.
+        animation.stateChanged.connect(lambda *_: self._forget_glide(animation))
+
+    def _forget_glide(self, animation: QPropertyAnimation) -> None:
+        """A glide stopped: drop our reference to it (if it is still the current one)."""
+        if self._glide is animation:
+            self._glide = None
 
     def jump_to_newest(self) -> None:
         """Go to the bottom at once, without gliding (when a chat is first filled)."""
