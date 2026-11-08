@@ -4,7 +4,11 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.7.0] - 2026-11-08
+
+Fixes and additions from the first evenings of real play: logging out no longer empties your
+save, deaths and new items say what happened, play time keeps itself up to date, and the
+report flags gear you can't use or should wear.
 
 ### Added
 

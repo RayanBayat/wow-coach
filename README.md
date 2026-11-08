@@ -30,9 +30,9 @@ You can start with Way 1 and add the others later.
 
 Shortcut: if you have [uv](https://docs.astral.sh/uv/getting-started/installation/), this line
 does steps 1 to 3 for you:
-`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.6.0 wow-coach setup`
+`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.7.0 wow-coach setup`
 
-1. Download `CoachLink-0.6.0.zip` from the
+1. Download `CoachLink-0.7.0.zip` from the
    [Releases page](https://github.com/RayanBayat/wow-coach/releases/latest).
 2. Unzip it into the game's `Interface\AddOns` folder, so this file exists:
    `World of Warcraft\_forever_\Interface\AddOns\CoachLink\CoachLink.toc`.
@@ -57,7 +57,7 @@ lists the commands.
    player notes file and installs the coach into Claude Code:
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.6.0 wow-coach setup --claude-code
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.7.0 wow-coach setup --claude-code
    ```
 
 3. Restart the game completely if the setup told you to, then start your coach:
