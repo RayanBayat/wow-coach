@@ -376,8 +376,8 @@ ChatGPT plan. The pieces (the plan, the rules and the reasons: `docs/plans/coach
 | The tools | `tools/`, `engine/agent.py`, `engine/sources.py` | The built-in coach uses tools while answering, like the Claude coach does. See "The tool loop" below |
 | Putting it together | `companion.py` | One builder for the CLI and the window: the same keychain entry, usage log and refresh lock. `LiveCoach` reads `settings.json` before every answer |
 | Settings | `app_settings.py` | `settings.json` in the data folder, no secrets. Every value is checked; a damaged file gives the defaults |
-| When to speak | `triggers/` | Two saves give events (death, level-up, quest ready, bags...). The player's rules per event (off, notify, coach), quiet hours, quiet in instances, a cooldown, a timer, and an optional triage step with the smallest plan model. One save never costs more than one unasked AI call |
-| The window | `app/` | A page on 127.0.0.1 (see below), and a watcher that answers the Coach panel's questions and runs the triggers |
+| When to speak | `triggers/` | Two saves give events (death, level-up, quest ready, bags...). One setting, `on_save`: `off`, `notify` (default: one free notification listing what is worth knowing, no AI) or `advice` (the same plus one coach answer), and one switch, quiet in instances. The game only hands data out when it saves, so there is no timer, no quiet hours, no cooldown (a save with nothing new gives no events) and no triage. One save never costs more than one unasked AI call |
+| The window | `app/` | A page on 127.0.0.1 (see below), and a watcher that answers the Coach panel's questions and runs "when the game saves" |
 | Alerts | `alerts.py` | Desktop notifications through the system's own programs (`notify-send`, `osascript`, PowerShell) |
 
 **The tool loop** (`engine/agent.py`, the loop documented in `ai/base.py`). The engine builds
@@ -459,7 +459,7 @@ compliance test fails on `shell=True`, `os.system` and `os.popen`.
 
 `wow-coach app` opens a Qt window (`src/wow_coach/desktop/`, PySide6 from the optional
 `desktop` extra). It is a second face for the same brain as the browser window: it builds the
-same `AppCore` (`app/run.py` `build_core`) and the same `Watcher`, so answering, triggers,
+same `AppCore` (`app/run.py` `build_core`) and the same `Watcher`, so answering, "when the game saves",
 limits and alerts work exactly as above. There is no web server in the desktop app.
 
 | Piece | Code | Job |
@@ -512,7 +512,7 @@ programs may change are locked with `<file>.lock` (`filelock.py`).
 
 | File | Format | What it holds |
 |---|---|---|
-| `settings.json` | JSON object | The choices made in the app (`app_settings.py`): `model`, `answer_questions_from_game`, `notify`, `share_other_player_names`, `send_coach_notes`, `use_claude_chats`, `triggers` (the speak-up rules). Missing or wrong values mean the defaults |
+| `settings.json` | JSON object | The choices made in the app (`app_settings.py`): `model`, `answer_questions_from_game`, `notify`, `share_other_player_names`, `send_coach_notes`, `use_claude_chats`, `triggers` (`on_save` and `quiet_in_instances`; the older per-event format is still read and mapped). Missing or wrong values mean the defaults |
 | `config.json` | JSON object | `wow_dir`: the game folder saved by `wow-coach setup` (the `WOW_COACH_CONFIG_FILE` variable points to another file) |
 | `coach-notes.md` | Markdown | The player notes (how the player likes to be coached). The `WOW_COACH_NOTES_FILE` variable points to another file |
 | `characters/<Name-Realm>.md` | Markdown | The coach's journal of one character: goals, plans, decisions |
@@ -520,7 +520,6 @@ programs may change are locked with `<file>.lock` (`filelock.py`).
 | `import-state.json` | JSON object | How far each Claude Code transcript was read: `{"v": 1, "claude-code": {"<project>/<session>.jsonl": {"offset": bytes, "coach": true, "character": "Name"}}}` |
 | `answered-questions.json` | JSON object | `{"Name-Realm": ["question id", ...]}`: game questions already answered, so none is answered (and paid for) twice |
 | `hidden-names-v2.json` | JSON object | `{"Name-Realm": ["name", ...]}`: other players' names seen in earlier saves, kept hidden |
-| `triggers-state.json` | JSON object | When the coach last spoke up by itself: `{"last_coach_at": {"Name-Realm": unix time}, "last_timer_at": unix time}` |
 | `usage.jsonl` | JSON Lines | One line per AI call: `{"at": ISO time, "model", "input_tokens", "output_tokens"}` and `"tokens_only": true` for numbers that belong to an earlier counted call. No text |
 | `welcome-seen.flag` | Text | Exists once the welcome message was dismissed |
 | `instance.lock` | Lock file | Held by the running desktop app, so only one copy runs |

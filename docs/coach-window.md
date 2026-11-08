@@ -55,34 +55,44 @@ It runs only on your computer. Only you can open it, and it never talks to other
 - **ChatGPT:** shows that you are signed in, how many questions you asked in the last hour and
   day, a **Manage usage** link to your ChatGPT settings, and **Sign out**.
 
-## When the coach speaks up by itself
+## When the game saves
 
-At first the coach only answers when you ask. In **Settings**, under **When should the coach
-speak up?**, you can choose what happens for each kind of event the game reports:
+The game only hands your character to wow-coach when it **saves**: when you type `/coach` or
+`/reload`, log out, press the "Save for the coach" key, or ask in the game. So the coach can
+never be "live", but right after each save it can tell you what changed since the save before.
 
-| Event | Example |
+In **Settings**, under **Coach on its own**, **When the game saves** has three choices:
+
+- **Off:** nothing happens. The coach only answers when you ask.
+- **Tell me what's worth knowing** (the default): one desktop notification that lists what is
+  worth knowing, in one short text. It is worked out by wow-coach itself from what changed
+  between the two saves, so it is free and uses nothing from your plan. When nothing
+  happened, you get nothing.
+- **Tell me and add the coach's advice:** the same notification, plus one coach answer about
+  those things, shown in the chat like any other answer. It uses one call of your plan.
+
+What counts as worth knowing:
+
+| Thing | Example |
 |---|---|
 | You died, or died again soon after coming back | "Died in Brill. Attacked by 2 enemies..." |
 | You levelled up | "Reached level 12." |
 | A quest is ready to turn in | "Ready to turn in: Fields of Grief." |
-| Your bags are nearly full | "2 free slots left." |
+| Your bags are nearly full | "Bags are nearly full: 2 free slots left." |
 | A new zone | "Now in Silverpine Forest." |
 | Unspent talent points, a gear upgrade in your bags, gear that needs repair | |
-| A timer, every N minutes | |
 
-For each one you choose **Off**, **Notify me** (just a notification, no AI) or **Ask the
-coach** (the coach looks at it and gives advice, using your plan).
+One more switch, **Stay quiet in dungeons and raids** (on at first): while you are in an
+instance, nothing is told or asked.
 
-- **The game only reports events when it saves:** at `/coach`, `/reload`, logout, or the
-  Coach panel's Ask.
-- **The coach stays quiet in dungeons and raids**, unless you turn that off, and in the quiet
-  hours you set.
-- **The cooldown:** after an answer it didn't ask for, the coach waits at least the cooldown
-  minutes before the next one. In between, you only get notifications.
-- **Optional "use a small AI to decide":** a small, cheap model on your plan reads the events
-  and your own words, for example "only wake the coach if I die twice in 10 minutes", and
-  decides whether it is worth asking the bigger model.
-- **Why it did or didn't speak:** the window shows each decision and its reason.
+There is no timer, no quiet hours and no waiting time between answers. One save gives at
+most one notification and at most one unasked answer, and a save where nothing changed gives
+nothing, so repeated `/reload`s cost nothing.
+
+Settings files from older versions still work: if any event was set to "Ask the coach" you
+get the advice choice, otherwise if any was on "Notify me" you get the notify choice, and
+when everything was off you get the new default. The old timer, quiet hours, waiting time
+and small-AI settings are dropped.
 
 ## Your plan's limits
 

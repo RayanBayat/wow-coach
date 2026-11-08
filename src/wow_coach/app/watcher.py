@@ -5,7 +5,8 @@ answered from memory, so a slow game hard disk is never woken up). It only reads
 after its change time moved.
 
 * A **new save** (the player typed /coach, /reload or logged out): tell the window, show the
-  open questions, and, if the player allowed it and is signed in, answer them.
+  open questions, and, if the player allowed it and is signed in, answer them. Then
+  ``SpeakUp`` may notify about what changed ("When the game saves" in the settings).
 * Every 60 seconds (and once at the start) it imports new chats from the player's Claude Code
   coach into the chat history (see ``importers/claude_code.py``).
 * **``Advice.lua`` changed from outside** (for example the Claude Code coach wrote it):
@@ -15,7 +16,6 @@ after its change time moved.
 import threading
 import time
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 
 from wow_coach.app.core import AppCore
@@ -25,7 +25,6 @@ from wow_coach.watch import ChangeTimes, change_times
 
 POLL_SECONDS = 2.0
 SETTLE_SECONDS = 1.0  # the game may still be writing right after the change time moves
-TIMER_CHECK_SECONDS = 60.0  # how often the timer rule is looked at
 IMPORT_SECONDS = 60.0  # how often new Claude coach chats are looked for
 
 
@@ -40,7 +39,6 @@ class Watcher:
         poll_seconds: float = POLL_SECONDS,
         settle_seconds: float = SETTLE_SECONDS,
         clock: Callable[[], float] = time.time,
-        local_hour: Callable[[], int] = lambda: datetime.now().hour,
     ) -> None:
         self._core = core
         self._wow_dir = wow_dir
@@ -48,8 +46,7 @@ class Watcher:
         self._settle = settle_seconds
         # Saves that already exist are not "new": only later changes count.
         self._save_times: ChangeTimes = change_times(wow_dir)
-        self._speak_up = SpeakUp(core, core.trigger_state_file, clock=clock, local_hour=local_hour)
-        self._next_timer_check = time.monotonic() + TIMER_CHECK_SECONDS
+        self._speak_up = SpeakUp(core, clock=clock)
         self._next_import = 0.0  # monotonic time of the next import: right at the start
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -71,15 +68,8 @@ class Watcher:
             if self._save_changed():
                 self._stop.wait(self._settle)  # let the game finish writing
             self.check_once()
-            if time.monotonic() >= self._next_timer_check:
-                self._next_timer_check = time.monotonic() + TIMER_CHECK_SECONDS
-                self.check_timer()
             if time.monotonic() >= self._next_import:
                 self.check_imports()
-
-    def check_timer(self) -> None:
-        """Let the timer rule fire if its time has come (no save needed)."""
-        self._core.report_errors(self._speak_up.on_timer)
 
     def check_imports(self) -> None:
         """Import new Claude coach chats now. Runs here, in the watcher thread, never in the GUI."""

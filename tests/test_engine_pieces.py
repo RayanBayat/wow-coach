@@ -12,7 +12,7 @@ from wow_coach.advice.contract import MAX_STEP_CHARS, MAX_STEPS, MAX_TEXT_CHARS
 from wow_coach.engine import memory as memory_module
 from wow_coach.engine.answer import ANSWER_SCHEMA, parse_answer
 from wow_coach.engine.memory import LocalMemory
-from wow_coach.engine.model import choose_model, choose_small_model
+from wow_coach.engine.model import choose_model
 from wow_coach.engine.redact import looks_like_player_name, other_player_names, redact_names
 from wow_coach.savedvars import find_saved_variables, load_characters
 
@@ -31,12 +31,6 @@ def test_answers_use_a_balanced_model_by_default() -> None:
     assert choose_model(plan, "gone") == "gpt-6.1-terra"
     assert choose_model(["big-sol", "x-luna"], None) == "big-sol"
     assert choose_model(["big", "x-luna"], None) == "x-luna"
-
-
-def test_the_small_model_is_for_quick_yes_or_no_checks() -> None:
-    assert choose_small_model(["gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna"]) == "gpt-6-luna"
-    assert choose_small_model(["big-sol", "mid-terra"]) == "mid-terra"
-    assert choose_small_model([]) is None
 
 
 def test_first_listed_model_when_no_known_size() -> None:

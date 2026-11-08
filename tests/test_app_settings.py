@@ -1,5 +1,6 @@
 """Tests for the companion's settings file."""
 
+import json
 from pathlib import Path
 
 import pytest
@@ -13,6 +14,7 @@ from wow_coach.app_settings import (
     settings_path,
     update_settings,
 )
+from wow_coach.triggers.contract import TriggerSettings
 
 
 def test_a_missing_file_gives_the_defaults(tmp_path: Path) -> None:
@@ -61,72 +63,39 @@ def test_the_file_lives_in_the_data_folder(tmp_path: Path) -> None:
     assert settings_path(environ=environ).name == "settings.json"
 
 
-def test_trigger_rules_are_saved_and_read_back(tmp_path: Path) -> None:
+def test_the_save_choice_is_saved_and_read_back(tmp_path: Path) -> None:
     path = tmp_path / "settings.json"
-    start = update_settings(
-        DEFAULTS, {"triggers": {"modes": {"died": "notify"}, "every_minutes": 30}}
-    )
-    save_settings(path, start)
+    save_settings(path, update_settings(DEFAULTS, {"triggers": {"on_save": "advice"}}))
+    assert load_settings(path).triggers.on_save == "advice"
+
+
+def test_an_old_settings_file_with_the_old_rules_still_loads(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    old_rules = {
+        "modes": {"asked": "coach", "died": "notify", "level_up": "coach"},
+        "every_minutes": 30,
+        "cooldown_minutes": 15,
+        "quiet_in_instances": False,
+        "quiet_from_hour": 23,
+        "quiet_to_hour": 7,
+        "use_triage": True,
+        "rules_text": "only if I die twice",
+    }
+    path.write_text(json.dumps({"notify": False, "triggers": old_rules}), encoding="utf-8")
     loaded = load_settings(path)
-    assert loaded.triggers.modes["died"] == "notify"
-    assert loaded.triggers.every_minutes == 30
-    assert loaded.triggers.modes["asked"] == "coach"  # always: the player asked
+    assert loaded.notify is False
+    assert loaded.triggers == TriggerSettings(on_save="advice", quiet_in_instances=False)
 
 
 def test_a_partial_trigger_change_keeps_the_other_rules() -> None:
-    start = update_settings(DEFAULTS, {"triggers": {"cooldown_minutes": 5, "use_triage": True}})
-    changed = update_settings(start, {"triggers": {"use_triage": False}})
-    assert changed.triggers.cooldown_minutes == 5
-    assert changed.triggers.use_triage is False
+    start = update_settings(
+        DEFAULTS, {"triggers": {"on_save": "advice", "quiet_in_instances": False}}
+    )
+    changed = update_settings(start, {"triggers": {"quiet_in_instances": True}})
+    assert changed.triggers.on_save == "advice"
+    assert changed.triggers.quiet_in_instances is True
 
 
-def test_by_default_the_coach_only_answers_when_asked() -> None:
-    modes = DEFAULTS.triggers.modes
-    assert {kind for kind, mode in modes.items() if mode != "off"} == {"asked"}
-
-
-def test_an_old_file_with_the_removed_speak_setting_still_loads(tmp_path: Path) -> None:
-    path = tmp_path / "settings.json"
-    path.write_text('{"speak": true, "notify": false}', encoding="utf-8")
-    loaded = load_settings(path)
-    assert loaded.notify is False
-    save_settings(path, loaded)
-    assert "speak" not in path.read_text(encoding="utf-8")
-
-
-def test_an_old_file_with_the_removed_usage_limits_still_loads(tmp_path: Path) -> None:
-    path = tmp_path / "settings.json"
-    path.write_text('{"max_calls_per_hour": 0, "max_calls_per_day": 5, "notify": false}', "utf-8")
-    loaded = load_settings(path)
-    assert loaded.notify is False
-    save_settings(path, loaded)
-    assert "max_calls" not in path.read_text(encoding="utf-8")
-
-
-def test_claude_chats_are_used_by_default_and_can_be_turned_off(tmp_path: Path) -> None:
-    assert DEFAULTS.use_claude_chats is True
-    changed = update_settings(DEFAULTS, {"use_claude_chats": False})
-    assert changed.use_claude_chats is False
-    assert update_settings(changed, {"use_claude_chats": "no"}).use_claude_chats is False  # refused
-    path = tmp_path / "settings.json"
-    save_settings(path, changed)
-    assert load_settings(path).use_claude_chats is False
-
-
-def test_coach_tool_settings_default_on_round_trip_and_refuse_bad_values(tmp_path: Path) -> None:
-    for name in ("use_tools", "web_search", "save_notes", "show_lookups"):
-        assert getattr(DEFAULTS, name) is True
-        off = update_settings(DEFAULTS, {name: False})
-        assert getattr(off, name) is False
-        assert getattr(update_settings(off, {name: "yes"}), name) is False  # refused
-    path = tmp_path / "settings.json"
-    save_settings(path, update_settings(DEFAULTS, {"web_search": False, "save_notes": False}))
-    loaded = load_settings(path)
-    assert (loaded.web_search, loaded.save_notes, loaded.use_tools) == (False, False, True)
-
-
-def test_an_old_file_without_the_tool_settings_gets_the_defaults(tmp_path: Path) -> None:
-    path = tmp_path / "settings.json"
-    path.write_text('{"notify": false, "use_claude_chats": false}', "utf-8")
-    loaded = load_settings(path)
-    assert loaded.use_tools and loaded.web_search and loaded.save_notes and loaded.show_lookups
+def test_by_default_the_coach_tells_what_is_worth_knowing_without_ai() -> None:
+    assert DEFAULTS.triggers.on_save == "notify"
+    assert DEFAULTS.triggers.quiet_in_instances is True
