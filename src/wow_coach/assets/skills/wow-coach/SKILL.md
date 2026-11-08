@@ -124,8 +124,33 @@ running; the player can also say "start live mode".
      fix (see the checks below), and the next 1-3 actions. Update the journal.
    - `logout`: a short summary of the session and what to do next time. Save it in the journal.
    - `reload`: only speak up if something is wrong (for example `Addon read errors`).
+   - `ask`: the player asked you a question in the game's Coach panel (addon 0.8.0+). See
+     "The Coach panel" below.
 
 If your agent cannot do this, skip it: the player just asks you after typing `/coach`.
+
+## The Coach panel (addon 0.8.0+)
+
+Inside the game, the Coach panel (`/coach panel`) shows your advice and has a box where the
+player can ask you a question. You read and write it with two MCP tools:
+
+- `questions_from_game`: the questions the player asked in the panel that have no answer yet,
+  each with a `question_id`.
+- `send_advice_to_game`: writes your answer into the panel. Give a short `title`, the next 1-3
+  concrete `steps` (each one sentence the player can act on), an optional short `text` with
+  the why, optional `warnings`, and the `question_id` when you answer a question.
+
+How to use them:
+- On a save with `reason: ask`, call `questions_from_game`, answer each question (read the
+  status first, as always), and send each answer with `send_advice_to_game`. Also say the
+  answer in this chat: the player sees it here at once, but in the game only after their next
+  `/reload`. Tell them that, once, the first time.
+- When you give the player a plan or new next steps, also send them with
+  `send_advice_to_game` (no `question_id`), so they are in the game too.
+- Keep panel text short and plain: it is read in a small window, while playing. No combat
+  advice: the panel hides in combat, and Blizzard doesn't want addons to help in fights.
+- The panel needs a one-time full game restart after the addon update (and after
+  `wow-coach setup` creates its data folder).
 
 ## Goals and plans
 
