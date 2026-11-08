@@ -1,7 +1,7 @@
 # Sign in with ChatGPT: research notes
 
-Read on **2026-11-08**, from OpenAI's public documentation only. No DevKit code and no code from
-the owner's private extension was read or used. The protocol facts below are written in our own
+Read on **2026-11-08**, from OpenAI's public documentation only. No DevKit code and no other
+implementation was read or used. The protocol facts below are written in our own
 words; the standards used are OAuth 2.0 (RFC 6749), PKCE (RFC 7636), OAuth 2.0 token revocation
 (RFC 7009) and OpenID Connect Core 1.0.
 
@@ -27,8 +27,8 @@ https://auth.openai.com/.well-known/openid-configuration.
   ChatGPT DevKit Noncommercial License v1.0": not usable in an MIT repo. We copy nothing from
   there. The pages on developers.openai.com state no license or reuse terms, and no separate
   program terms for open-source apps were found. The cookbook says to "review OpenAI's terms and
-  policies before distributing an integration". **UNVERIFIED: the governing terms.** The owner
-  should read OpenAI's Terms of Use and Service Terms once before 0.9.0 ships.
+  policies before distributing an integration". The governing terms are the
+  "Sign in with ChatGPT Terms" (https://openai.com/policies/sign-in-with-chatgpt-terms/, section 11).
 - **Preview status.** The page is called "Preview limitations". The feature may change.
 - A "Manage usage" limit can be the plan's or an app-specific limit.
 
@@ -213,3 +213,27 @@ account, on Linux with KDE Wallet as the keychain.
 - **Saved sign-in:** reused on the next run without the browser.
 - **Still not checked:** `Retry-After` on a plan limit, the meaning of
   `earliest_refresh_at`, a first registration on another port, and Windows.
+
+## 11. The Sign in with ChatGPT Terms and UI guidelines (read 2026-11-08)
+
+The terms page (https://openai.com/policies/sign-in-with-chatgpt-terms/) refuses automated
+reading (403), so these sentences come from search-engine extracts of it. Re-read the page in a
+browser before each release.
+
+| The terms say | What wow-coach does |
+|---|---|
+| "Use your app's own name during sign-in and activation. Do not impersonate OpenAI, another application, or another open-source project." | Registers as "wow-coach" (`agent_name_hint`) |
+| "Obtain and use SIWC access and refresh tokens only through OpenAI's supported sign-in flow and as authorized by the user. Do not ask users for their ChatGPT passwords or session cookies." | Only the documented OAuth flow; never passwords or cookies (a compliance test forbids `chatgpt.com/backend-api`) |
+| "Developers may process personal data only in accordance with applicable privacy laws, as authorized by users, and under a legally adequate privacy notice presented before processing." | `docs/privacy.md`, shown (summary and link) before signing in, in `wow-coach signin` and in the window |
+| "Vulnerabilities or breaches affecting users must be reported to OpenAI promptly." | `SECURITY.md` says so |
+| No use "that poses a security vulnerability or threat to users, OpenAI, or any third party, or interacting with users in a deceptive, false, misleading, or harassing manner" | Security reviews of every part; answers are labelled "AI can be wrong" |
+| "Users must be able to use their ChatGPT plan through SIWC without paying you or upgrading to a paid version of your application." | wow-coach is free |
+
+UI/UX guidelines (https://developers.openai.com/siwc/ui-ux-guidelines):
+- A welcome message after the first sign-in only: "You're using your ChatGPT plan", with
+  "Got it".
+- "Continue with ChatGPT" starts the sign-in.
+- "Using ChatGPT plan" near the composer or model selector.
+- A "Manage usage" link (https://chatgpt.com/settings/usage) near the usage summary, and as
+  the primary action on usage-limit errors.
+- Text only: no logo. The approved button formats are on /siwc/website, not checked.
