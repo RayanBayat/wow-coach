@@ -120,6 +120,26 @@ def test_requests_from_other_sites_are_refused(client: Client, site: str) -> Non
     assert client.request("POST", "/api/settings", {"changes": {}}, headers=headers)[0] == 403
 
 
+def test_opening_the_window_page_itself_works_from_anywhere(client: Client) -> None:
+    # The start page in the temp folder (file://) forwards to the window: browsers call that
+    # "cross-site". The page holds no data (the token is in the #fragment, which the server
+    # never sees), so opening it as a page is fine; its files and the API stay same-origin.
+    page = {
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Dest": "document",
+    }
+    assert client.request("GET", "/", headers=page)[0] == 200
+    assert client.request("GET", "/app.js", headers=page)[0] == 403
+    assert client.request("GET", "/api/state", headers=page)[0] == 403
+    script = {
+        "Sec-Fetch-Site": "cross-site",
+        "Sec-Fetch-Mode": "no-cors",
+        "Sec-Fetch-Dest": "script",
+    }
+    assert client.request("GET", "/", headers=script)[0] == 403
+
+
 @pytest.mark.parametrize("site", ["same-origin", "none"])
 def test_same_origin_requests_are_allowed(client: Client, site: str) -> None:
     assert client.request("GET", "/api/state", headers={"Sec-Fetch-Site": site})[0] == 200

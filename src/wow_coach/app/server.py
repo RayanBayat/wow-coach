@@ -296,11 +296,25 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     # ---- routing ----------------------------------------------------------------------
 
+    def _is_opening_the_page(self, path: str) -> bool:
+        """The browser opening the window itself as a page (a top-level navigation).
+
+        Allowed from anywhere: the start page in the temp folder (file://) forwards here, which
+        browsers call "cross-site". The page holds no data; the one-time token is in the
+        #fragment, which the server never sees. Its files and the API stay same-origin only.
+        """
+        return (
+            path in ("/", "/index.html")
+            and self.headers.get("Sec-Fetch-Mode") == "navigate"
+            and self.headers.get("Sec-Fetch-Dest") == "document"
+        )
+
     def do_GET(self) -> None:
         """Pages, files and read-only API calls."""
-        if not self._host_ok() or not self._fetch_site_ok():
-            return self._fail(403, "This address is not allowed.")
         url = urlsplit(self.path)
+        site_ok = self._fetch_site_ok() or self._is_opening_the_page(url.path)
+        if not self._host_ok() or not site_ok:
+            return self._fail(403, "This address is not allowed.")
         if not url.path.startswith("/api/"):
             return self._guarded(lambda: self._serve_static(url.path))
         if not self._has_session():
