@@ -935,6 +935,178 @@ end
 
 
 -------------------------------------------------------------------------------
+-- Deaths: who was attacking you
+-------------------------------------------------------------------------------
+
+-- Since game version 12, addons can't read the combat log, so they can't see who
+-- hit you. What an addon can see is which enemies around you have you as their
+-- target. So while you are in combat the addon looks every second at your target,
+-- focus, mouseover and every enemy with a name plate, and remembers the ones
+-- attacking you. When you die, the ones seen in the last few seconds are saved.
+-- The game's death recap (the "what killed me" list) adds the killing blow when
+-- the game has one.
+
+local ATTACKER_SCAN_SECONDS = 1
+local RECENT_ATTACK_SECONDS = 10    -- attackers seen this recently count for a death
+local FORGET_ATTACK_SECONDS = 60    -- older ones are dropped
+local DEATH_LOOP_SECONDS = 300      -- a death this soon after coming back to life is marked
+local RECAP_DELAY_SECONDS = 1       -- the death recap arrives a moment after dying
+local RECAP_MAX_AGE_SECONDS = 30    -- an older recap belongs to an earlier death
+local MAX_NAMEPLATES = 40
+-- The game's classification words, in plain English ("normal" and weak mobs get none).
+local CLASSIFICATION_WORDS = {
+    elite = "elite", rareelite = "rare elite", rare = "rare", worldboss = "boss",
+}
+
+-- The units we can look at: target, focus, mouseover and nameplate1..40.
+local WATCHED_UNITS = { "target", "focus", "mouseover" }
+for index = 1, MAX_NAMEPLATES do
+    table.insert(WATCHED_UNITS, "nameplate" .. index)
+end
+
+local recentAttackers = {}  -- GUID (or name) -> { name, level, classification, isPlayer, lastSeen }
+local attackerTicker = nil  -- the every-second look while in combat
+local lastRevivedAt = nil   -- when you last came back to life (this session)
+
+-- In some places (dungeon fights) the game hides unit details from addons as
+-- "secret" values. We skip those instead of failing on them.
+local function isSecret(value)
+    return issecretvalue ~= nil and issecretvalue(value)
+end
+
+-- Remember `unit` if it is an enemy that is attacking you right now.
+local function noteIfAttacking(unit, now)
+    if not UnitExists(unit) or not UnitCanAttack("player", unit) then
+        return
+    end
+    if UnitIsDeadOrGhost(unit) or not UnitIsUnit(unit .. "target", "player") then
+        return
+    end
+    local name, key = UnitName(unit), UnitGUID(unit)
+    if not name or isSecret(name) or isSecret(key) then
+        return
+    end
+    recentAttackers[key or name] = {
+        name = name,
+        level = UnitLevel(unit),
+        classification = UnitClassification(unit),
+        isPlayer = UnitIsPlayer(unit) == true,
+        lastSeen = now,
+    }
+end
+
+-- One look around for attackers; also forgets the ones not seen for a while.
+local function scanForAttackers()
+    local now = GetTime()
+    for _, unit in ipairs(WATCHED_UNITS) do
+        pcall(noteIfAttacking, unit, now)  -- a unit can vanish or be unreadable: skip it
+    end
+    for key, attacker in pairs(recentAttackers) do
+        if now - attacker.lastSeen > FORGET_ATTACK_SECONDS then
+            recentAttackers[key] = nil
+        end
+    end
+end
+
+-- The attackers seen in the last RECENT_ATTACK_SECONDS, strongest first, or nil.
+local function attackersJustNow()
+    local now = GetTime()
+    local list = {}
+    for _, attacker in pairs(recentAttackers) do
+        if now - attacker.lastSeen <= RECENT_ATTACK_SECONDS then
+            table.insert(list, {
+                name = attacker.name, level = attacker.level,
+                classification = attacker.classification, isPlayer = attacker.isPlayer or nil,
+            })
+        end
+    end
+    table.sort(list, function(a, b)
+        if (a.level or 0) ~= (b.level or 0) then
+            return (a.level or 0) > (b.level or 0)
+        end
+        return a.name < b.name
+    end)
+    return #list > 0 and list or nil
+end
+
+-- "Scarlet Warrior (level 9, elite)"
+local function attackerText(attacker)
+    local details = {}
+    if attacker.level == -1 then
+        table.insert(details, "level ?? (far above yours)")  -- the skull in the game
+    elseif attacker.level then
+        table.insert(details, "level " .. attacker.level)
+    end
+    if attacker.isPlayer then
+        table.insert(details, "player")
+    elseif CLASSIFICATION_WORDS[attacker.classification] then
+        table.insert(details, CLASSIFICATION_WORDS[attacker.classification])
+    end
+    if #details == 0 then
+        return attacker.name
+    end
+    return attacker.name .. " (" .. table.concat(details, ", ") .. ")"
+end
+
+-- The killing blow from the game's death recap: { name, spell, amount }, or nil.
+-- Like Blizzard's own recap window, the first event is the one that killed you.
+local function killingBlow()
+    local recap = C_DeathRecap
+    if not (recap and recap.HasRecapEvents and recap.HasRecapEvents()) then
+        return nil
+    end
+    local blow = (recap.GetRecapEvents() or {})[1]
+    if not blow or not blow.timestamp or math.abs(time() - blow.timestamp) > RECAP_MAX_AGE_SECONDS then
+        return nil  -- no recap for this death (yet), or one from an earlier death
+    end
+    local spell = blow.spellName
+    if blow.event == "SWING_DAMAGE" then
+        spell = "melee"
+    elseif blow.event == "ENVIRONMENTAL_DAMAGE" then
+        spell = string.lower(tostring(blow.environmentalType or "environment"))  -- "falling"
+    end
+    local name = nil
+    if not blow.hideCaster and blow.event ~= "ENVIRONMENTAL_DAMAGE" then
+        name = blow.sourceName
+    end
+    return { name = name, spell = spell, amount = blow.amount }
+end
+
+-- "Scarlet Warrior (melee, 45 damage)", or "falling (200 damage)" with no one to name.
+local function killerText(killer)
+    local damage = killer.amount and (killer.amount .. " damage") or nil
+    if not killer.name then
+        return (killer.spell or "unknown") .. (damage and (" (" .. damage .. ")") or "")
+    end
+    local how = { killer.spell or "unknown", damage }
+    return killer.name .. " (" .. table.concat(how, ", ") .. ")"
+end
+
+-- The history sentence for a death, from what is known about it.
+local function deathText(death)
+    local parts = { "Died in " .. death.place .. " (level " .. tostring(death.level) .. ")" }
+    if death.attackers then
+        local names = {}
+        for _, attacker in ipairs(death.attackers) do
+            table.insert(names, attackerText(attacker))
+        end
+        local enemies = #names == 1 and "1 enemy" or (#names .. " enemies")
+        table.insert(parts, "Attacked by " .. enemies .. ": " .. table.concat(names, ", "))
+    end
+    if death.killer then
+        table.insert(parts, "Killing blow: " .. killerText(death.killer))
+    end
+    if death.secondsSinceRevive then
+        table.insert(parts, death.secondsSinceRevive .. " s after coming back to life")
+    end
+    if #parts == 1 then
+        return parts[1]  -- nothing more known: the plain sentence, as before
+    end
+    return table.concat(parts, ". ") .. "."
+end
+
+
+-------------------------------------------------------------------------------
 -- Snapshot and history
 -------------------------------------------------------------------------------
 
@@ -1136,12 +1308,57 @@ function handlers.PLAYER_LEVEL_UP(newLevel)
     askPlayedSoon()
 end
 
+-- You died: save where, who was attacking you, and (a moment later, when the
+-- game has it) the killing blow from the death recap. See "Deaths" above.
 function handlers.PLAYER_DEAD()
+    scanForAttackers()  -- one last look
     local place = GetSubZoneText()
     if place == "" then
         place = GetRealZoneText()
     end
-    addHistory("death", "Died in " .. place .. " (level " .. UnitLevel("player") .. ")")
+    local death = { place = place, level = UnitLevel("player"), attackers = attackersJustNow() }
+    if lastRevivedAt and time() - lastRevivedAt <= DEATH_LOOP_SECONDS then
+        death.secondsSinceRevive = time() - lastRevivedAt
+    end
+    local event = addHistory("death", deathText(death), {
+        attackers = death.attackers, secondsSinceRevive = death.secondsSinceRevive,
+    })
+    C_Timer.After(RECAP_DELAY_SECONDS, function()
+        local ok, blow = pcall(killingBlow)
+        if ok and blow then
+            death.killer = blow
+            event.killer = blow
+            event.text = deathText(death)
+        end
+    end)
+end
+
+-- Combat starts and ends ("regen" = health and mana coming back, which stops in combat).
+function handlers.PLAYER_REGEN_DISABLED()
+    scanForAttackers()
+    if not attackerTicker then
+        attackerTicker = C_Timer.NewTicker(ATTACKER_SCAN_SECONDS, scanForAttackers)
+    end
+end
+
+function handlers.PLAYER_REGEN_ENABLED()
+    if attackerTicker then
+        attackerTicker:Cancel()
+        attackerTicker = nil
+    end
+end
+
+-- Back in your body after the corpse run, or at the spirit healer.
+function handlers.PLAYER_UNGHOST()
+    lastRevivedAt = time()
+end
+
+-- Fires when you release your spirit (you become a ghost, not alive yet) and when
+-- another player resurrects you. Only the second one counts as coming back.
+function handlers.PLAYER_ALIVE()
+    if not UnitIsDeadOrGhost("player") then
+        lastRevivedAt = time()
+    end
 end
 
 function handlers.QUEST_TURNED_IN(questID, xpReward)

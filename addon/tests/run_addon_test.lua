@@ -57,11 +57,14 @@ local function installFakeGame()
     date = os.date
     GetTime = function() return 1000 end  -- seconds since the PC started; buffs end relative to it
 
-    UnitName = function() return "Testchar" end
+    -- Units around the player that a test puts there: unit token -> { guid, name,
+    -- level, classification, isPlayer, target ("player" when it attacks you) }.
+    enemies = {}
+    UnitName = function(unit) return enemies[unit] and enemies[unit].name or "Testchar" end
     GetRealmName = function() return "Testrealm" end
     UnitRace = function() return "Undead", "Scourge" end
     UnitClass = function() return "Mage", "MAGE" end
-    UnitLevel = function() return 7 end
+    UnitLevel = function(unit) return enemies[unit] and enemies[unit].level or 7 end
     UnitFactionGroup = function() return "Horde", "Horde" end
     GetGuildInfo = function() return nil end
     IsResting = function() return true end
@@ -310,7 +313,18 @@ local function installFakeGame()
     IsInGroup = function() return false end
     IsInRaid = function() return false end
     GetNumGroupMembers = function() return 0 end
-    UnitExists = function() return false end
+    UnitExists = function(unit) return enemies[unit] ~= nil end
+    UnitGUID = function(unit) return enemies[unit] and enemies[unit].guid end
+    UnitCanAttack = function(_, unit) return enemies[unit] ~= nil end
+    UnitClassification = function(unit) return enemies[unit] and enemies[unit].classification or "normal" end
+    UnitIsPlayer = function(unit) return enemies[unit] and enemies[unit].isPlayer == true end
+    playerIsDead = false
+    UnitIsDeadOrGhost = function(unit) return unit == "player" and playerIsDead end
+    -- "nameplate1target" is "the unit nameplate1 is attacking".
+    UnitIsUnit = function(unit, other)
+        local attacker = enemies[unit:match("^(.-)target$") or ""]
+        return other == "player" and attacker ~= nil and attacker.target == "player"
+    end
     C_MountJournal = {
         GetMountIDs = function() return { 1, 2 } end,
         GetMountInfoByID = function(mountID)
@@ -417,7 +431,17 @@ local function installFakeGame()
     -- Timers: C_Timer.After only queues the function; runTimers() runs the queue,
     -- like the game does a moment later.
     pendingTimers = {}
-    C_Timer = { After = function(_, callback) table.insert(pendingTimers, callback) end }
+    tickers = {}
+    C_Timer = {
+        After = function(_, callback) table.insert(pendingTimers, callback) end,
+        -- A repeating timer; tests run its callback by hand (tickers[1].callback()).
+        NewTicker = function(_, callback)
+            local ticker = { callback = callback, cancelled = false }
+            ticker.Cancel = function(self) self.cancelled = true end
+            table.insert(tickers, ticker)
+            return ticker
+        end,
+    }
     -- /played: the game answers with TIME_PLAYED_MSG, which every chat window shows.
     playedRequests = 0
     RequestTimePlayed = function() playedRequests = playedRequests + 1 end
@@ -907,7 +931,94 @@ check(ChatFrame1:IsEventRegistered("TIME_PLAYED_MSG"), "the player's own /played
 
 
 -------------------------------------------------------------------------------
--- Test 6: a real logout, when the game has already unloaded the character
+-- Test 6: why the character died
+-------------------------------------------------------------------------------
+
+installFakeGame()
+loadAddon()
+local clock = 1000
+GetTime = function() return clock end
+local function lastDeath()
+    local history = CoachLinkDB.characters["Testchar-Testrealm"].history
+    return history[#history]
+end
+enemies = {
+    nameplate1 = { guid = "Creature-1", name = "Scarlet Warrior", level = 9,
+        classification = "elite", target = "player" },
+    nameplate2 = { guid = "Creature-2", name = "Scarlet Friar", level = 8,
+        classification = "normal", target = "player" },
+    nameplate3 = { guid = "Creature-3", name = "Duskbat", level = 5, target = "player" },
+    nameplate4 = { guid = "Creature-4", name = "Rotting Ancestor", level = 6, target = "Farmer" },
+}
+enemies.target = enemies.nameplate1      -- the player targets the warrior
+fire("PLAYER_REGEN_DISABLED")            -- combat starts: everyone attacking is noted
+check(#tickers == 1, "in combat the addon keeps looking for attackers every second")
+enemies.nameplate3 = nil                 -- the bat is killed...
+clock = 1015                             -- ...and 15 s later the player dies
+tickers[1].callback()
+fire("PLAYER_DEAD")
+local death = lastDeath()
+check(death.kind == "death" and #death.attackers == 2, "a death lists the enemies attacking in the last 10 s")
+check(death.attackers[1].name == "Scarlet Warrior" and death.attackers[1].level == 9
+    and death.attackers[1].classification == "elite", "attackers have their level and elite mark")
+check(death.text == "Died in Brill (level 7). Attacked by 2 enemies: Scarlet Warrior (level 9, elite), "
+    .. "Scarlet Friar (level 8).", "the death text names the attackers: " .. death.text)
+fire("PLAYER_REGEN_ENABLED")
+check(tickers[1].cancelled, "out of combat the addon stops looking")
+
+-- The game's death recap, when it has one, names the killing blow.
+C_DeathRecap = {
+    HasRecapEvents = function() return true end,
+    GetRecapEvents = function()
+        return {
+            { event = "SWING_DAMAGE", sourceName = "Scarlet Warrior", amount = 45, timestamp = FAKE_NOW },
+            { event = "SPELL_DAMAGE", spellName = "Holy Smite", sourceName = "Scarlet Friar",
+                amount = 20, timestamp = FAKE_NOW - 2 },
+        }
+    end,
+}
+fire("PLAYER_DEAD")
+runTimers()                              -- the recap is read a moment after dying
+death = lastDeath()
+check(death.killer and death.killer.name == "Scarlet Warrior" and death.killer.spell == "melee"
+    and death.killer.amount == 45, "the killing blow comes from the death recap")
+check(death.text:find("Killing blow: Scarlet Warrior (melee, 45 damage).", 1, true) ~= nil,
+    "the death text names the killing blow: " .. death.text)
+
+-- Dying soon after coming back to life (a "death loop").
+time = function() return FAKE_NOW + 100 end
+playerIsDead = true
+fire("PLAYER_ALIVE")                     -- released the spirit: still a ghost, not alive
+playerIsDead = false
+time = function() return FAKE_NOW + 200 end
+fire("PLAYER_UNGHOST")                   -- back in the body after the corpse run
+time = function() return FAKE_NOW + 245 end
+C_DeathRecap = {
+    HasRecapEvents = function() return true end,
+    GetRecapEvents = function()
+        return { { event = "ENVIRONMENTAL_DAMAGE", environmentalType = "Falling", amount = 200,
+            timestamp = FAKE_NOW + 245 } }
+    end,
+}
+enemies = {}
+clock = 1300                             -- the attackers from before were seen long ago
+fire("PLAYER_DEAD")
+runTimers()
+death = lastDeath()
+check(death.secondsSinceRevive == 45, "a death soon after coming back to life is marked")
+check(death.text == "Died in Brill (level 7). Killing blow: falling (200 damage). "
+    .. "45 s after coming back to life.", "the death text says how soon: " .. death.text)
+
+-- An old recap (from an earlier death) is not used.
+time = function() return FAKE_NOW + 2000 end
+fire("PLAYER_DEAD")
+runTimers()
+check(lastDeath().killer == nil and lastDeath().secondsSinceRevive == nil,
+    "an old death recap and an old revive are not used")
+
+
+-------------------------------------------------------------------------------
+-- Test 7: a real logout, when the game has already unloaded the character
 -------------------------------------------------------------------------------
 
 local function savedCharacter() return CoachLinkDB.characters["Testchar-Testrealm"] end

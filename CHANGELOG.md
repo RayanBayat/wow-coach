@@ -6,6 +6,14 @@ All notable changes to this project are written here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Deaths in the history say who was attacking you: each enemy's name, level and whether it is
+  an elite, the killing blow when the game's death recap has one, and how soon after coming
+  back to life you died again. (The game no longer lets addons read the combat log, so the
+  addon notes the enemies that have you as their target while you fight.)
+  ([#4](https://github.com/RayanBayat/wow-coach/issues/4))
+
 ### Changed
 
 - Play time stays up to date without typing `/played`: the addon asks the game for it after

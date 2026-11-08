@@ -115,8 +115,8 @@ In a terminal, `wow-coach characters` and `wow-coach progress` show the same lis
 - The AI you choose receives what you paste or what it reads, and sends it to its provider, like
   anything else you type there. Your character sheet contains your character name, realm,
   guild, level, zone, quests, items, gear, spells, gold and the rest of what the game shows you.
-  It also contains other players' character names when they are in your group or sent you
-  mail (with the mail's subject). It does not contain your account name, password or email.
+  It also contains other players' character names when they are in your group, sent you
+  mail (with the mail's subject) or attacked you just before you died. It does not contain your account name, password or email.
 - The addon only uses the normal addon interface. It does not read game memory, inject code or
   automate play. Addons that use the normal interface are allowed under Blizzard's rules.
 - The coach never needs you to close the game for it.

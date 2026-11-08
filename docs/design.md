@@ -152,9 +152,26 @@ and saves from older addons simply lack them.
 |---|---|---|
 | `time` | number | Unix time (seconds) |
 | `kind` | string | `"level"`, `"death"`, `"quest"`, `"login"` |
-| `text` | string | A sentence, for example `"Reached level 7"`, `"Died in Brill (level 6)"` |
+| `text` | string | A sentence, for example `"Reached level 7"`, `"Died in Brill (level 6)"`. A death adds what is known: `"Died in Brill (level 6). Attacked by 2 enemies: Scarlet Warrior (level 9, elite), Scarlet Friar (level 8). Killing blow: Scarlet Warrior (melee, 45 damage). 40 s after coming back to life."` |
 | `level` | number | Character level at the time. For a `"level"` event it is the level reached (saves from addon 0.6.0 and older store the level before it) |
 | `zone` | string | Zone at the time |
+| `attackers` | list | Death only (added in 0.7.0): the enemies seen attacking in the last 10 seconds, strongest first: `{ name, level, classification, isPlayer }`. `level` -1 means "??" (far above yours); `classification` is the game's word (`"normal"`, `"elite"`, `"rareelite"`, `"rare"`, `"worldboss"`...). Missing when none was seen |
+| `killer` | table | Death only: the killing blow from the game's death recap, `{ name, spell, amount }`. `spell` is `"melee"` for a plain hit, or the cause for environment damage (`"falling"`, then without `name`). Missing when the game had no recap |
+| `secondsSinceRevive` | number | Death only: seconds since the character came back to life, when that was 5 minutes or less ago (a "death loop": coming back next to the same enemies) |
+
+**How a death is explained.** Since game version 12, addons can't read the combat log in
+Forever: `COMBAT_LOG_EVENT_UNFILTERED` is marked restricted, and `GetCurrentEventInfo` only
+exists in `C_CombatLogSecure` (Blizzard's own code), not in `C_CombatLog` (checked in the
+Forever UI source, `Blizzard_APIDocumentationGenerated/CombatLog*Documentation.lua`). So the
+addon can't see who hit you. Instead, while the player is in combat (`PLAYER_REGEN_DISABLED`
+to `PLAYER_REGEN_ENABLED`), it looks every second at `target`, `focus`, `mouseover` and
+`nameplate1`-`nameplate40`, and remembers each enemy whose target is the player
+(`UnitIsUnit(unit .. "target", "player")`). Enemies without a name plate are only seen when
+targeted. One second after `PLAYER_DEAD` it asks `C_DeathRecap.GetRecapEvents()` for the
+killing blow (the first event, as in Blizzard's recap window) and only uses it if its
+`timestamp` is within 30 seconds of now. Not verified in the game: whether Forever fills the
+death recap (Blizzard's recap window only loads in retail), so `killer` may stay missing.
+Coming back to life is `PLAYER_UNGHOST`, or `PLAYER_ALIVE` when the player is not a ghost.
 
 ### Progress point fields
 
