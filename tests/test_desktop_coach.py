@@ -12,6 +12,7 @@ from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.main_window import MainWindow
 from wow_coach.desktop.pages.coach import (
     BUSY_TEXT,
+    MAX_TYPED_REMEMBERED,
     OPEN_BUSY_TEXT,
     OPEN_NONE_TEXT,
     WAITING_FOR_SAVE_TEXT,
@@ -142,7 +143,7 @@ def test_a_question_asked_while_waiting_goes_out_when_the_save_arrives(
     assert setup.core.asked == []
     assert WAITING_FOR_SAVE_TEXT in setup.texts()
     setup.event("save", saved_at=2_599, problem=None)
-    assert setup.core.asked == [("Where next?", None)]
+    assert setup.core.asked == [("Where next?", KEY)]
     assert WAITING_FOR_SAVE_TEXT not in setup.texts()
     assert setup.page.chat.typing_visible is True
 
@@ -152,7 +153,7 @@ def test_cancelling_the_refresh_asks_with_the_data_we_have(qtbot: QtBot, tmp_pat
     setup.page.start_refresh()
     setup.page.send_question("Where next?")
     setup.page.refresh_banner.cancel()
-    assert setup.core.asked == [("Where next?", None)]
+    assert setup.core.asked == [("Where next?", KEY)]
     assert setup.page.header.refresh_button.isEnabled() is True
 
 
@@ -169,7 +170,7 @@ def test_a_busy_coach_queues_the_question_and_sends_it_after_the_answer(
     assert BUSY_TEXT in setup.texts()
     setup.core.busy = False
     setup.event("answer", **answer_event("First answer", answered_at=2_700))
-    assert setup.core.asked == [("Second question", None)]
+    assert setup.core.asked == [("Second question", KEY)]
 
 
 def test_a_failed_answer_also_releases_the_queue(qtbot: QtBot, tmp_path: Path) -> None:
@@ -178,7 +179,7 @@ def test_a_failed_answer_also_releases_the_queue(qtbot: QtBot, tmp_path: Path) -
     setup.page.send_question("Waiting one")
     setup.core.busy = False
     setup.event("error", message="The AI had a hiccup.", kind="error")
-    assert setup.core.asked == [("Waiting one", None)]
+    assert setup.core.asked == [("Waiting one", KEY)]
 
 
 def test_a_usage_limit_drops_the_queue_and_offers_manage_usage(
@@ -210,7 +211,7 @@ def test_a_chip_sends_its_question_like_a_typed_one(qtbot: QtBot, tmp_path: Path
     action = QUICK_ACTIONS[1]
     chip = next(c for c in setup.page._chip_buttons if c.text() == action.label)
     qtbot.mouseClick(chip, Qt.MouseButton.LeftButton)
-    assert setup.core.asked == [(action.question, None)]
+    assert setup.core.asked == [(action.question, KEY)]
     assert action.question in setup.texts()
 
 
@@ -230,7 +231,7 @@ def test_the_welcome_cards_send_their_question(qtbot: QtBot, tmp_path: Path) -> 
     assert setup.page.stack.currentIndex() == 1  # the welcome
     card = setup.page.welcome.cards[0]
     card.clicked.emit()
-    assert setup.core.asked == [(card.action.question, None)]
+    assert setup.core.asked == [(card.action.question, KEY)]
     assert setup.page.stack.currentIndex() == 0  # the chat
 
 
@@ -482,3 +483,112 @@ def test_the_page_style_exists_for_both_color_schemes() -> None:
     assert LIGHT.success in chat_style(LIGHT)
     assert DARK.success in chat_style(DARK)
     assert chat_style(DARK) != chat_style(LIGHT)
+
+
+# ---- the busy queue retries on its own -------------------------------------------------------
+
+
+def test_a_queued_question_is_retried_by_the_timer_without_any_event(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    """The coach can stay busy after its answer was published (alerts, speech...)."""
+    setup = start(qtbot, tmp_path)
+    setup.core.busy = True
+    setup.page.send_question("First waiting")
+    setup.page.send_question("Second waiting")
+    assert setup.page._queue_timer.isActive() is True
+    setup.page._queue_timer.timeout.emit()  # still busy: nothing goes out
+    assert setup.core.asked == []
+    setup.core.busy = False
+    setup.page._queue_timer.timeout.emit()
+    setup.page._queue_timer.timeout.emit()
+    assert [q for q, _ in setup.core.asked] == ["First waiting", "Second waiting"]
+    assert setup.page._queue_timer.isActive() is False
+
+
+def test_the_goes_next_notice_is_shown_once_however_often_it_retries(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    setup = start(qtbot, tmp_path)
+    setup.core.busy = True
+    setup.page.send_question("Waiting")
+    for _ in range(3):
+        setup.page._queue_timer.timeout.emit()
+    assert setup.texts().count(BUSY_TEXT) == 1
+
+
+def test_an_event_retry_that_fails_keeps_the_order_and_the_question(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    setup = start(qtbot, tmp_path)
+    setup.core.busy = True
+    setup.page.send_question("One")
+    setup.page.send_question("Two")
+    setup.event("answer", **answer_event("Done", answered_at=2_700))  # core still busy
+    assert setup.core.asked == []
+    setup.core.busy = False
+    setup.page._queue_timer.timeout.emit()
+    assert [q for q, _ in setup.core.asked] == ["One"]
+
+
+def test_an_info_event_releases_the_queue(qtbot: QtBot, tmp_path: Path) -> None:
+    setup = start(qtbot, tmp_path)
+    setup.core.busy = True
+    setup.page.send_question("Queued behind it")
+    setup.core.busy = False
+    setup.event("info", text="Those questions were already answered.")
+    assert setup.core.asked == [("Queued behind it", KEY)]
+
+
+def test_an_info_event_alone_turns_the_typing_dots_off(qtbot: QtBot, tmp_path: Path) -> None:
+    waiting = [{"id": "a", "text": "x", "asked_at": 1}]
+    setup = start(qtbot, tmp_path, open_questions=waiting)
+    setup.page.answer_open_questions()
+    assert setup.page.chat.typing_visible is True
+    setup.event("info", text="Those questions were already answered.")
+    assert setup.page.chat.typing_visible is False
+
+
+def test_a_waiting_question_is_asked_for_the_character_it_was_typed_for(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    setup = start(qtbot, tmp_path)
+    setup.core.busy = True
+    setup.page.send_question("For the first one")
+    setup.bridge._selected = "Other-Realm"  # the player picks someone else
+    setup.core.busy = False
+    setup.page._queue_timer.timeout.emit()
+    assert setup.core.asked == [("For the first one", KEY)]
+
+
+def test_a_character_switch_drops_the_old_characters_waiting_questions(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    setup = start(qtbot, tmp_path)
+    setup.core.busy = True
+    setup.page.send_question("Queued for the first")
+    setup.page.start_refresh()
+    setup.page.send_question("Waiting for a save")
+    setup.core.raw_state = sample_state(selected="Other-Realm", characters=[KEY, "Other-Realm"])
+    setup.bridge.refresh_state()
+    setup.core.busy = False
+    setup.page._queue_timer.timeout.emit()
+    setup.event("save", saved_at=2_599, problem=None)
+    assert setup.core.asked == []
+    assert setup.page._queue_timer.isActive() is False
+    assert setup.page.chat.typing_visible is False
+
+
+def test_an_answer_without_a_question_adds_no_question_bubble(qtbot: QtBot, tmp_path: Path) -> None:
+    """The real engine drops ``question`` unless the answer has a valid id."""
+    setup = start(qtbot, tmp_path, answers=[])
+    setup.page.send_question("How do I fish?")
+    setup.event("answer", **answer_event("Fishing", answered_at=2_700, question=None))
+    assert sum("How do I fish?" in text for text in setup.texts()) == 1
+
+
+def test_remembered_typed_questions_cannot_grow_forever(qtbot: QtBot, tmp_path: Path) -> None:
+    setup = start(qtbot, tmp_path, answers=[])
+    for number in range(MAX_TYPED_REMEMBERED + 30):
+        setup.page.send_question(f"Question {number}")
+    assert len(setup.page._typed_questions) == MAX_TYPED_REMEMBERED

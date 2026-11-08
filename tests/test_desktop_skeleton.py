@@ -96,7 +96,7 @@ def test_bridge_asks_for_the_character_it_was_given_even_after_a_switch() -> Non
     assert core.asked == [("Typed earlier", "First-Realm")]
 
 
-def test_answer_now_reads_the_game_in_the_background(qtbot: QtBot) -> None:
+def test_answer_now_reads_the_game_in_the_background() -> None:
     jobs: list[Callable[[], None]] = []
     core = FakeCore()
     bridge = CoreBridge(core, runner=jobs.append)
