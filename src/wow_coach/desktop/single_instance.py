@@ -104,21 +104,30 @@ def socket_address(
     return str(path)
 
 
-def _make_private_folder(folder: Path) -> bool:
-    """Create ``folder`` for this user only. False when it is not safe to use.
+if sys.platform == "win32":
 
-    A folder that already exists is only trusted when it is a real folder (not a link) that
-    belongs to this user. Then its permissions are tightened to this user alone.
-    """
-    try:
-        folder.mkdir(mode=stat.S_IRWXU, parents=True, exist_ok=True)
-        info = folder.lstat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+    def _make_private_folder(folder: Path) -> bool:
+        """On Windows the address is a pipe name: there is no socket folder to make."""
+        del folder
+        return True
+
+else:
+
+    def _make_private_folder(folder: Path) -> bool:
+        """Create ``folder`` for this user only. False when it is not safe to use.
+
+        A folder that already exists is only trusted when it is a real folder (not a link)
+        that belongs to this user. Then its permissions are tightened to this user alone.
+        """
+        try:
+            folder.mkdir(mode=stat.S_IRWXU, parents=True, exist_ok=True)
+            info = folder.lstat()
+            if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+                return False
+            folder.chmod(stat.S_IRWXU)
+        except OSError:
             return False
-        folder.chmod(stat.S_IRWXU)
-    except OSError:
-        return False
-    return True
+        return True
 
 
 class SingleInstance(QObject):
