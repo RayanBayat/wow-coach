@@ -93,16 +93,19 @@ class AppTray(QObject):
         ):
             self.open_requested.emit()
 
+    def show_message(self, text: str) -> None:
+        """Pop up a short message next to the icon (does nothing when there is no tray)."""
+        if self._tray is None:
+            return
+        self.last_message = text
+        self._tray.showMessage(
+            "WoW Coach", text, QSystemTrayIcon.MessageIcon.Information, _MESSAGE_MS
+        )
+
     def hint_once(self) -> None:
         """Tell the player, the first time only, that the app went to the tray."""
         if self._tray is None or self._settings.value(_MESSAGE_SHOWN_KEY, False, type=bool):
             return
         self._settings.setValue(_MESSAGE_SHOWN_KEY, True)
         self._settings.sync()
-        self.last_message = TRAY_MESSAGE
-        self._tray.showMessage(
-            "WoW Coach",
-            TRAY_MESSAGE,
-            QSystemTrayIcon.MessageIcon.Information,
-            _MESSAGE_MS,
-        )
+        self.show_message(TRAY_MESSAGE)

@@ -310,19 +310,21 @@ def _desktop_installed() -> bool:
 
 def _app(arguments: argparse.Namespace, wow_dir_flag: Path | None) -> int:
     """Open the desktop app, or the browser window when asked or when Qt is not installed."""
-    folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
     wants_browser = arguments.browser or arguments.no_browser or arguments.port != 0
     if not wants_browser and not _desktop_installed():
         print(DESKTOP_MISSING)
         wants_browser = True
     if wants_browser:
+        folder = resolve_game_folder(wow_dir_flag, config_file=config_path(environ=os.environ)).path
         run_app(wow_dir=folder, port=arguments.port, open_in_browser=not arguments.no_browser)
         return 0
     # Imported only here, not at the top of the file: Qt is an optional extra, and people
     # without it must still be able to use every other command (and the browser window).
     from wow_coach.desktop.run import run_desktop  # noqa: PLC0415 - optional extra, see above
 
-    return run_desktop(wow_dir=folder, start_hidden=arguments.hidden)
+    # The desktop app looks for the game folder itself: when it is missing it shows a window
+    # that helps, instead of failing here where the player would see nothing.
+    return run_desktop(wow_dir_flag=wow_dir_flag, start_hidden=arguments.hidden)
 
 
 def _mcp(wow_dir_flag: Path | None) -> int:
