@@ -52,6 +52,16 @@ class NotebookData:
     character: NoteFile | None
     player: NoteFile
 
+    @property
+    def character_text(self) -> str | None:
+        """The journal's text, or None when there is none."""
+        return self.character.text if self.character is not None else None
+
+    @property
+    def player_text(self) -> str | None:
+        """The player notes' text, or None when there is none."""
+        return self.player.text
+
 
 def stamp_of(path: Path) -> FileStamp:
     """A cheap fingerprint of a file: when it changed and how big it is (None if missing)."""
