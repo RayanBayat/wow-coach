@@ -187,6 +187,12 @@ def test_wiki_reads_a_page_and_a_section(capsys: pytest.CaptureFixture[str]) -> 
     assert "Section: Sells" in capsys.readouterr().out
 
 
+def test_wiki_finds_a_quest_by_id(capsys: pytest.CaptureFixture[str]) -> None:
+    body = (WIKI_FIXTURES / "search_quest_365.json").read_text(encoding="utf-8")
+    assert main(["wiki", "--quest", "365"], fetch=lambda _url, _params: body) == 0
+    assert "Fields of Grief (Classic)" in capsys.readouterr().out
+
+
 def test_wiki_without_anything_to_do_explains(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["wiki"], fetch=_fake_wiki) == 2
     assert "--page" in capsys.readouterr().err

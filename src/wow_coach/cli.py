@@ -25,7 +25,12 @@ from wow_coach.server import main as run_mcp_server
 from wow_coach.setup import SetupChoices, SetupWorld, run_setup
 from wow_coach.watch import watch
 from wow_coach.web import Fetch, FetchBytes, PoliteFetcher, build_user_agent
-from wow_coach.wiki import DEFAULT_MAX_CHARS, answer_read_wiki_page, answer_search_wiki
+from wow_coach.wiki import (
+    DEFAULT_MAX_CHARS,
+    answer_find_quest,
+    answer_read_wiki_page,
+    answer_search_wiki,
+)
 
 HISTORY_EVENTS_SHOWN = 10
 
@@ -92,18 +97,21 @@ def _build_parser() -> argparse.ArgumentParser:
     wiki.add_argument("query", nargs="?", help="what to search for")
     wiki.add_argument("--page", metavar="TITLE", help="read this page instead of searching")
     wiki.add_argument("--section", metavar="NAME", help="with --page: only this section")
+    wiki.add_argument("--quest", type=int, metavar="ID", help="find the page of this quest ID")
     wiki.add_argument("--limit", type=int, default=5, help="how many search results (default 5)")
     return parser
 
 
 def _wiki(arguments: argparse.Namespace, fetch: Fetch | None) -> int:
     download = PoliteFetcher(build_user_agent()) if fetch is None else fetch
-    if arguments.page:
+    if arguments.quest is not None:
+        print(answer_find_quest(arguments.quest, download))
+    elif arguments.page:
         print(answer_read_wiki_page(arguments.page, arguments.section, DEFAULT_MAX_CHARS, download))
     elif arguments.query:
         print(answer_search_wiki(arguments.query, arguments.limit, download))
     else:
-        print("wow-coach: give a search text, or --page TITLE to read a page", file=sys.stderr)
+        print("wow-coach: give a search text, --page TITLE, or --quest ID", file=sys.stderr)
         return 2
     return 0
 

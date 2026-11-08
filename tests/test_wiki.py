@@ -6,7 +6,7 @@ from pathlib import Path
 
 from wow_coach.errors import LookupFailed
 from wow_coach.web import Fetch
-from wow_coach.wiki import answer_read_wiki_page, answer_search_wiki, page_url
+from wow_coach.wiki import answer_find_quest, answer_read_wiki_page, answer_search_wiki, page_url
 
 FIXTURES = Path(__file__).parent / "fixtures" / "wiki"
 
@@ -157,6 +157,55 @@ def test_busy_wiki_is_reported() -> None:
     body = json.dumps({"error": {"code": "maxlag", "info": "waiting for a database server"}})
     text = answer_read_wiki_page("X", None, 6000, FakeFetch(body))
     assert text.startswith("Warcraft Wiki didn't answer (busy).")
+
+
+def test_find_quest_names_the_page_whose_infobox_id_matched() -> None:
+    fetch = FakeFetch(_file("search_quest_365.json"))
+    text = answer_find_quest(365, fetch)
+    assert "Quest 365" in text
+    assert "1. Fields of Grief (Classic): the infobox id matched." in text
+    assert "https://warcraft.wiki.gg/wiki/Fields_of_Grief_(Classic)" in text
+    assert text.splitlines()[-1].startswith("Source: Warcraft Wiki (")
+
+
+def test_find_quest_searches_the_quest_infobox_id_field() -> None:
+    fetch = FakeFetch(_file("search_quest_365.json"))
+    answer_find_quest(365, fetch)
+    ((url, params),) = fetch.calls
+    assert url == "https://warcraft.wiki.gg/api.php"
+    assert params["list"] == "search"
+    assert params["srsearch"] == 'insource:"id = 365" insource:Questbox'
+    assert params["maxlag"] == "5"
+
+
+def test_find_quest_lists_every_page_when_several_match() -> None:
+    body = json.dumps(
+        {
+            "query": {
+                "search": [
+                    {"title": "Quest A", "snippet": '| <span class="searchmatch">id</span> = 7'},
+                    {"title": "Quest B (Classic)", "snippet": "id = 7 and more text"},
+                    {"title": "Other", "snippet": "mentions the number 7 only"},
+                ]
+            }
+        }
+    )
+    text = answer_find_quest(7, FakeFetch(body))
+    assert "1. Quest A: the infobox id matched." in text
+    assert "2. Quest B (Classic): the infobox id matched." in text
+    assert "3. Other: the id was not visible in the match; read the page to check." in text
+    assert "More than one page" in text
+
+
+def test_find_quest_with_no_match_says_so_without_guessing() -> None:
+    text = answer_find_quest(987654, FakeFetch(_file("search_quest_none.json")))
+    assert text.startswith("No quest page with infobox id 987654")
+    assert "search_wiki" in text
+
+
+def test_find_quest_timeout_is_plain_text() -> None:
+    text = answer_find_quest(365, _failing_fetch("timeout"))
+    assert text == "Warcraft Wiki didn't answer (timeout). Try again or use web search."
 
 
 class RoutedFetch:

@@ -1,8 +1,9 @@
 """Look things up on the Warcraft Wiki (warcraft.wiki.gg) through its official MediaWiki API.
 
-Two lookups, both returning short plain text that ends with a ``Source:`` line:
+Three lookups, all returning short plain text that ends with a ``Source:`` line:
 
 * ``answer_search_wiki``: find page titles for a question.
+* ``answer_find_quest``: find the quest page whose info box has a given quest ID.
 * ``answer_read_wiki_page``: read one page (or one section of it) as plain text.
 
 The wiki's text is licensed CC BY-SA 4.0, so every answer carries the page link and the
@@ -11,6 +12,7 @@ fake one.
 """
 
 import json
+import re
 from urllib.parse import quote
 
 from wow_coach.errors import LookupFailed
@@ -96,6 +98,48 @@ def _search_results(data: dict[str, object]) -> list[dict[str, object]] | None:
     if not isinstance(results, list):
         return None
     return [item for item in results if isinstance(item, dict)]
+
+
+def answer_find_quest(quest_id: int, fetch: Fetch) -> str:
+    """Text for the ``find_quest`` tool: the wiki page(s) whose quest info box has this ID.
+
+    Searching by title is unreliable because Forever reuses Classic quests (same ID, page
+    called "Title (Classic)") while a plain title search finds the Retail page first. The
+    quest info box (``Questbox``) has an ``id`` field, which the wiki's search can match.
+    """
+    query = f'insource:"id = {quest_id}" insource:Questbox'
+    try:
+        data = _ask(
+            fetch,
+            {"action": "query", "list": "search", "srsearch": query, "srlimit": "5"},
+        )
+    except LookupFailed as error:
+        return _didnt_answer(str(error))
+    results = _search_results(data)
+    if results is None:
+        return _didnt_answer("unexpected reply")
+    if not results:
+        return (
+            f"No quest page with infobox id {quest_id} found on the Warcraft Wiki. "
+            "Try search_wiki with the quest title."
+        )
+    lines = [f"Quest {quest_id} on the Warcraft Wiki:"]
+    for number, result in enumerate(results, start=1):
+        title = str(result.get("title", ""))
+        snippet = clean_snippet(str(result.get("snippet", "")))
+        lines.append(f"{number}. {title}: {_id_match_note(quest_id, snippet)}")
+        lines.append(f"   {page_url(title)}")
+    if len(results) > 1:
+        lines.append("More than one page matched: read each and pick the one for Forever.")
+    lines.append(SOURCE_LINE)
+    return "\n".join(lines)
+
+
+def _id_match_note(quest_id: int, snippet: str) -> str:
+    """Say whether the search snippet shows the ``id = N`` line of the info box."""
+    if re.search(rf"\bid\s*=\s*{quest_id}\b", snippet):
+        return "the infobox id matched."
+    return "the id was not visible in the match; read the page to check."
 
 
 def answer_read_wiki_page(title: str, section: str | None, max_chars: int, fetch: Fetch) -> str:

@@ -35,7 +35,12 @@ from wow_coach.notes import (
 from wow_coach.report import format_age, format_history, format_progress, format_status
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
 from wow_coach.web import Fetch, PoliteFetcher, build_user_agent
-from wow_coach.wiki import DEFAULT_MAX_CHARS, answer_read_wiki_page, answer_search_wiki
+from wow_coach.wiki import (
+    DEFAULT_MAX_CHARS,
+    answer_find_quest,
+    answer_read_wiki_page,
+    answer_search_wiki,
+)
 
 SERVER_NAME = "wow-coach"
 SERVER_INSTRUCTIONS = (
@@ -47,7 +52,8 @@ SERVER_INSTRUCTIONS = (
     "character) and the shared player notes with save_player_notes when you learn "
     "something worth remembering. For game facts (where "
     "an NPC is, what a vendor sells, who gives a quest, what it rewards) use read_wiki_page, "
-    "or search_wiki to find the right page first, and cite the page link."
+    "or search_wiki to find the right page first, and cite the page link. Look quests up "
+    "with find_quest and the quest ID from character_status, not by title."
 )
 
 logger = logging.getLogger(__name__)
@@ -413,6 +419,21 @@ def build_server(
             max_chars: Longest answer to return (default 6000).
         """
         return answer_read_wiki_page(title, section, max_chars, download)
+
+    @server.tool(annotations=web_lookup)
+    def find_quest(quest_id: int) -> str:
+        """Find the Warcraft Wiki page of a quest from its quest ID.
+
+        Use this instead of searching the quest title: Forever reuses Classic quests (same
+        ID), and a title search often finds the Retail page, which has other NPCs and
+        rewards. character_status shows each quest as "(quest 365)". Then call
+        read_wiki_page with the title it returns. If several pages are listed, read the
+        one for Classic or Forever. Always cite the link you used.
+
+        Args:
+            quest_id: The quest ID, for example 365.
+        """
+        return answer_find_quest(quest_id, download)
 
     return server
 

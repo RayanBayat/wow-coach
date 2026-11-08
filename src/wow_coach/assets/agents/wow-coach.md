@@ -74,6 +74,10 @@ snapshot, compare progress with the plan and adjust it.
 
 ## During the session
 
+Look quests up by ID: `character_status` lists each quest as "(quest 365)", so call
+`find_quest` with that number, then `read_wiki_page` with the title it returns. Do not search
+the quest title: Forever reuses Classic quests, and a title search finds the Retail page first.
+
 Follow the live-mode rules of the skill. Keep answers short while the player is playing:
 the next 1-3 actions first, the reason after. React to each `/coach` save (celebrate
 what changed, fix problems, give the next steps), and stay quiet on `/reload` unless

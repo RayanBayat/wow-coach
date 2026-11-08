@@ -227,14 +227,22 @@ The coach keeps two kinds of Markdown file in the data folder (code: `notes.py`)
 ## Game lookups (Warcraft Wiki)
 
 The MCP server (and the `wow-coach wiki` command) can look up game facts so the coach does not
-need slow, noisy web searches. Code: `web.py` (downloading), `wiki.py` (the two lookups),
+need slow, noisy web searches. Code: `web.py` (downloading), `wiki.py` (the three lookups),
 `wikitext.py` (turning the wiki's source markup into plain text).
 
 How it works, in plain words:
 
 1. `search_wiki` asks the wiki's search API for page titles and shows a cleaned one-line
    snippet and the link for each.
-2. `read_wiki_page` asks the wiki's parse API for a page's source text, then `wikitext.py`
+2. `find_quest` finds a quest page by quest ID. A title search is unreliable: Forever reuses
+   Classic quests (same ID) and their pages are called "Title (Classic)", while the plain
+   title is often the Retail quest with a different ID. The status report shows each quest as
+   "(quest 365)". Quest pages have a `Questbox` info box with an `id` field, so the tool runs
+   the wiki's search (CirrusSearch) with `insource:"id = 365" insource:Questbox` and lists the
+   pages found. For each it says whether the match snippet shows the `id = 365` line. If
+   several pages match it says so; if none match it says so and suggests `search_wiki`
+   (it never guesses). On the command line: `wow-coach wiki --quest 365`.
+3. `read_wiki_page` asks the wiki's parse API for a page's source text, then `wikitext.py`
    pulls the info box (name, level, location...) out, turns coordinates like
    `{{co|61|52|Tirisfal Glades}}` into `Tirisfal Glades 61, 52`, turns links into their text,
    turns tables into `a | b | c` rows, and drops references and HTML.
@@ -251,7 +259,7 @@ How it works, in plain words:
      templates, each answer cut at 3000 characters), and only for pages that have such
      templates. If it fails, the template shows as `[SoD Mage Scroll 20]` so the coach can see
      something was there.
-3. Every answer ends with a `Source:` line.
+4. Every answer ends with a `Source:` line.
 
 Rules we follow:
 
