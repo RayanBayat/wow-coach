@@ -8,7 +8,15 @@ putting its folder in the right place.
 
 You need: WoW Forever installed through the Battle.net app, and about 10 minutes.
 
-## The shortcut: let wow-coach do it
+## Easiest: let the WoW Coach app do it
+
+If you use the [WoW Coach app](desktop-app.md), you do not need this page. Open the app, click
+**Setup**, and click **Install CoachLink** (or **Update CoachLink**) on the **CoachLink addon**
+card. It downloads the addon that matches the app and puts it in your game, and it creates the
+`CoachLink_Advice` folder for the coach's answers. Then restart the game completely. This page
+is for people who do not use the app, or who prefer to do it by hand.
+
+## The shortcut: let wow-coach do it from a terminal
 
 If you have [uv](https://docs.astral.sh/uv/getting-started/installation/) installed, this one
 line finds your game folder, downloads the addon, installs it and remembers where your game is
@@ -54,6 +62,7 @@ Open `_forever_`.
 | Windows | `C:\Program Files (x86)\World of Warcraft\_forever_` |
 | macOS | `/Applications/World of Warcraft/_forever_` |
 | Linux with Wine or Lutris | `~/Games/battlenet/drive_c/Program Files (x86)/World of Warcraft/_forever_` (or under `~/.wine/drive_c/`) |
+| Linux with another Wine or Proton prefix | the same ending, `drive_c/Program Files (x86)/World of Warcraft/_forever_`, inside the prefix folder (Proton prefixes keep `drive_c` inside a `pfx` folder). Where the prefix is differs by launcher, so look for "prefix" in the launcher's settings. |
 
 **If it didn't work:** on Linux, the Battle.net app runs inside Wine. Open your file manager
 and look under the path above. Hidden folders (names starting with a dot) must be shown;
@@ -114,13 +123,17 @@ repeat the check at the end of Step 4. Also confirm you restarted the whole game
 2. Type `/coach` and press Enter. The screen reloads for a few seconds. That's normal: it is how
    the addon saves your character.
 
-Now continue with [Use it with any AI chat](use-with-any-ai-chat.md).
+Now continue with the [WoW Coach app](desktop-app.md) (recommended), or [use it with any AI
+chat](use-with-any-ai-chat.md).
 
 ## Updating later
 
-Download the new zip, delete the old `CoachLink` folder in `AddOns`, unzip the new one in its
+With the app: **Setup**, then **Update CoachLink** on the CoachLink card. By hand: download
+the new zip, delete the old `CoachLink` folder in `AddOns`, unzip the new one in its
 place and restart the game fully.
 
 ## Uninstalling
 
-Close the game and delete the `CoachLink` folder from `AddOns`.
+Close the game and delete the `CoachLink` folder from `AddOns`. If you also used the Coach
+panel or the app, delete the `CoachLink_Advice` folder next to it too (it holds the coach's
+answers). To remove the app itself, see [Uninstall](desktop-app.md#uninstall).
