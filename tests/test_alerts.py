@@ -2,6 +2,7 @@
 
 import subprocess
 from collections.abc import Mapping
+from pathlib import Path
 
 import pytest
 
@@ -81,27 +82,27 @@ def test_linux_notify_command() -> None:
     system, runner, _ = make("linux")
     assert system.notify("Title", "Body")
     argv, env, timeout = runner.calls[0]
-    assert argv == ["notify-send", "--app-name=wow-coach", "--", "Title", "Body"]
+    assert argv == ["/bin/notify-send", "--app-name=wow-coach", "--", "Title", "Body"]
     assert env == {} and timeout == 5
 
 
 def test_linux_speak_prefers_spd_say() -> None:
     system, _, popen = make("linux")
     assert system.speak("hello")
-    assert popen.calls == [(["spd-say", "--", "hello"], {}, None)]
+    assert popen.calls == [(["/bin/spd-say", "--", "hello"], {}, None)]
 
 
 def test_linux_speak_falls_back_to_espeak_with_stdin() -> None:
     system, _, popen = make("linux", {"espeak-ng"})
     assert system.speak("hello")
-    assert popen.calls == [(["espeak-ng", "--stdin"], {}, "hello")]
+    assert popen.calls == [(["/bin/espeak-ng", "--stdin"], {}, "hello")]
 
 
 def test_macos_commands() -> None:
     system, runner, popen = make("darwin")
     assert system.notify("T", "B") and system.speak("hello")
     assert runner.calls[0][0] == [
-        "osascript",
+        "/bin/osascript",
         "-e",
         "on run argv",
         "-e",
@@ -112,14 +113,14 @@ def test_macos_commands() -> None:
         "T",
         "B",
     ]
-    assert popen.calls == [(["say", "-f", "-"], {}, "hello")]
+    assert popen.calls == [(["/bin/say", "-f", "-"], {}, "hello")]
 
 
 def test_windows_commands_read_text_from_environment() -> None:
     system, runner, popen = make("win32")
     assert system.notify("T", "B") and system.speak("hello")
     argv, env, _ = runner.calls[0]
-    assert argv[:4] == ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
+    assert argv[:4] == ["/bin/powershell", "-NoProfile", "-NonInteractive", "-Command"]
     assert argv[4] == alerts.WINDOWS_NOTIFY_SCRIPT
     assert env == {"WOW_COACH_TITLE": "T", "WOW_COACH_TEXT": "B"}
     speak_argv, speak_env, speak_stdin = popen.calls[0]
@@ -138,12 +139,13 @@ def test_text_only_ever_travels_as_its_own_value(platform: str, nasty: str) -> N
     system.notify(nasty, nasty)
     system.speak(nasty)
     texts = {clean_text(nasty, limit) for limit in (60, 240, 600)}
+    texts |= {alerts.escape_markup(nasty, limit) for limit in (60, 240, 600)}
     # Every argv item is a fixed word, a fixed script, or exactly the cleaned text.
     fixed_scripts = {alerts.WINDOWS_NOTIFY_SCRIPT, alerts.WINDOWS_SPEAK_SCRIPT, *alerts.MAC_SCRIPT}
     all_argv = [call[0] for call in runner.calls] + [call[0] for call in popen.calls]
     for argv in all_argv:
         for item in argv:
-            if item in fixed_scripts or item.strip() in texts:
+            if item in fixed_scripts or item.strip() in texts or item.startswith("/bin/"):
                 continue
             # anything else is a short fixed option such as "-e" or "--app-name=wow-coach"
             assert item.startswith("-") or ("/" not in item and len(item) < 12), item
@@ -158,7 +160,7 @@ def test_leading_dash_is_not_an_option() -> None:
     system.notify("-bad", "-worse")
     system.speak("-rf")
     assert runner.calls[0][0][2] == "--"
-    assert popen.calls[0][0][:2] == ["spd-say", "--"]
+    assert popen.calls[0][0][:2] == ["/bin/spd-say", "--"]
     mac, mac_runner, _ = make("darwin")
     mac.notify("-bad", "-worse")
     assert mac_runner.calls[0][0][-3:] == ["--", " -bad", " -worse"]
@@ -249,3 +251,44 @@ def test_available() -> None:
     assert make("linux", {"espeak-ng"})[0].available() == {"notify": False, "speak": True}
     assert make("darwin", set())[0].available() == {"notify": False, "speak": False}
     assert make("win32")[0].available() == {"notify": True, "speak": True}
+
+
+def test_linux_notification_text_is_escaped_so_it_is_not_markup() -> None:
+    system, runner, _ = make("linux")
+    system.notify('<b>Hi</b> & <a href="x">C</a>', '<img src="x"> A&B')
+    argv = runner.calls[0][0]
+    assert argv[-2] == '&lt;b&gt;Hi&lt;/b&gt; &amp; &lt;a href="x"&gt;C&lt;/a&gt;'
+    assert argv[-1] == '&lt;img src="x"&gt; A&amp;B'
+    assert "<" not in argv[-2] + argv[-1]
+
+
+def test_escaped_cut_never_splits_an_entity() -> None:
+    system, runner, _ = make("linux")
+    system.notify("&" * 100, "<" * 500)
+    title, body = runner.calls[0][0][-2:]
+    assert title == "&amp;" * 12 and len(title) <= 60
+    assert body == "&lt;" * 60 and len(body) <= 240
+
+
+def test_programs_run_by_resolved_path_not_bare_name() -> None:
+    for platform in ("linux", "darwin", "win32"):
+        system = SystemAlerts(
+            platform=platform,
+            which=lambda name: f"/found/{name}",
+            runner=FakeRunner(),
+            popen=FakePopen(),
+        )
+        command = system._notify_command("t", "b")
+        assert command is not None and command[0][0].startswith("/found/")
+
+
+def test_windows_prefers_the_system32_powershell(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    exe = tmp_path / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    monkeypatch.setenv("SYSTEMROOT", str(tmp_path))
+    system, runner, _ = make("win32")
+    system.notify("t", "b")
+    assert runner.calls[0][0][0] == str(exe)

@@ -13,6 +13,7 @@ untrusted. It must never become part of a command or a script. It only travels a
 No program is ever run through a shell.
 """
 
+import html
 import logging
 import os
 import shutil
@@ -21,6 +22,7 @@ import sys
 import threading
 import unicodedata
 from collections.abc import Callable, Mapping
+from pathlib import Path
 from typing import Protocol
 
 log = logging.getLogger(__name__)
@@ -95,6 +97,22 @@ def clean_text(text: str, limit: int) -> str:
     return "".join(kept).strip()[:limit].strip()
 
 
+def escape_markup(text: str, limit: int) -> str:
+    """Escape `<`, `>` and `&` so a notification shows the text as plain text, not markup.
+
+    Some desktops (KDE) read notification text as HTML-like markup, so an AI-written
+    `<a href=...>` would become a clickable link. The cut counts escaped characters and
+    is made between characters, so it never splits an entity such as `&amp;`.
+    """
+    result = ""
+    for char in clean_text(text, len(text)):
+        piece = html.escape(char, quote=False)
+        if len(result) + len(piece) > limit:
+            break
+        result += piece
+    return result.strip()
+
+
 def default_runner(argv: list[str], env_extra: Mapping[str, str], timeout: float) -> int:
     """Run a program (no shell), wait for it, and return its exit code."""
     done = subprocess.run(  # noqa: S603 - argument list, no shell; text is never a command
@@ -132,8 +150,8 @@ def _not_an_option(text: str) -> str:
     return " " + text if text.startswith("-") else text
 
 
-def _powershell(script: str) -> list[str]:
-    return ["powershell", "-NoProfile", "-NonInteractive", "-Command", script]
+def _powershell(program: str, script: str) -> list[str]:
+    return [program, "-NoProfile", "-NonInteractive", "-Command", script]
 
 
 class SystemAlerts:
@@ -166,8 +184,12 @@ class SystemAlerts:
     def notify(self, title: str, body: str) -> bool:
         """Show a desktop notification and wait briefly. Never raises."""
         try:
-            title = clean_text(title, MAX_TITLE)
-            body = clean_text(body, MAX_BODY)
+            if self._platform.startswith("linux"):
+                title = escape_markup(title, MAX_TITLE)
+                body = escape_markup(body, MAX_BODY)
+            else:
+                title = clean_text(title, MAX_TITLE)
+                body = clean_text(body, MAX_BODY)
             command = self._notify_command(title, body)
             if command is None or not (title or body):
                 return False
@@ -200,38 +222,59 @@ class SystemAlerts:
 
     def _notify_command(self, title: str, body: str) -> tuple[list[str], dict[str, str]] | None:
         if self._platform.startswith("linux"):
-            if not self._which("notify-send"):
+            program = self._find("notify-send")
+            if program is None:
                 return None
-            return ["notify-send", f"--app-name={APP_NAME}", "--", title, body], {}
+            return [program, f"--app-name={APP_NAME}", "--", title, body], {}
         if self._platform == "darwin":
-            if not self._which("osascript"):
+            program = self._find("osascript")
+            if program is None:
                 return None
             script = [part for line in MAC_SCRIPT for part in ("-e", line)]
             args = ["--", _not_an_option(title), _not_an_option(body)]
-            return ["osascript", *script, *args], {}
+            return [program, *script, *args], {}
         if self._platform == "win32":
-            if not self._which("powershell"):
+            program = self._find_powershell()
+            if program is None:
                 return None
             env = {TITLE_VARIABLE: title, TEXT_VARIABLE: body}
-            return _powershell(WINDOWS_NOTIFY_SCRIPT), env
+            return _powershell(program, WINDOWS_NOTIFY_SCRIPT), env
         return None
 
     def _speak_command(self, text: str) -> tuple[list[str], dict[str, str], str | None] | None:
         if self._platform.startswith("linux"):
-            if self._which("spd-say"):
-                return ["spd-say", "--", text], {}, None
-            if self._which("espeak-ng"):
-                return ["espeak-ng", "--stdin"], {}, text
+            spd_say = self._find("spd-say")
+            if spd_say:
+                return [spd_say, "--", text], {}, None
+            espeak = self._find("espeak-ng")
+            if espeak:
+                return [espeak, "--stdin"], {}, text
             return None
         if self._platform == "darwin":
-            if not self._which("say"):
+            program = self._find("say")
+            if program is None:
                 return None
-            return ["say", "-f", "-"], {}, text
+            return [program, "-f", "-"], {}, text
         if self._platform == "win32":
-            if not self._which("powershell"):
+            program = self._find_powershell()
+            if program is None:
                 return None
-            return _powershell(WINDOWS_SPEAK_SCRIPT), {TEXT_VARIABLE: text}, None
+            return _powershell(program, WINDOWS_SPEAK_SCRIPT), {TEXT_VARIABLE: text}, None
         return None
+
+    def _find(self, name: str) -> str | None:
+        """The full path of a program. Running the full path (not the bare name) stops a
+        look-alike program in the current folder from being picked instead."""
+        return self._which(name) or None
+
+    def _find_powershell(self) -> str | None:
+        """Windows PowerShell: the copy in System32 if it exists, else whatever `which` finds."""
+        root = os.environ.get("SYSTEMROOT")
+        if root and self._platform == "win32":
+            system_copy = Path(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe")
+            if system_copy.exists():
+                return str(system_copy)
+        return self._find("powershell")
 
     def _stop_current(self) -> None:
         """Stop the previous speech if it is still talking (one voice at a time)."""
