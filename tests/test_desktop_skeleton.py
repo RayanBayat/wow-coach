@@ -155,7 +155,7 @@ def test_window_lists_every_page_and_switches_between_them(qtbot: QtBot) -> None
     window = MainWindow(bridge)
     qtbot.addWidget(window)
     names = [page.name for page in window.pages]
-    assert names == ["coach", "settings", "chatgpt", "setup", "privacy"]
+    assert names == ["coach", "notebook", "settings", "chatgpt", "setup", "privacy"]
     window.show_page("settings")
     page = window.current_page()
     assert page is not None

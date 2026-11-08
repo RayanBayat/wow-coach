@@ -27,6 +27,12 @@ _SHAPES: Final[dict[str, str]] = {
         'a2 2 0 0 1 2-2z"/>'
         '<path d="M8 9h8M8 12.5h5"/>'
     ),
+    # An open book with a few lines of writing.
+    "notebook": (
+        '<path d="M12 6c-2-1.6-5-2-8.5-1.5v13C7 17.5 10 18 12 19.6 14 18 17 17.5 20.5 17.5v-13'
+        'C17 4 14 4.4 12 6z"/>'
+        '<path d="M12 6v13.6M6.5 8.5h2.5M6.5 11.5h2.5M15 8.5h2.5M15 11.5h2.5"/>'
+    ),
     # Three sliders.
     "settings": (
         '<path d="M4 7h9M17 7h3M4 12h3M11 12h9M4 17h11M19 17h1"/>'
