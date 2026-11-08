@@ -185,7 +185,7 @@ def test_open_in_editor_opens_only_the_known_files(
     page = make_page(qtbot)
     page.character_part.open_button.click()
     page.player_part.open_button.click()
-    assert opened == [str(journal), str(player)]
+    assert [Path(item) for item in opened] == [journal, player]  # Qt writes / even on Windows
 
 
 def test_reload_reads_again_even_without_a_change(qtbot: QtBot) -> None:

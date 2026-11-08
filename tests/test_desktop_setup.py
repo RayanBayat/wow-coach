@@ -2,6 +2,7 @@
 
 import io
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from pytestqt.qtbot import QtBot
 
 from wow_coach.config import load_saved_wow_dir
 from wow_coach.desktop.hotkey import GlobalHotkey, HotkeyState, HotkeyStatus
-from wow_coach.desktop.pages.setup import SetupPage, SetupServices
+from wow_coach.desktop.pages.setup import MENU_NAME, SetupPage, SetupServices
 from wow_coach.desktop.setup_checks import (
     RESTART_WOW_HINT,
     Status,
@@ -25,7 +26,7 @@ from wow_coach.desktop.setup_checks import (
     install_or_update_addon,
     make_report,
 )
-from wow_coach.desktop.shortcuts import ShortcutFolders, ShortcutMaker
+from wow_coach.desktop.shortcuts import ShortcutFolders, ShortcutMaker, overlay_command
 from wow_coach.errors import LookupFailed
 from wow_coach.setup import RELEASE_URL
 
@@ -338,7 +339,7 @@ def test_the_key_card_explains_the_keybinding(qtbot: QtBot, tmp_path: Path) -> N
 def test_the_page_toggles_shortcuts(qtbot: QtBot, tmp_path: Path) -> None:
     maker, folders = linux_maker(tmp_path, program=tmp_path / "bin" / "wow-coach")
     page = make_page(qtbot, make_services(tmp_path, maker=maker), make_game(tmp_path))
-    assert page.menu_card.button.text() == "Add to my app menu"
+    assert page.menu_card.button.text() == f"Add to my {MENU_NAME}"
     page.menu_card.button.click()
     assert (folders.menu_dir / "wow-coach.desktop").is_file()
     assert page.menu_card.button.text() == "Remove"
@@ -422,6 +423,11 @@ def test_an_active_hotkey_shows_a_calm_ok_card(qtbot: QtBot, tmp_path: Path) -> 
     assert card.button.text() == "Copy command"
 
 
+# The command texts below use Linux paths and Linux quoting; Windows has its own test.
+LINUX_COMMANDS = pytest.mark.skipif(sys.platform == "win32", reason="Linux paths and quoting")
+
+
+@LINUX_COMMANDS
 def test_a_missing_portal_shows_the_kde_steps_and_the_real_command(
     qtbot: QtBot, tmp_path: Path
 ) -> None:
@@ -454,12 +460,14 @@ def test_macos_says_there_is_no_global_hotkey_and_has_no_retry(
     assert card.retry_button.isHidden()
 
 
+@LINUX_COMMANDS
 def test_a_path_with_spaces_is_quoted_in_the_command(qtbot: QtBot, tmp_path: Path) -> None:
     hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "x")
     page = overlay_page(qtbot, tmp_path, hotkey, program=Path("/home/my name/bin/wow-coach-app"))
     assert page.overlay_card.command.text() == "'/home/my name/bin/wow-coach-app' --toggle-overlay"
 
 
+@LINUX_COMMANDS
 def test_copy_command_puts_the_command_on_the_clipboard(qtbot: QtBot, tmp_path: Path) -> None:
     hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "x")
     page = overlay_page(qtbot, tmp_path, hotkey)
@@ -492,7 +500,7 @@ def test_without_the_menu_entry_the_card_suggests_adding_it_first(
     maker, folders = linux_maker(tmp_path, program=tmp_path / "bin" / "wow-coach")
     hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "The desktop did not accept the key.")
     page = overlay_page(qtbot, tmp_path, hotkey, maker=maker)
-    assert "app menu" in page.overlay_card.tip.text()
+    assert MENU_NAME in page.overlay_card.tip.text()
     page.menu_card.button.click()  # adds the menu entry
     assert (folders.menu_dir / "wow-coach.desktop").is_file()
     assert page.overlay_card.tip.isHidden()
@@ -512,3 +520,10 @@ def test_the_overlay_card_text_is_plain_text(qtbot: QtBot, tmp_path: Path) -> No
     card = page.overlay_card
     for label in (card.sentence, card.steps, card.tip):
         assert label.textFormat() == Qt.TextFormat.PlainText
+
+
+def test_on_windows_the_overlay_command_uses_windows_quoting() -> None:
+    command = overlay_command(
+        Path("C:/Program Files/WoW Coach/wow-coach-app.exe"), platform="win32"
+    )
+    assert command == '"C:/Program Files/WoW Coach/wow-coach-app.exe" --toggle-overlay'

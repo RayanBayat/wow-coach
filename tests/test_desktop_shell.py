@@ -1,5 +1,9 @@
 """The desktop shell: icons, one instance only, the tray and closing the window."""
 
+import shutil
+import sys
+import tempfile
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -85,10 +89,38 @@ def test_the_sidebar_shows_icons_and_follows_the_selected_page(qtbot: QtBot) -> 
 # ---- one instance only -------------------------------------------------------------------
 
 
+def short_run_folder() -> Path:
+    """A private folder for the socket, short enough for every system.
+
+    A socket path may only be about 100 characters long, and macOS test folders are longer
+    than that, which would make the app fall back to one shared folder for all tests. So each
+    test gets its own short folder in the system's temporary folder, removed afterwards.
+    """
+    # mkdtemp makes a folder only this user can open; /tmp keeps the path short on macOS.
+    short_root = "/tmp" if sys.platform != "win32" else None  # noqa: S108 - see above
+    folder = Path(tempfile.mkdtemp(prefix="wc-", dir=short_root))
+    _SHORT_FOLDERS.append(folder)
+    return folder
+
+
+_SHORT_FOLDERS: list[Path] = []
+
+
+@pytest.fixture(autouse=True)
+def _remove_short_folders() -> Iterator[None]:
+    yield
+    while _SHORT_FOLDERS:
+        shutil.rmtree(_SHORT_FOLDERS.pop(), ignore_errors=True)
+
+
+_RUN_FOLDERS: dict[Path, Path] = {}  # one short run folder per test folder
+
+
 def private_environ(root: Path) -> dict[str, str]:
-    """Environment variables that keep the lock file and the socket inside ``root``."""
-    (root / "run").mkdir(exist_ok=True)
-    return {"WOW_COACH_DATA_DIR": str(root / "data"), "XDG_RUNTIME_DIR": str(root / "run")}
+    """Environment variables that keep the lock file in ``root`` and the socket private."""
+    if root not in _RUN_FOLDERS or not _RUN_FOLDERS[root].exists():
+        _RUN_FOLDERS[root] = short_run_folder()
+    return {"WOW_COACH_DATA_DIR": str(root / "data"), "XDG_RUNTIME_DIR": str(_RUN_FOLDERS[root])}
 
 
 def make_instance(root: Path, name: str = "t") -> SingleInstance:
@@ -226,7 +258,7 @@ def test_the_socket_lives_in_a_private_folder(tmp_path: Path) -> None:
     try:
         assert instance.claim()
         folder = Path(instance.address).parent
-        assert folder == tmp_path / "run" / "wow-coach"
+        assert folder == _RUN_FOLDERS[tmp_path] / "wow-coach"
         assert folder.stat().st_mode & 0o777 == 0o700
     finally:
         instance.close()

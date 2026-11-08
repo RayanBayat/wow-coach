@@ -4,6 +4,7 @@ Nothing here shows a real window on a screen (Qt draws offscreen), registers a r
 touches the player's real settings (a temporary ``.ini`` file is used).
 """
 
+import uuid
 from pathlib import Path
 
 import pytest
@@ -229,15 +230,15 @@ def test_the_single_instance_message_toggles(rig: Rig, qtbot: QtBot, tmp_path: P
         "WOW_COACH_DATA_DIR": str(tmp_path / "data"),
         "XDG_RUNTIME_DIR": str(tmp_path / "run"),
     }
-    first = SingleInstance("overlay-test", environ=environ)
+    # A name of its own: on Windows two programs may listen on one pipe name, so an earlier
+    # test's listener could otherwise receive the message.
+    name = f"overlay-test-{uuid.uuid4().hex[:8]}"
+    first = SingleInstance(name, environ=environ)
     try:
         assert first.claim()
         first.toggle_overlay_requested.connect(rig.controller.toggle)
         with qtbot.waitSignal(first.toggle_overlay_requested, timeout=3000):
-            assert (
-                SingleInstance("overlay-test", environ=environ).claim(TOGGLE_OVERLAY_MESSAGE)
-                is False
-            )
+            assert SingleInstance(name, environ=environ).claim(TOGGLE_OVERLAY_MESSAGE) is False
         assert rig.panel.isVisible()
     finally:
         first.close()
