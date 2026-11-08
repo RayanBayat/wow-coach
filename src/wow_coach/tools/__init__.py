@@ -31,3 +31,8 @@ Left out on purpose, compared with the MCP server:
 * ``questions_from_game`` and ``send_advice_to_game``: the built-in coach answers those
   questions itself and the app, not the AI, writes the in-game panel file.
 """
+
+from wow_coach.tools.base import MAX_OUTPUT_CHARACTERS, CoachTool, ToolKind
+from wow_coach.tools.registry import build_coach_tools
+
+__all__ = ["MAX_OUTPUT_CHARACTERS", "CoachTool", "ToolKind", "build_coach_tools"]
