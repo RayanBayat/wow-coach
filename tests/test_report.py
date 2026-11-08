@@ -322,3 +322,33 @@ def test_a_kept_save_says_when_the_player_logged_out() -> None:
     }
     text = format_status(snapshot, now=NOW)
     assert "Logged out 10 min ago; this is the last full save, from before that." in text
+
+
+def test_full_report_shows_gear_hints_after_the_bags() -> None:
+    snapshot: Table = {
+        **FULL,
+        "professions": [
+            {"name": "Cloth", "rank": 1, "maxRank": 1, "category": "Armor Proficiencies"}
+        ],
+        "bags": {
+            "free": 10,
+            "total": 16,
+            "containers": [
+                {
+                    "bag": 0,
+                    "items": [
+                        {
+                            "name": "Heavy Helm",
+                            "type": "Armor",
+                            "subType": "Plate",
+                            "equipSlot": "Head",
+                            "itemLevel": 9,
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+    text = format_status(snapshot, now=NOW)
+    assert text.index("**Bags:**") < text.index("**Gear hints**")
+    assert "Can't use: Heavy Helm" in text

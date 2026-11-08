@@ -180,6 +180,8 @@ Tailoring", "run Deadmines"), do these seven things. This works in any AI, not o
 | Bags nearly full | Sell gray items at a vendor (the report says what they're worth); get bigger bags |
 | A quest's `Goal:` line | It names who to hand the quest in to and where: use it for exact directions |
 | An item in the bags they could wear (`equipSlot`, `needs level`) | Compare its stats with the worn item in that slot; tell them to equip it if it's better |
+| `Gear hints` section: "Can't use" lines | Tell them to sell or vendor the item (or, for a weapon type, check whether a weapon master could teach the skill first) |
+| `Gear hints` section: "Possible upgrade" lines | It is only a hint (item level and empty slots): compare stats and the level needed, then say whether to equip it |
 | Gear durability under about a third | Repair at any vendor with a hammer icon (a repair vendor) before it breaks |
 | Recipes colored orange or yellow | Craft those to level the profession; gray ones give no skill points |
 | Profession materials in the bags or bank (cloth, ore, herbs) | Say what they can craft with them, or that they sell well |

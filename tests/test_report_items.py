@@ -1,6 +1,7 @@
 """Tests for the item sections of the status report: gear, bags, bank, mail, recipes."""
 
 from wow_coach.report import format_status
+from wow_coach.report_gear_hints import gear_hints_section
 from wow_coach.report_items import (
     bags_section,
     bank_section,
@@ -188,3 +189,151 @@ def test_item_sections_tolerate_junk_data() -> None:
     text = format_status(snapshot, now=NOW)
     assert "**Bags:** 1/2 slots free" in text
     assert "seen at an unknown time" in text
+
+
+# ---------------------------------------------------------------------------
+# Gear hints (made-up mage, level 10)
+# ---------------------------------------------------------------------------
+
+
+def _bag_item(name: str, kind: str, sub_kind: str, slot: str, level: int, **extra: object) -> Table:
+    item: Table = {
+        "name": name,
+        "type": kind,
+        "subType": sub_kind,
+        "equipSlot": slot,
+        "itemLevel": level,
+        "quality": 1,
+        "requiredLevel": 1,
+    }
+    item.update(extra)  # type: ignore[arg-type]
+    return item
+
+
+def _mage(bag_items: list[Table], **changes: object) -> Table:
+    """A level 10 mage who wears a staff, has no wand, and carries ``bag_items``."""
+    snapshot: Table = {
+        "level": 10,
+        "professions": [
+            {"name": "Staves", "rank": 5, "maxRank": 50, "category": "Weapon Skills"},
+            {"name": "Wands", "rank": 5, "maxRank": 50, "category": "Weapon Skills"},
+            {"name": "Cloth", "rank": 1, "maxRank": 1, "category": "Armor Proficiencies"},
+        ],
+        "gear": [
+            {"slot": "Main hand", "name": "Worn Staff", "itemLevel": 5, "quality": 1},
+            {"slot": "Back", "name": "Worn Cloak", "itemLevel": 8, "quality": 2},
+            {"slot": "Waist", "name": "Worn Belt", "itemLevel": 9, "quality": 2},
+            {"slot": "Ring 1", "name": "Worn Ring", "itemLevel": 9, "quality": 2},
+            {"slot": "Ring 2", "name": "Worn Ring B", "itemLevel": 9, "quality": 2},
+        ],
+        "bags": {"containers": [{"bag": 0, "items": bag_items}]},
+    }
+    snapshot.update(changes)  # type: ignore[arg-type]
+    return snapshot
+
+
+MAIL_BELT = _bag_item("Clasped Belt", "Armor", "Mail", "Waist", 8)
+PRACTICE_WAND = _bag_item("Practice Wand", "Weapon", "Wands", "Ranged", 6)
+
+
+def test_armor_without_proficiency_is_flagged() -> None:
+    text = gear_hints_section(_mage([MAIL_BELT]))
+    assert text.startswith("**Gear hints**")
+    assert "- Can't use: Clasped Belt (armor type Mail" in text
+
+
+def test_weapon_without_skill_says_a_weapon_master_may_teach_it() -> None:
+    axe = _bag_item("Rusty Axe", "Weapon", "One-Handed Axes", "One-Hand", 3)
+    text = gear_hints_section(_mage([axe]))
+    assert "Rusty Axe" in text
+    assert "no Axes weapon skill" in text
+    assert "weapon master" in text
+
+
+def test_empty_wand_slot_is_a_possible_upgrade() -> None:
+    text = gear_hints_section(_mage([PRACTICE_WAND]))
+    assert (
+        "- Possible upgrade: Practice Wand (item level 6) for the empty Ranged (wand) slot" in text
+    )
+
+
+def test_higher_item_level_is_a_possible_upgrade() -> None:
+    staff = _bag_item("Fine Staff", "Weapon", "Staves", "Two-Hand", 9)
+    text = gear_hints_section(_mage([staff]))
+    assert "Fine Staff (item level 9) for Main hand: Worn Staff (item level 5)" in text
+
+
+def test_lower_item_level_gives_no_hint() -> None:
+    cloak = _bag_item("Battered Cloak", "Armor", "Cloth", "Back", 5)
+    staff = _bag_item("Bent Staff", "Weapon", "Staves", "Two-Hand", 2)
+    assert gear_hints_section(_mage([cloak, staff])) == ""
+
+
+def test_miscellaneous_items_are_never_flagged() -> None:
+    pick = _bag_item("Mining Pick", "Weapon", "Miscellaneous", "Main Hand", 4)
+    ring = _bag_item("Plain Ring", "Armor", "Miscellaneous", "Finger", 3)
+    assert gear_hints_section(_mage([pick, ring])) == ""
+
+
+def test_gray_worn_item_is_replaced_by_a_better_quality_one() -> None:
+    gray = {"slot": "Back", "name": "Rag", "itemLevel": 12, "quality": 0}
+    cloak = _bag_item("Plain Cloak", "Armor", "Cloth", "Back", 3)
+    text = gear_hints_section(_mage([cloak], gear=[gray]))
+    assert "Plain Cloak (item level 3) for Back: Rag (item level 12, gray)" in text
+
+
+def test_item_that_needs_a_higher_level_says_so() -> None:
+    staff = _bag_item("Fine Staff", "Weapon", "Staves", "Two-Hand", 20, requiredLevel=14)
+    assert "Fine Staff (item level 20, needs level 14)" in gear_hints_section(_mage([staff]))
+
+
+def test_rings_are_compared_with_the_weaker_worn_ring() -> None:
+    gear = [
+        {"slot": "Ring 1", "name": "Good Ring", "itemLevel": 20, "quality": 2},
+        {"slot": "Ring 2", "name": "Weak Ring", "itemLevel": 4, "quality": 2},
+    ]
+    ring = _bag_item("New Ring", "Armor", "Miscellaneous", "Finger", 9)
+    text = gear_hints_section(_mage([ring], gear=gear))
+    assert "New Ring (item level 9) for Ring 2: Weak Ring (item level 4)" in text
+
+
+def test_missing_item_levels_make_no_upgrade_claim() -> None:
+    worn = [{"slot": "Back", "name": "Worn Cloak", "quality": 2}]  # no item level
+    cloak = _bag_item("Plain Cloak", "Armor", "Cloth", "Back", 30)
+    assert gear_hints_section(_mage([cloak], gear=worn)) == ""
+
+
+def test_no_proficiency_lines_means_no_check() -> None:
+    old_save = _mage([MAIL_BELT], professions=[])
+    assert gear_hints_section(old_save) == ""
+
+
+def test_armor_check_skipped_when_only_weapon_skills_are_known() -> None:
+    only_weapons = [{"name": "Staves", "rank": 5, "maxRank": 50, "category": "Weapon Skills"}]
+    assert gear_hints_section(_mage([MAIL_BELT], professions=only_weapons)) == ""
+
+
+def test_section_is_empty_without_bags() -> None:
+    assert gear_hints_section({"level": 5}) == ""
+
+
+def test_the_example_character_gets_exactly_two_hints() -> None:
+    items = [
+        MAIL_BELT,
+        PRACTICE_WAND,
+        _bag_item("Bent Staff", "Weapon", "Staves", "Two-Hand", 2),
+        _bag_item("Mining Pick", "Weapon", "Miscellaneous", "Main Hand", 4),
+        _bag_item("Battered Cloak", "Armor", "Cloth", "Back", 5),
+    ]
+    text = gear_hints_section(_mage(items))
+    assert text.count("\n- ") == 2
+    assert "Clasped Belt" in text and "Practice Wand" in text
+
+
+def test_gear_hints_follow_the_bags_in_the_full_report() -> None:
+    snapshot = {
+        **_mage([PRACTICE_WAND]),
+        "bags": {"free": 1, "total": 2, "containers": [{"bag": 0, "items": [PRACTICE_WAND]}]},
+    }
+    text = format_status(snapshot, now=NOW)
+    assert text.index("**Bags:**") < text.index("**Gear hints**") < text.index("**Bank")

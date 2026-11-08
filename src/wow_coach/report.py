@@ -10,7 +10,7 @@ section quietly disappears when its data is missing or empty.
 import itertools
 from typing import NamedTuple
 
-from wow_coach import report_details, report_items
+from wow_coach import report_details, report_gear_hints, report_items
 from wow_coach.lua_table import LuaValue
 from wow_coach.report_values import (
     DAY,
@@ -69,6 +69,7 @@ def format_status(snapshot: Table, *, now: float) -> str:
         report_items.recipes_section(snapshot, now),
         report_items.gear_section(snapshot),
         report_items.bags_section(snapshot),
+        report_gear_hints.gear_hints_section(snapshot),
         report_items.bank_section(snapshot, now),
         report_items.mail_section(snapshot, now),
         report_details.spells_section(snapshot),
