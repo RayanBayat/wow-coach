@@ -99,3 +99,38 @@ def test_a_partial_trigger_change_keeps_the_other_rules() -> None:
 def test_by_default_the_coach_tells_what_is_worth_knowing_without_ai() -> None:
     assert DEFAULTS.triggers.on_save == "notify"
     assert DEFAULTS.triggers.quiet_in_instances is True
+
+
+def test_overlay_settings_have_defaults() -> None:
+    assert DEFAULTS.overlay_opacity == 92
+    assert DEFAULTS.overlay_hotkey == "Ctrl+Shift+Space"
+
+
+def test_an_old_settings_file_without_overlay_values_loads(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text('{"notify": false}', encoding="utf-8")
+    loaded = load_settings(path)
+    assert loaded.notify is False
+    assert (loaded.overlay_opacity, loaded.overlay_hotkey) == (92, "Ctrl+Shift+Space")
+
+
+def test_overlay_settings_round_trip(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    chosen = update_settings(DEFAULTS, {"overlay_opacity": 70, "overlay_hotkey": "Ctrl+Alt+F9"})
+    save_settings(path, chosen)
+    loaded = load_settings(path)
+    assert (loaded.overlay_opacity, loaded.overlay_hotkey) == (70, "Ctrl+Alt+F9")
+
+
+@pytest.mark.parametrize("bad", [59, 101, -5, "80", 80.5, True, None])
+def test_a_bad_opacity_is_refused(bad: object) -> None:
+    assert settings_from_dict({"overlay_opacity": bad}).overlay_opacity == 92
+    start = update_settings(DEFAULTS, {"overlay_opacity": 75})
+    assert update_settings(start, {"overlay_opacity": bad}).overlay_opacity == 75
+
+
+@pytest.mark.parametrize("bad", ["", "   ", "x" * 41, "Ctrl+\u00e9", "Ctrl+\nA", 5, None])
+def test_a_bad_hotkey_is_refused(bad: object) -> None:
+    assert settings_from_dict({"overlay_hotkey": bad}).overlay_hotkey == "Ctrl+Shift+Space"
+    start = update_settings(DEFAULTS, {"overlay_hotkey": "Ctrl+F9"})
+    assert update_settings(start, {"overlay_hotkey": bad}).overlay_hotkey == "Ctrl+F9"
