@@ -8,9 +8,11 @@ from pathlib import Path
 import pytest
 from desktop_support import make_bridge, run_now
 from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QApplication
 from pytestqt.qtbot import QtBot
 
 from wow_coach.config import load_saved_wow_dir
+from wow_coach.desktop.hotkey import GlobalHotkey, HotkeyState, HotkeyStatus
 from wow_coach.desktop.pages.setup import SetupPage, SetupServices
 from wow_coach.desktop.setup_checks import (
     RESTART_WOW_HINT,
@@ -356,3 +358,157 @@ def test_without_a_stable_program_the_page_shows_the_install_command(
     assert "uv tool install" in page.menu_card.command.text()
     assert page.menu_card.button.isHidden()
     assert not folders.menu_dir.exists()
+
+
+# ---- the overlay hotkey card ---------------------------------------------------------------
+
+
+class FakeHotkey(GlobalHotkey):
+    """A hotkey whose status the test sets by hand."""
+
+    def __init__(
+        self, state: HotkeyState, message: str = "", sequence: str = "Ctrl+Shift+Space"
+    ) -> None:
+        super().__init__()
+        self._sequence = sequence
+        self._status = HotkeyStatus(state, message)
+        self.registered: list[str] = []
+
+    def register(self, sequence: str) -> None:
+        self.registered.append(sequence)
+
+    def unregister(self) -> None:
+        pass
+
+    def change(self, state: HotkeyState, message: str) -> None:
+        self._set_status(state, message)
+
+
+def overlay_page(
+    qtbot: QtBot,
+    tmp_path: Path,
+    hotkey: GlobalHotkey,
+    *,
+    platform: str = "linux",
+    desktop: str = "KDE",
+    program: Path | None = Path("/home/me/.local/bin/wow-coach-app"),
+    maker: ShortcutMaker | None = None,
+) -> SetupPage:
+    services = make_services(tmp_path, maker=maker)
+    services.platform = platform
+    services.desktop = desktop
+    services.program = program
+    page = make_page(qtbot, services, make_game(tmp_path))
+    page.set_hotkey(hotkey)
+    return page
+
+
+def test_the_overlay_card_is_hidden_until_the_app_gives_it_a_hotkey(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    page = make_page(qtbot, make_services(tmp_path), make_game(tmp_path))
+    assert page.overlay_card.isHidden()
+
+
+def test_an_active_hotkey_shows_a_calm_ok_card(qtbot: QtBot, tmp_path: Path) -> None:
+    hotkey = FakeHotkey(HotkeyState.ACTIVE, "Active. Press Ctrl+Shift+Space to show or hide it.")
+    page = overlay_page(qtbot, tmp_path, hotkey)
+    card = page.overlay_card
+    assert not card.isHidden()
+    assert "Active" in card.sentence.text()
+    assert card.steps.isHidden()
+    assert card.command.isHidden()
+    assert card.retry_button.isHidden()
+    assert card.button.text() == "Copy command"
+
+
+def test_a_missing_portal_shows_the_kde_steps_and_the_real_command(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "No portal here.")
+    page = overlay_page(qtbot, tmp_path, hotkey)
+    card = page.overlay_card
+    assert card.sentence.text() == "No portal here."
+    assert "System Settings → Keyboard → Shortcuts" in card.steps.text()
+    assert "Add New → Command or Script" in card.steps.text()
+    assert not card.steps.isHidden()
+    assert card.command.text() == "/home/me/.local/bin/wow-coach-app --toggle-overlay"
+    assert not card.retry_button.isHidden()
+
+
+def test_other_linux_desktops_get_generic_steps(qtbot: QtBot, tmp_path: Path) -> None:
+    hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "No portal here.")
+    page = overlay_page(qtbot, tmp_path, hotkey, desktop="GNOME")
+    assert "custom shortcut" in page.overlay_card.steps.text()
+    assert "KDE" not in page.overlay_card.steps.text()
+
+
+def test_macos_says_there_is_no_global_hotkey_and_has_no_retry(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "macOS has no global hotkey in WoW Coach yet.")
+    page = overlay_page(qtbot, tmp_path, hotkey, platform="darwin", desktop="")
+    card = page.overlay_card
+    assert "macOS" in card.sentence.text()
+    assert "Shortcuts app" in card.steps.text()
+    assert card.retry_button.isHidden()
+
+
+def test_a_path_with_spaces_is_quoted_in_the_command(qtbot: QtBot, tmp_path: Path) -> None:
+    hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "x")
+    page = overlay_page(qtbot, tmp_path, hotkey, program=Path("/home/my name/bin/wow-coach-app"))
+    assert page.overlay_card.command.text() == "'/home/my name/bin/wow-coach-app' --toggle-overlay"
+
+
+def test_copy_command_puts_the_command_on_the_clipboard(qtbot: QtBot, tmp_path: Path) -> None:
+    hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "x")
+    page = overlay_page(qtbot, tmp_path, hotkey)
+    page.overlay_card.button.click()
+    clipboard = QApplication.clipboard()
+    assert clipboard is not None
+    assert clipboard.text() == "/home/me/.local/bin/wow-coach-app --toggle-overlay"
+
+
+def test_try_again_asks_the_hotkey_again(qtbot: QtBot, tmp_path: Path) -> None:
+    hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "x", sequence="Ctrl+Alt+F9")
+    page = overlay_page(qtbot, tmp_path, hotkey)
+    page.overlay_card.retry_button.click()
+    assert hotkey.registered == ["Ctrl+Alt+F9"]
+
+
+def test_the_card_follows_the_hotkeys_status(qtbot: QtBot, tmp_path: Path) -> None:
+    hotkey = FakeHotkey(HotkeyState.STARTING, "Waiting for your desktop.")
+    page = overlay_page(qtbot, tmp_path, hotkey)
+    assert page.overlay_card.steps.isHidden()  # still waiting: no by-hand steps yet
+    hotkey.change(HotkeyState.UNAVAILABLE, "The key was not set up.")
+    assert not page.overlay_card.steps.isHidden()
+    hotkey.change(HotkeyState.ACTIVE, "Active.")
+    assert page.overlay_card.steps.isHidden()
+
+
+def test_without_the_menu_entry_the_card_suggests_adding_it_first(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    maker, folders = linux_maker(tmp_path, program=tmp_path / "bin" / "wow-coach")
+    hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "The desktop did not accept the key.")
+    page = overlay_page(qtbot, tmp_path, hotkey, maker=maker)
+    assert "app menu" in page.overlay_card.tip.text()
+    page.menu_card.button.click()  # adds the menu entry
+    assert (folders.menu_dir / "wow-coach.desktop").is_file()
+    assert page.overlay_card.tip.isHidden()
+
+
+def test_without_a_stable_program_the_card_says_to_install_first(
+    qtbot: QtBot, tmp_path: Path
+) -> None:
+    hotkey = FakeHotkey(HotkeyState.UNAVAILABLE, "x")
+    page = overlay_page(qtbot, tmp_path, hotkey, program=None)
+    assert page.overlay_card.command.text() == "wow-coach-app --toggle-overlay"
+    assert "Install" in page.overlay_card.tip.text()
+
+
+def test_the_overlay_card_text_is_plain_text(qtbot: QtBot, tmp_path: Path) -> None:
+    page = overlay_page(qtbot, tmp_path, FakeHotkey(HotkeyState.UNAVAILABLE, "x"))
+    card = page.overlay_card
+    for label in (card.sentence, card.steps, card.tip):
+        assert label.textFormat() == Qt.TextFormat.PlainText

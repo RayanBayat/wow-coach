@@ -9,6 +9,7 @@ and ``shortcuts.py`` and know nothing about Qt.
 import importlib.metadata
 import logging
 import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -28,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from wow_coach.config import config_path
 from wow_coach.desktop.bridge import CoreBridge, Runner, run_in_thread
+from wow_coach.desktop.hotkey import GlobalHotkey, HotkeyState
 from wow_coach.desktop.icons import icon
 from wow_coach.desktop.pages.base import Page
 from wow_coach.desktop.setup_checks import (
@@ -50,6 +53,7 @@ from wow_coach.desktop.shortcuts import (
     default_folders,
     find_stable_program,
     is_supported,
+    overlay_command,
 )
 from wow_coach.desktop.theme import SPACE, SPACE_LARGE, SPACE_SMALL, Colors, current_colors
 from wow_coach.web import FetchBytes, PoliteFetcher, build_user_agent
@@ -63,6 +67,42 @@ KEYBINDING_SENTENCE = (
     'coach (reloads the interface)". Press it whenever you want me to see your latest progress.'
 )
 NO_SHORTCUTS_SENTENCE = "Shortcuts are not available on macOS yet."
+
+# The "Overlay hotkey" card: what it says when the key does not work by itself.
+OVERLAY_INTRO = (
+    "A key that shows or hides the coach on top of your game, so you can ask without leaving it."
+)
+OVERLAY_STEPS_KDE = (
+    "To set the key by hand on KDE: open System Settings → Keyboard → Shortcuts, choose "
+    "Add New → Command or Script, paste this command, then pick your key:"
+)
+OVERLAY_STEPS_LINUX = (
+    "To set the key by hand: open your desktop's keyboard settings, add a custom shortcut, "
+    "paste this command as its command, then pick your key:"
+)
+OVERLAY_STEPS_WINDOWS = (
+    "Try another key in Settings. Or make a shortcut to this command and give it a "
+    '"Shortcut key" in its Properties:'
+)
+OVERLAY_STEPS_MAC = (
+    "macOS has no global hotkey here yet. The tray menu and the Overlay button work. You can "
+    "make a key yourself with the Shortcuts app (a Run Shell Script action running this "
+    "command); we have not tested that:"
+)
+OVERLAY_MENU_FIRST = (
+    "Tip: add WoW Coach to your app menu first (the App menu card above). That is how your "
+    "desktop learns about the app. Then press Try again."
+)
+OVERLAY_UNSTABLE = "This program path may be temporary. Install WoW Coach once, as shown above."
+
+
+def overlay_steps(platform: str, desktop: str) -> str:
+    """The plain steps for adding the overlay key by hand on this system."""
+    if platform == "win32":
+        return OVERLAY_STEPS_WINDOWS
+    if platform == "darwin":
+        return OVERLAY_STEPS_MAC
+    return OVERLAY_STEPS_KDE if "kde" in desktop.lower() else OVERLAY_STEPS_LINUX
 
 
 def _style(c: Colors) -> str:
@@ -85,6 +125,9 @@ class SetupServices:
     download: FetchBytes
     shortcut_maker: ShortcutMaker | None  # None where shortcuts are not supported
     runner: Runner = run_in_thread
+    program: Path | None = None  # the stable ``wow-coach-app`` program, or None
+    platform: str = sys.platform
+    desktop: str = ""  # the desktop's name, for example "KDE" (``$XDG_CURRENT_DESKTOP``)
     pick_folder: Callable[[QWidget], str] = lambda parent: QFileDialog.getExistingDirectory(
         parent, "Choose the _forever_ folder of World of Warcraft"
     )
@@ -106,6 +149,8 @@ def real_services() -> SetupServices:
         config_file=config_path(environ=os.environ),
         download=_download_from_web,
         shortcut_maker=maker,
+        program=find_stable_program(),
+        desktop=os.environ.get("XDG_CURRENT_DESKTOP", ""),
     )
 
 
@@ -144,6 +189,7 @@ class SetupCard(QFrame):
         self.button.hide()
 
         text = QVBoxLayout()
+        self.text_column = text  # cards with more to say add to it
         text.setSpacing(SPACE_SMALL // 2)
         text.addWidget(self._title)
         text.addWidget(self.sentence)
@@ -185,6 +231,31 @@ class SetupCard(QFrame):
         self.button.show()
 
 
+class OverlayHotkeyCard(SetupCard):
+    """The "Overlay hotkey" card: whether the key works, and how to add it by hand if not.
+
+    It reuses the card's command box and button: the box shows the command and the button
+    copies it. A second button tries the automatic way again.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("Overlay hotkey")
+        self.steps = QLabel()
+        self.steps.setWordWrap(True)
+        self.steps.setTextFormat(Qt.TextFormat.PlainText)
+        self.steps.setProperty("role", "muted")
+        self.retry_button = QPushButton("Try again")
+        self.retry_button.setProperty("kind", "secondary")
+        self.retry_button.setToolTip("Ask your desktop for the key again.")
+        self.tip = QLabel()
+        self.tip.setWordWrap(True)
+        self.tip.setTextFormat(Qt.TextFormat.PlainText)
+        self.tip.setProperty("role", "muted")
+        self.text_column.insertWidget(2, self.steps)  # between the sentence and the command
+        self.text_column.addWidget(self.tip)
+        self.text_column.addWidget(self.retry_button, 0, Qt.AlignmentFlag.AlignLeft)
+
+
 class SetupPage(Page):
     """The checklist that gets the game, the addon and the shortcuts ready."""
 
@@ -208,6 +279,7 @@ class SetupPage(Page):
         self._game_dir: Path | None = None
         self._snapshot: Snapshot | None = None
         self._busy = False
+        self._hotkey: GlobalHotkey | None = None
         self._build()
         self.setStyleSheet(_style(current_colors()))
         self._snapshot_ready.connect(self._show_snapshot)
@@ -235,6 +307,8 @@ class SetupPage(Page):
         self.answers_card = SetupCard("Answers folder")
         self.key_card = SetupCard('"Save for the coach" key')
         self.key_card.show_state("info", KEYBINDING_SENTENCE)
+        self.overlay_card = OverlayHotkeyCard()
+        self.overlay_card.hide()  # shown once the app gives the page its hotkey
         self.menu_card = SetupCard("App menu")
         self.login_card = SetupCard("Start with my computer")
         self.no_shortcuts = QLabel(NO_SHORTCUTS_SENTENCE)
@@ -245,6 +319,8 @@ class SetupPage(Page):
         self.answers_card.button.clicked.connect(self._create_answers)
         self.menu_card.button.clicked.connect(lambda: self._toggle_shortcut(at_login=False))
         self.login_card.button.clicked.connect(lambda: self._toggle_shortcut(at_login=True))
+        self.overlay_card.button.clicked.connect(self._copy_overlay_command)
+        self.overlay_card.retry_button.clicked.connect(self._retry_hotkey)
 
         column = QVBoxLayout()
         column.setSpacing(SPACE)
@@ -257,6 +333,7 @@ class SetupPage(Page):
         column.addWidget(self.menu_card)
         column.addWidget(self.login_card)
         column.addWidget(self.no_shortcuts)
+        column.addWidget(self.overlay_card)
         column.addStretch(1)
 
         content = QWidget()
@@ -316,6 +393,7 @@ class SetupPage(Page):
         self._show_addon(report)
         self._show_answers(report)
         self._show_shortcuts(snapshot.shortcuts)
+        self._show_overlay_card()  # the tip depends on whether the menu entry exists
         self._apply_busy()
 
     def _show_check(self, card: SetupCard, check: Check) -> None:
@@ -391,6 +469,62 @@ class SetupPage(Page):
             card.show_button(remove, "Remove this shortcut again.")
         else:
             card.show_button(add, "Make this shortcut. You can remove it later.", primary=True)
+
+    # ---- the overlay hotkey card -----------------------------------------------------------
+
+    def set_hotkey(self, hotkey: GlobalHotkey) -> None:
+        """Tell the page which global hotkey the app uses, so the card can show how it is doing."""
+        self._hotkey = hotkey
+        hotkey.status_changed.connect(self._show_overlay_card)
+        self._show_overlay_card()
+
+    def overlay_command_text(self) -> str:
+        """The command a keyboard shortcut runs to show or hide the overlay."""
+        services = self.services
+        return overlay_command(services.program, services.platform)
+
+    def _show_overlay_card(self) -> None:
+        card = self.overlay_card
+        hotkey = self._hotkey
+        if hotkey is None:
+            return
+        status = hotkey.status
+        working = status.active
+        waiting = status.state in (HotkeyState.STARTING, HotkeyState.OFF)
+        icon_name = "ok" if working else "info" if waiting else "attention"
+        card.show_state(icon_name, status.message or OVERLAY_INTRO)
+        services = self.services
+        card.steps.setText(overlay_steps(services.platform, services.desktop))
+        card.command.setText(self.overlay_command_text())
+        card.tip.setText(self._overlay_tip())
+        by_hand = not working and not waiting
+        for widget in (card.steps, card.command):
+            widget.setVisible(by_hand)
+        card.tip.setVisible(by_hand and bool(card.tip.text()))
+        card.retry_button.setVisible(
+            by_hand and not services.platform.startswith("darwin") and bool(hotkey.sequence)
+        )
+        card.show_button("Copy command", "Copy the command that shows or hides the overlay.")
+        card.show()
+
+    def _overlay_tip(self) -> str:
+        """Extra advice: the menu entry first, or install the program first."""
+        services = self.services
+        snapshot = self._snapshot
+        if services.program is None:
+            return OVERLAY_UNSTABLE
+        linux = services.platform.startswith("linux")
+        if linux and snapshot is not None and snapshot.shortcuts is not None:
+            return "" if snapshot.shortcuts.in_menu else OVERLAY_MENU_FIRST
+        return ""
+
+    def _copy_overlay_command(self) -> None:
+        QApplication.clipboard().setText(self.overlay_command_text())
+        self._show_message("Copied. Paste it as the command of a keyboard shortcut.", error=False)
+
+    def _retry_hotkey(self) -> None:
+        if self._hotkey is not None and self._hotkey.sequence:
+            self._hotkey.register(self._hotkey.sequence)
 
     # ---- actions -------------------------------------------------------------------------
 
@@ -506,5 +640,6 @@ class SetupPage(Page):
             self.key_card,
             self.menu_card,
             self.login_card,
+            self.overlay_card,
         ):
             card.repaint_icon()
