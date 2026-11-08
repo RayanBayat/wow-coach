@@ -28,7 +28,9 @@ def platform_arguments(environ: Mapping[str, str], system: str = sys.platform) -
     On a Linux desktop that uses Wayland, apps are not allowed to keep their own window on top
     of other windows, and "Keep on top of the game" needs that. The same desktop also runs old
     X11 apps (through XWayland), and those may stay on top. So when XWayland is there, the app
-    runs as an X11 app. Setting ``QT_QPA_PLATFORM`` yourself always wins.
+    runs as an X11 app. Qt's X11 plugin needs extra system libraries that some desktops lack, so
+    the answer is ``xcb;wayland``: Qt tries X11 first and falls back to Wayland (the window then
+    just cannot stay on top). Setting ``QT_QPA_PLATFORM`` yourself always wins.
     """
     if not system.startswith("linux") or environ.get("QT_QPA_PLATFORM"):
         return []
@@ -36,7 +38,7 @@ def platform_arguments(environ: Mapping[str, str], system: str = sys.platform) -
         environ.get("WAYLAND_DISPLAY")
     )
     if on_wayland and environ.get("DISPLAY"):
-        return ["-platform", "xcb"]
+        return ["-platform", "xcb;wayland"]
     return []
 
 
