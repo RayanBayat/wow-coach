@@ -37,7 +37,9 @@ from wow_coach.errors import (
     SetupFailed,
     WowCoachError,
 )
+from wow_coach.game_running import is_game_running
 from wow_coach.gamedir import resolve_game_folder
+from wow_coach.migrate import GAME_RUNNING_SENTENCE, finish_upgrade, upgrade_pending
 from wow_coach.notes import notes_path
 from wow_coach.web import FetchBytes
 
@@ -75,6 +77,8 @@ class SetupWorld:
     interactive: bool  # False when there is nobody to answer questions
     now: float
     out: TextIO
+    # Replaced by a fake in tests. Used before moving a save from the old CoachLink addon.
+    game_is_running: Callable[[], bool] = is_game_running
 
 
 # ---------------------------------------------------------------------------
@@ -254,9 +258,14 @@ def _setup_addon(game: Path, world: SetupWorld, say: Say) -> bool:
         return True
     version = world.package_version
     installed = installed_addon_version(addon)
-    if installed == version:
+    # HeroBridge was called CoachLink before 0.11.0: the old addon and its save are moved over.
+    moving_from_coachlink = upgrade_pending(game)
+    if installed == version and not moving_from_coachlink:
         say(f"  OK: HeroBridge {version} is already installed in {addon}.")
         return True
+    if moving_from_coachlink and world.game_is_running():
+        say(f"  PROBLEM: {GAME_RUNNING_SENTENCE}")
+        return False
     say(f"  Installing HeroBridge {version} (installed now: {installed or 'nothing'}) ...")
     try:
         install_addon(addons, version, world.download)
@@ -267,9 +276,22 @@ def _setup_addon(game: Path, world: SetupWorld, say: Say) -> bool:
         say("  docs/install-the-addon.md (https://github.com/RayanBayat/wow-coach).")
         return False
     say(f"  OK: HeroBridge {version} installed in {addon}.")
+    if moving_from_coachlink and not _move_from_coachlink(game, say):
+        return False
     say("  Now quit WoW completely (use the game menu: Exit Game), then start it again.")
     say("  The game only notices a new or updated addon after a full restart.")
     return True
+
+
+def _move_from_coachlink(game: Path, say: Say) -> bool:
+    """Carry the old CoachLink save and answers over to HeroBridge, then remove the old addon."""
+    say("  CoachLink is now called HeroBridge. Moving your saved characters over ...")
+    report = finish_upgrade(game, is_running=False)
+    for note in report.notes:
+        say(f"  {note}")
+    for problem in report.problems:
+        say(f"  PROBLEM: {problem}")
+    return report.ok
 
 
 def create_advice_folder(addons: Path) -> bool:

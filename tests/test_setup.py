@@ -73,6 +73,7 @@ class Session:
             interactive=interactive,
             now=1_000_000.0,
             out=self.out,
+            game_is_running=lambda: False,  # never look at the real computer in a test
         )
 
     def run(self, choices: SetupChoices = NO_CHOICES, **world_options: object) -> tuple[int, str]:
@@ -358,3 +359,62 @@ def test_setup_transcript_is_plain_words(session: Session) -> None:
     _, text = session.run(replace(NO_CHOICES, claude_code=True))
     print(text)  # shown with pytest -s; copied into the release notes
     assert text.count("OK:") >= 5
+
+
+# ---- players coming from the old CoachLink addon (renamed HeroBridge in 0.11.0) -----------
+
+OLD_SAVE = (
+    'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
+    '["Testchar-Testrealm"] = {\n["snapshot"] = {\n["savedAt"] = 42,\n},\n},\n},\n}\n'
+)
+
+
+def add_old_coachlink(session: Session) -> Path:
+    """Put an old CoachLink addon, its answers folder and its save in the fake game."""
+    addons = session.game / "Interface" / "AddOns"
+    for name in ("CoachLink", "CoachLink_Advice"):
+        (addons / name).mkdir(parents=True)
+    (addons / "CoachLink" / "CoachLink.toc").write_text("## Version: 0.10.0\n")
+    save_folder = session.game / "WTF" / "Account" / "ACC" / "SavedVariables"
+    save_folder.mkdir(parents=True)
+    (save_folder / "CoachLink.lua").write_text(OLD_SAVE)
+    return save_folder
+
+
+def test_setup_replaces_coachlink_and_moves_the_save(session: Session) -> None:
+    save_folder = add_old_coachlink(session)
+    code, text = session.run()
+    assert code == 0, text
+    assert (session.addon / "HeroBridge.toc").is_file()
+    assert not (session.game / "Interface" / "AddOns" / "CoachLink").exists()
+    assert not (session.game / "Interface" / "AddOns" / "CoachLink_Advice").exists()
+    assert session.advice.is_dir()
+    assert (save_folder / "HeroBridge.lua").read_text().startswith("HeroBridgeDB = {")
+    assert (save_folder / "CoachLink.lua").read_text() == OLD_SAVE
+    assert "CoachLink is now called HeroBridge" in text
+    assert "PROBLEM" not in text
+
+
+def test_setup_changes_nothing_while_the_game_runs(session: Session) -> None:
+    save_folder = add_old_coachlink(session)
+    world = replace(session.world(), game_is_running=lambda: True)
+    code = run_setup(NO_CHOICES, world)
+    assert code == 1
+    assert "WoW is still running" in session.out.getvalue()
+    assert (session.game / "Interface" / "AddOns" / "CoachLink").is_dir()
+    assert not (save_folder / "HeroBridge.lua").exists()
+    assert session.downloaded == []
+
+
+def test_setup_leaves_a_linked_coachlink_alone(session: Session, tmp_path: Path) -> None:
+    add_old_coachlink(session)
+    addons = session.game / "Interface" / "AddOns"
+    (addons / "CoachLink" / "CoachLink.toc").unlink()
+    (addons / "CoachLink").rmdir()
+    repo = tmp_path / "repo-copy"
+    repo.mkdir()
+    (addons / "CoachLink").symlink_to(repo, target_is_directory=True)
+    code, text = session.run()
+    assert code == 0
+    assert (addons / "CoachLink").is_symlink()
+    assert "left it alone" in text

@@ -529,3 +529,57 @@ def test_on_windows_the_overlay_command_uses_windows_quoting() -> None:
     program = PureWindowsPath("C:/Program Files/WoW Coach/wow-coach-app.exe")
     command = overlay_command(program, platform="win32")
     assert command == '"C:\\Program Files\\WoW Coach\\wow-coach-app.exe" --toggle-overlay'
+
+
+# ---- coming from the old CoachLink addon (renamed HeroBridge in 0.11.0) --------------------
+
+
+def add_old_coachlink(game: Path) -> Path:
+    addons = game / "Interface" / "AddOns"
+    (addons / "CoachLink").mkdir()
+    (addons / "CoachLink" / "CoachLink.toc").write_text("## Version: 0.10.0\n")
+    folder = game / "WTF" / "Account" / "ACC" / "SavedVariables"
+    folder.mkdir(parents=True)
+    (folder / "CoachLink.lua").write_text(
+        'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n},\n}\n'
+    )
+    return folder
+
+
+def test_the_card_explains_the_rename_and_offers_update(qtbot: QtBot, tmp_path: Path) -> None:
+    game = make_game(tmp_path)
+    add_old_coachlink(game)
+    check = check_addon(game, VERSION)[0]
+    assert check.status is Status.ATTENTION
+    assert check.sentence == (
+        "CoachLink is now called HeroBridge. Close WoW, then click Update. "
+        "Your saved character comes along."
+    )
+    page = make_page(qtbot, make_services(tmp_path), game)
+    assert page.addon_card.button.text() == "Update HeroBridge"
+
+
+def test_update_moves_the_save_and_removes_the_old_addon(tmp_path: Path) -> None:
+    game = make_game(tmp_path)
+    save_folder = add_old_coachlink(game)
+    result = install_or_update_addon(game, VERSION, lambda _url: addon_zip(), lambda: False)
+    assert result.ok
+    assert "saved character" in result.sentence
+    assert (save_folder / "HeroBridge.lua").is_file()
+    assert (save_folder / "CoachLink.lua").is_file()
+    assert not (game / "Interface" / "AddOns" / "CoachLink").exists()
+    assert check_addon(game, VERSION)[0].status is Status.OK
+
+
+def test_update_refuses_while_the_game_runs_and_changes_nothing(tmp_path: Path) -> None:
+    game = make_game(tmp_path)
+    save_folder = add_old_coachlink(game)
+
+    def no_download(_url: str) -> bytes:
+        raise AssertionError("nothing may be downloaded while the game runs")
+
+    result = install_or_update_addon(game, VERSION, no_download, lambda: True)
+    assert not result.ok
+    assert "Close WoW" in result.sentence
+    assert (game / "Interface" / "AddOns" / "CoachLink").is_dir()
+    assert not (save_folder / "HeroBridge.lua").exists()

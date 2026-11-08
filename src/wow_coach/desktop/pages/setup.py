@@ -410,7 +410,7 @@ class SetupPage(Page):
         folder_ok = self._game_dir is not None and report.game_folder.status is Status.OK
         if not folder_ok or report.addon_is_link or report.addon.status is Status.OK:
             card.button.hide()
-        elif report.addon_installed is None:
+        elif report.addon_installed is None and not report.old_coachlink:
             card.show_button(
                 "Install HeroBridge", "Download HeroBridge and put it in your game.", primary=True
             )

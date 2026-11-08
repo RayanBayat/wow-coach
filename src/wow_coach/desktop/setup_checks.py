@@ -8,6 +8,7 @@ Everything here reads or writes the disk, and the game may live on a slow hard d
 page calls these from a background thread, never from the window's thread.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -16,6 +17,8 @@ from typing import Final
 from wow_coach.advice.paths import advice_addon_for
 from wow_coach.config import save_wow_dir
 from wow_coach.errors import WowCoachError
+from wow_coach.game_running import is_game_running
+from wow_coach.migrate import GAME_RUNNING_SENTENCE, finish_upgrade, upgrade_pending
 from wow_coach.setup import (
     ADDON_FOLDER,
     create_advice_folder,
@@ -28,6 +31,11 @@ from wow_coach.web import FetchBytes
 
 # The sentence shown after the addon was installed or updated.
 RESTART_WOW_HINT: Final = "Done. Restart WoW (or /reload) to use the new version."
+# Shown on the addon card while the old CoachLink addon or its save still needs moving.
+RENAMED_SENTENCE: Final = (
+    "CoachLink is now called HeroBridge. Close WoW, then click Update. "
+    "Your saved character comes along."
+)
 
 
 class Status(Enum):
@@ -64,6 +72,7 @@ class SetupReport:
     answers_folder: Check
     addon_installed: str | None  # the installed version, None when not installed
     addon_is_link: bool  # a developer's linked copy: never replaced
+    old_coachlink: bool = False  # the old CoachLink addon or its save is still there
 
 
 def addons_folder(game_dir: Path) -> Path:
@@ -101,6 +110,8 @@ def check_addon(game_dir: Path, app_version: str) -> tuple[Check, str | None, bo
     if is_link(addon):
         return Check(Status.OK, "HeroBridge is linked from a development copy."), None, True
     installed = installed_addon_version(addon)
+    if upgrade_pending(game_dir):
+        return Check(Status.ATTENTION, RENAMED_SENTENCE), installed, False
     if installed is None:
         return (
             Check(Status.PROBLEM, "HeroBridge is not installed yet. It lets the game talk to me."),
@@ -135,7 +146,14 @@ def make_report(game_dir: Path | None, app_version: str) -> SetupReport:
         needs_folder = Check(Status.PROBLEM, "I need the game folder first.")
         return SetupReport(folder_check, needs_folder, needs_folder, None, False)
     addon, installed, is_link = check_addon(game_dir, app_version)
-    return SetupReport(folder_check, addon, check_answers_folder(game_dir), installed, is_link)
+    return SetupReport(
+        folder_check,
+        addon,
+        check_answers_folder(game_dir),
+        installed,
+        is_link,
+        old_coachlink=upgrade_pending(game_dir),
+    )
 
 
 # ---- the actions --------------------------------------------------------------------------
@@ -159,24 +177,41 @@ def change_game_folder(chosen: Path, config_file: Path) -> ActionResult:
     return ActionResult(True, "Saved. Restart WoW Coach so it watches this folder.", True)
 
 
-def install_or_update_addon(game_dir: Path, app_version: str, download: FetchBytes) -> ActionResult:
+def install_or_update_addon(
+    game_dir: Path,
+    app_version: str,
+    download: FetchBytes,
+    game_is_running: Callable[[], bool] = is_game_running,
+) -> ActionResult:
     """Download HeroBridge (the version that matches this app) and put it in the game.
 
     Installing while the game runs is fine: the game reads addon files only when it loads.
     The answers folder is created too, because the addon needs it.
+
+    If the old CoachLink addon (or its save) is still there, its save and answers are moved
+    to HeroBridge and the old folders are removed. That part needs the game closed, because
+    the game rewrites its save files when it exits; with the game running, nothing is changed.
     """
     addons = addons_folder(game_dir)
     if is_link(addons / ADDON_FOLDER):
         return ActionResult(True, "HeroBridge is a linked development copy, so I left it alone.")
+    moving = upgrade_pending(game_dir)
+    if moving and game_is_running():
+        return ActionResult(False, GAME_RUNNING_SENTENCE)
     try:
         install_addon(addons, app_version, download)
         create_advice_folder(addons)
+        move = finish_upgrade(game_dir, is_running=False) if moving else None
     except (WowCoachError, ValueError) as error:
         return ActionResult(False, f"I could not install HeroBridge: {error}. Please try again.")
     except OSError as error:
         return ActionResult(
             False, f"I could not write to the game folder: {error}. Is the folder choice right?"
         )
+    if move is not None and not move.ok:
+        return ActionResult(False, " ".join(move.problems))
+    if move is not None:
+        return ActionResult(True, f"{RESTART_WOW_HINT} Your saved character came along.")
     return ActionResult(True, RESTART_WOW_HINT)
 
 
