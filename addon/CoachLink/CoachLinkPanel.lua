@@ -34,7 +34,8 @@ local TEXT = {
     askButton = "Ask (saves and reloads)",
     youAsked = "You asked: ",
     warningsHeader = "Be careful",
-    waiting = "Waiting for your coach: ",
+    waiting = "Waiting for your coach: %s. When your coach says the answer is ready, click Show answer.",
+    showAnswer = "Show answer (reloads)",
     howTo = "No advice from your coach yet.\n\n"
         .. "Type a question below and press Ask, or ask your coach on the PC. "
         .. "Answers appear here after your next /reload.",
@@ -319,7 +320,7 @@ local function bodyText(answer, waiting)
         end
     end
     for _, question in ipairs(waiting) do
-        table.insert(parts, TEXT.waiting .. question)
+        table.insert(parts, string.format(TEXT.waiting, question))
     end
     return table.concat(parts, "\n\n")
 end
@@ -419,7 +420,7 @@ local function layoutText()
     local innerWidth = math.max(100, panel:GetWidth() - 40)
     panel.steps:SetWidth(innerWidth)
     panel.footer:SetWidth(innerWidth)
-    panel.status:SetWidth(innerWidth)
+    panel.status:SetWidth(math.max(60, innerWidth - 180))   -- leaves room for the Show answer button
     local scrollWidth = math.max(100, panel.scroll:GetWidth())
     panel.content:SetWidth(scrollWidth)
     panel.body:SetWidth(scrollWidth)
@@ -450,7 +451,9 @@ local function refresh()
     local answer = newestAnswer(mine)
     local steps = stepsToShow(answer, mine)
     panel.steps:SetText(stepsText(steps))
-    panel.body:SetText(bodyText(answer, waitingQuestions()))
+    local waiting = waitingQuestions()
+    panel.body:SetText(bodyText(answer, waiting))
+    panel.showAnswer:SetShown(#waiting > 0)
     panel.footer:SetText(footerText(answer, mine, steps, time()))
     panel.scroll:SetVerticalScroll(0)
     layoutText()
@@ -459,8 +462,19 @@ end
 -- The Ask box and button only work out of combat.
 local function updateAskEnabled()
     if panel then
-        panel.askButton:SetEnabled(not playerIsInCombat())
+        local canClick = not playerIsInCombat()
+        panel.askButton:SetEnabled(canClick)
+        panel.showAnswer:SetEnabled(canClick)
     end
+end
+
+-- Reload the UI so the game reads the answer wow-coach wrote. Only from the player's
+-- click, and never in combat.
+local function showAnswerFromClick()
+    if playerIsInCombat() then
+        return
+    end
+    ReloadUI()
 end
 
 -- Ask the coach with what is typed in the box. ns.askCoach saves the question and
@@ -579,7 +593,15 @@ local function createAskRow(frame)
     askBox:SetScript("OnEnterPressed", askFromBox)
     askBox:SetScript("OnEscapePressed", function(box) box:ClearFocus() end)
 
-    frame.status, frame.askButton, frame.askBox = status, askButton, askBox
+    -- Shown only while a question waits for its answer (see refresh).
+    local showAnswer = CreateFrame("Button", PANEL_NAME .. "ShowAnswer", frame, "UIPanelButtonTemplate")
+    showAnswer:SetSize(170, 22)
+    showAnswer:SetPoint("BOTTOMRIGHT", -24, 54)
+    showAnswer:SetText(TEXT.showAnswer)
+    showAnswer:SetScript("OnClick", showAnswerFromClick)
+    showAnswer:Hide()
+
+    frame.status, frame.askButton, frame.askBox, frame.showAnswer = status, askButton, askBox, showAnswer
 end
 
 -- A small grip in the bottom right corner. Dragging it resizes the window (the
