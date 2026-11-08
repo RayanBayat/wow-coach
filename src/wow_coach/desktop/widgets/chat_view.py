@@ -56,7 +56,8 @@ class ChatView(QScrollArea):
         self._rows: list[MessageRow] = []
         self._coach_bubbles: list[CoachBubble | ReplyBubble] = []
         # Layout order: all message rows, then the typing dots, then a spring.
-        self._typing_row = MessageRow(TypingBubble(), on_right=False)
+        self._typing = TypingBubble()
+        self._typing_row = MessageRow(self._typing, on_right=False)
         self._typing_row.hide()
         self._column.addWidget(self._typing_row)
         self._column.addStretch(1)
@@ -104,12 +105,11 @@ class ChatView(QScrollArea):
         answer: AnswerView,
         *,
         now: float,
-        note: str = "",
-        written_to_game: bool = False,
+        show_lookups: bool = True,
         animate: bool = True,
     ) -> MessageRow:
         """Add an answer from the coach (on the left)."""
-        bubble = CoachBubble(answer, note=note, written_to_game=written_to_game, now=now)
+        bubble = CoachBubble(answer, now=now, show_lookups=show_lookups)
         self._coach_bubbles.append(bubble)
         return self._add(bubble, on_right=False, animate=animate)
 
@@ -153,12 +153,24 @@ class ChatView(QScrollArea):
 
     def set_typing(self, on: bool) -> None:
         """Show or hide the coach's typing dots, and keep them in view."""
+        if not on:
+            self._typing.set_activity("")
         if on == self.typing_visible:
             return
         stick = self._at_bottom()
         self._typing_row.setVisible(on)
         if on and stick:
             self._scroll_soon()
+
+    def set_activity(self, text: str) -> None:
+        """Show what the coach is looking up inside the typing bubble (while it is shown)."""
+        if self.typing_visible:
+            self._typing.set_activity(text)
+
+    @property
+    def activity_text(self) -> str:
+        """The line next to the typing dots (for tests)."""
+        return self._typing.activity_text
 
     def refresh_times(self, now: float) -> None:
         """Update "5 min ago" in every answer."""

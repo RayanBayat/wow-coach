@@ -69,7 +69,7 @@ def test_structured_answers_keep_their_parchment_layout(qtbot: QtBot, tmp_path: 
     )  # fmt: skip
     answer_text = setup.texts()[1]
     assert "Train" in answer_text and "Step one" in answer_text and "Because." in answer_text
-    assert "From ChatGPT" in answer_text
+    assert "From ChatGPT" not in answer_text  # no small "from ..." line under answers
 
 
 def test_a_plain_reply_is_plain_text_and_long_ones_fold(qtbot: QtBot, tmp_path: Path) -> None:

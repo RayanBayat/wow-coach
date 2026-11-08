@@ -315,20 +315,6 @@ def test_answer_text_is_shown_as_plain_text_never_as_markup(qtbot: QtBot, tmp_pa
     assert any(label.text() == "<b>Bold?</b>" for label in labels)
 
 
-def test_the_meta_line_says_when_the_answer_is_also_in_the_game(
-    qtbot: QtBot, tmp_path: Path
-) -> None:
-    setup = start(qtbot, tmp_path, answers=[])
-    event = answer_event("Saved one", answered_at=2_599)
-    event["written_to_game"] = True
-    setup.event("answer", **event)
-    assert any("Also in your in-game panel after your next reload" in t for t in setup.texts())
-    assert any("just now" in t for t in setup.texts())
-    setup.clock.now += 5 * 60
-    setup.page._tick()
-    assert any("5 min ago" in t for t in setup.texts())
-
-
 def test_scrolled_up_readers_get_a_new_answer_pill_instead_of_being_moved(
     qtbot: QtBot, tmp_path: Path
 ) -> None:

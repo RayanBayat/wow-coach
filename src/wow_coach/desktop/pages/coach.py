@@ -26,7 +26,14 @@ from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.compact import CompactCard
 from wow_coach.desktop.pages.base import Page
 from wow_coach.desktop.quick_actions import QUICK_ACTIONS, QuickAction
-from wow_coach.desktop.state import AnswerView, MessageView, StateView, read_answer
+from wow_coach.desktop.state import (
+    AnswerView,
+    MessageView,
+    StateView,
+    read_answer,
+    read_lookups,
+    read_sources,
+)
 from wow_coach.desktop.theme import SPACE, SPACE_LARGE, Colors, current_colors
 from wow_coach.desktop.widgets.bars import OpenQuestionsBar, ProblemBanner, SignInCard
 from wow_coach.desktop.widgets.bubbles import MessageRow
@@ -260,6 +267,8 @@ class CoachPage(Page):
             self._on_save(data)
         elif kind == "answer":
             self._on_answer(data)
+        elif kind == "activity":
+            self._on_activity(data)
         elif kind == "question":
             self._on_game_questions(data)
         elif kind == "error":
@@ -414,14 +423,23 @@ class CoachPage(Page):
     def _on_answer(self, data: Mapping[str, object]) -> None:
         raw = data.get("answer")
         if isinstance(raw, Mapping) and self._is_shown_character(data):
-            note = data.get("note")
-            self._add_answer(
+            answer = replace(
                 read_answer(raw),
-                live=True,
-                note=note if isinstance(note, str) else "",
-                written_to_game=data.get("written_to_game") is True,
+                sources=read_sources(data.get("sources")),
+                lookups=read_lookups(data.get("lookups")),
             )
+            self._add_answer(answer, live=True)
         self._release_queue()
+
+    def _on_activity(self, data: Mapping[str, object]) -> None:
+        """The coach is looking something up: show the newest line in the typing bubble."""
+        text = data.get("text")
+        if self._show_lookups() and isinstance(text, str) and self._is_shown_character(data):
+            self.chat.set_activity(text)
+
+    def _show_lookups(self) -> bool:
+        """True unless the player turned off "Show what the coach looked up"."""
+        return self._state.settings.get("show_lookups") is not False
 
     def _on_game_questions(self, data: Mapping[str, object]) -> None:
         questions = data.get("questions")
@@ -550,23 +568,19 @@ class CoachPage(Page):
                 message.content, tag=tag, seconds=message.seconds, now=self._now(), animate=live
             )
 
-    def _add_answer(
-        self, answer: AnswerView, *, live: bool, note: str = "", written_to_game: bool = False
-    ) -> None:
+    def _add_answer(self, answer: AnswerView, *, live: bool) -> None:
         """Add one answer (and the question it belongs to), unless it is already there."""
         if answer_key(answer) in self._seen:
             return
         self._add_question_of(answer, animate=live)
-        self._add_answer_bubble(answer, live=live, note=note, written_to_game=written_to_game)
+        self._add_answer_bubble(answer, live=live)
 
-    def _add_answer_bubble(
-        self, answer: AnswerView, *, live: bool, note: str = "", written_to_game: bool = False
-    ) -> None:
+    def _add_answer_bubble(self, answer: AnswerView, *, live: bool) -> None:
         """Draw an answer's parchment bubble and remember it, for the card too."""
         self._seen.add(answer_key(answer))
         self._newest_seconds = max(self._newest_seconds, float(answer.answered_at))
         self.chat.add_answer(
-            answer, now=self._now(), note=note, written_to_game=written_to_game, animate=live
+            answer, now=self._now(), show_lookups=self._show_lookups(), animate=live
         )
         if self._newest is None or answer.answered_at >= self._newest.answered_at:
             self._newest = answer

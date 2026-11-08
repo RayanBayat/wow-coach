@@ -11,8 +11,26 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Final
 
+from wow_coach.engine.sources import MAX_SOURCES, is_web_url
+
 # How the chat names the AI behind an answer (ids are the ``provider`` field of a message).
 PROVIDER_LABELS: Final = {"chatgpt": "ChatGPT", "claude-code": "your Claude coach"}
+
+
+@dataclass(frozen=True, slots=True)
+class SourceView:
+    """A web page an answer came from. ``title`` may be empty (the window then shows the site)."""
+
+    title: str
+    url: str
+
+
+@dataclass(frozen=True, slots=True)
+class LookupView:
+    """One thing the coach looked up or saved while answering, as a plain sentence."""
+
+    kind: str  # "read", "write" or "web"
+    text: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +45,8 @@ class AnswerView:
     answered_at: int
     question: str | None
     question_id: str | None
+    sources: tuple[SourceView, ...] = ()
+    lookups: tuple[LookupView, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -129,6 +149,27 @@ def read_answer(raw: Mapping[str, object]) -> AnswerView:
         answered_at=_int_or_none(raw.get("answered_at")) or 0,
         question=_text_or_none(raw.get("question")),
         question_id=_text_or_none(raw.get("question_id")),
+        sources=read_sources(raw.get("sources")),
+        lookups=read_lookups(raw.get("lookups")),
+    )
+
+
+def read_sources(raw: object) -> tuple[SourceView, ...]:
+    """Source dicts as views. Only plain web links get through, whoever sent them."""
+    found = [
+        SourceView(_text(item.get("title")), url)
+        for item in _mappings(raw)
+        if is_web_url(url := _text(item.get("url")))
+    ]
+    return tuple(found[:MAX_SOURCES])
+
+
+def read_lookups(raw: object) -> tuple[LookupView, ...]:
+    """Lookup dicts as views (entries without text are skipped)."""
+    return tuple(
+        LookupView(_text(item.get("kind")), text)
+        for item in _mappings(raw)
+        if (text := _text(item.get("text")).strip())
     )
 
 
@@ -151,6 +192,8 @@ def read_message(raw: Mapping[str, object]) -> MessageView | None:
             answered_at=int(seconds or 0),
             question=None,
             question_id=None,
+            sources=read_sources(saved.get("sources")),
+            lookups=read_lookups(saved.get("lookups")),
         )
     return MessageView(
         id=_text(raw.get("id")),
