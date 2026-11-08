@@ -310,6 +310,8 @@ local function questLines(snapshot)
     local lines = {}
     for _, quest in ipairs(snapshot.quests or {}) do
         local tags = {}
+        -- The ID tells apart quests with the same title (Classic and Retail wiki pages).
+        if quest.questID then table.insert(tags, "quest " .. quest.questID) end
         if quest.complete then table.insert(tags, "DONE, ready to turn in") end
         if quest.failed then table.insert(tags, "FAILED") end
         if quest.suggestedGroup then table.insert(tags, "group quest for " .. quest.suggestedGroup) end

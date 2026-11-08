@@ -19,6 +19,15 @@ All notable changes to this project are written here. The format follows
   price), and items you take from the mail. The history now keeps the newest 500 events
   instead of 300 ([#5](https://github.com/RayanBayat/wow-coach/issues/5)).
 
+- A **Gear hints** section in the status report, right after the bags. It lists bag items your
+  character can't use (armor without the proficiency, weapons without the weapon skill), and
+  possible upgrades: something usable for an empty slot, or with a higher item level than what
+  you wear, or replacing a gray item ([#6](https://github.com/RayanBayat/wow-coach/issues/6)).
+- Quest IDs in the status report and in `/coach copy` ("Fields of Grief (quest 365)"), and a
+  new lookup, `find_quest` (MCP) and `wow-coach wiki --quest 365`. It finds a quest's Warcraft
+  Wiki page by its ID, so the coach reads the Classic page Forever uses, not a Retail page with
+  the same title ([#8](https://github.com/RayanBayat/wow-coach/issues/8)).
+
 ### Changed
 
 - Play time stays up to date without typing `/played`: the addon asks the game for it after
@@ -32,6 +41,11 @@ All notable changes to this project are written here. The format follows
 
 ### Fixed
 
+- Wiki pages no longer lose text from templates the reader doesn't know. Game names such as
+  `{{g|forever}}` become "Forever", content the wiki fills in from other pages (for example the
+  scroll lists on "Comprehend Scroll") is asked from the wiki in one extra request, and any
+  other unknown template leaves its text or its name in brackets instead of nothing
+  ([#7](https://github.com/RayanBayat/wow-coach/issues/7)).
 - Logging out or quitting no longer replaces your last good snapshot with an almost empty one
   (wrong level, no gold, no bags or gear). On a real logout the game unloads the character
   before the addon's last chance to save, so the addon now also reads your character when you

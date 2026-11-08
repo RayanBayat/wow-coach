@@ -119,9 +119,8 @@ def _cant_use_reason(item: Table, armor: set[str] | None, weapons: set[str] | No
         skill = WEAPON_SKILL[sub_kind]
         if skill not in weapons:
             return (
-                f"weapon type {sub_kind}, but this character has no {skill} weapon skill "
-                "(some weapon skills can be learned from a weapon master, "
-                "so check before ruling it out)"
+                f"weapon type {sub_kind}, but this character has no {skill} weapon skill yet; "
+                "a weapon master teaches some weapon skills, so check before selling it"
             )
     return None
 

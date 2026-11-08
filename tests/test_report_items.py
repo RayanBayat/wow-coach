@@ -248,6 +248,7 @@ def test_weapon_without_skill_says_a_weapon_master_may_teach_it() -> None:
     assert "Rusty Axe" in text
     assert "no Axes weapon skill" in text
     assert "weapon master" in text
+    assert "((" not in text and "))" not in text  # one pair of brackets reads better
 
 
 def test_empty_wand_slot_is_a_possible_upgrade() -> None:

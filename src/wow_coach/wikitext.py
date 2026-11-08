@@ -70,25 +70,23 @@ GAME_NAMES = {
     "bcc": "Burning Crusade Classic",
 }
 # Templates that are page furniture, not content: navigation boxes, link lists, references,
-# banners about patches or seasons. An unknown template whose name contains one of these words
-# is dropped instead of being shown in brackets.
-NOISE_WORDS = (
+# banners about patches or seasons. An unknown template is dropped instead of being shown in
+# brackets when its name contains one of NOISE_PARTS anywhere ("Classfooter"), or one of the
+# short NOISE_WORDS as a whole word ("Main" yes, "Domain" no).
+NOISE_PARTS = (
     "footer",
     "navbox",
-    "nav",
     "elinks",
     "reflist",
     "references",
     "documentation",
     "patchbranch",
     "defaultsort",
-    "season",
-    "stub",
     "sidebar",
     "hatnote",
     "see also",
-    "main",
 )
+NOISE_WORDS = ("nav", "season", "stub", "main")
 # Plain words some templates stand for.
 WORD_TEMPLATES = {"alliance": "Alliance", "horde": "Horde", "questfinish": "(turn-in)"}
 
@@ -205,8 +203,10 @@ def _known_expansion(name: str, parts: list[str]) -> str | None:
 
 
 def _is_noise(name: str) -> bool:
-    """True for templates that are page furniture (see ``NOISE_WORDS``) or parser functions."""
-    return name.startswith("#") or any(word in name for word in NOISE_WORDS)
+    """True for templates that are page furniture (see ``NOISE_PARTS``) or parser functions."""
+    if name.startswith("#") or any(part in name for part in NOISE_PARTS):
+        return True
+    return any(re.search(rf"\b{re.escape(word)}\b", name) for word in NOISE_WORDS)
 
 
 def _last_plain_argument(parts: list[str]) -> str:

@@ -723,7 +723,7 @@ for _, fact in ipairs({
     "Spell damage bonus: 0 (all schools)", "Spell crit 1.6%", "dodge 4.3%",
     "Mana regen per 5 s: 12.5",
     "- Arcane Intellect (buff, 25 min left)", "- Cozy Fire (buff)",
-    "[7] Fields of Grief (DONE, ready to turn in; Tirisfal Glades)",
+    "[7] Fields of Grief (quest 365; DONE, ready to turn in; Tirisfal Glades)",
     "Goal: Bring 10 Tirisfal Pumpkins to Farmer Solliden in Brill.",
     "[ ] Maggot Eye's Paw: 0/1", "group quest for 3", "Quests completed so far (all time): 3",
     "Unspent talent points: 1", "Frost 2", "Frostbite (2/5)",

@@ -59,6 +59,12 @@ def test_bold_and_italic_marks_are_removed() -> None:
     assert parse_wikitext("T", "'''Bold''' and ''italic''").sections[0].text == "Bold and italic"
 
 
+def test_a_noise_word_must_be_a_whole_word_of_the_template_name() -> None:
+    # "main" is a noise word ({{Main|...}} is a "main article" link), but "Domain" is not it.
+    page = parse_wikitext("T", "Text {{Main|Mage}} and {{Domain|Shadowlands}}.")
+    assert page.sections[0].text == "Text and Shadowlands."
+
+
 def test_noise_templates_are_dropped_including_nested_ones() -> None:
     page = parse_wikitext("T", "Before {{Reflist|{{inner}}}} after")
     assert page.sections[0].text == "Before after"
