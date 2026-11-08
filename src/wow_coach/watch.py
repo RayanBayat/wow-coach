@@ -28,10 +28,17 @@ type ChangeTimes = dict[Path, int]
 
 
 def change_times(wow_dir: Path) -> ChangeTimes:
-    """Last-changed time of every account's HeroBridge.lua (empty until the first save)."""
-    pattern = "WTF/Account/*/SavedVariables/HeroBridge.lua"
+    """Last-changed time of every account's save file (empty until the first save).
+
+    Both names count: HeroBridge.lua, and CoachLink.lua from before 0.11.0.
+    """
+    paths = [
+        path
+        for file_name in ("HeroBridge.lua", "CoachLink.lua")
+        for path in wow_dir.glob(f"WTF/Account/*/SavedVariables/{file_name}")
+    ]
     times: ChangeTimes = {}
-    for path in wow_dir.glob(pattern):
+    for path in paths:
         try:
             times[path] = path.stat().st_mtime_ns
         except OSError:

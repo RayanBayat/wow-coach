@@ -45,7 +45,8 @@ def _check_save_file(game_folder: Path, now: float, say: Say) -> bool:
     except CoachDataMissing:
         say(NO_SAVE_HELP)
         addons = game_folder / "Interface" / "AddOns"
-        if not (addons / "HeroBridge").is_dir():
+        # The old CoachLink folder also counts as "installed" until the player updates.
+        if not (addons / "HeroBridge").is_dir() and not (addons / "CoachLink").is_dir():
             say(ADDON_MISSING_HELP.format(addons=addons))
         return False
     say(f"Save file: {save_file}")
