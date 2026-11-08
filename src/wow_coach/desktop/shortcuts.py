@@ -18,7 +18,9 @@ Every function takes the folders it writes to as arguments, so tests use tempora
 import logging
 import os
 import re
+import shlex
 import shutil
+import subprocess
 import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
@@ -44,6 +46,9 @@ UNSTABLE_SENTENCE: Final = (
     "Install it once with this command, then open it again:"
 )
 UNSUPPORTED_SENTENCE: Final = "Shortcuts are not available on this system yet."
+
+# The command that shows or hides the overlay in the running app (see ``single_instance.py``).
+TOGGLE_OVERLAY_ARGUMENT: Final = "--toggle-overlay"
 
 # Arguments added after the program's path (the menu entry needs none).
 MENU_ARGUMENTS: Final[tuple[str, ...]] = ()
@@ -195,6 +200,17 @@ def find_stable_program(
         if path.is_file() and not is_temporary_program(path, roots):
             return path
     return None
+
+
+def overlay_command(program: Path | None, platform: str = sys.platform) -> str:
+    """The command a keyboard shortcut should run to show or hide the overlay.
+
+    It uses the same stable program the shortcuts use. When there is none (the app was
+    started from a temporary place) the bare program name is shown instead, which works once
+    the player has installed the program (the Setup page says so).
+    """
+    parts = [PROGRAM_NAME if program is None else str(program), TOGGLE_OVERLAY_ARGUMENT]
+    return subprocess.list2cmdline(parts) if platform == "win32" else shlex.join(parts)
 
 
 # ---- Linux: .desktop files ----------------------------------------------------------------

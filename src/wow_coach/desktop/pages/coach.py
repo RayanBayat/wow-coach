@@ -18,11 +18,12 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Final, NamedTuple
 
-from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
+    QMainWindow,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -143,6 +144,9 @@ class CoachPage(Page):
 
     name = "coach"
     title = "Coach"
+
+    # The player pressed the "Overlay" button: show or hide the overlay (see ``overlay.py``).
+    overlay_requested = Signal()
 
     def __init__(
         self,
@@ -276,6 +280,7 @@ class CoachPage(Page):
     def _wire(self) -> None:
         self.header.character_chosen.connect(self.bridge.select_character)
         self.header.keep_on_top_clicked.connect(self.toggle_card)
+        self.header.overlay_clicked.connect(self.overlay_requested)
         self.questions_bar.answer_now.connect(self.answer_open_questions)
         self.bridge.open_questions_answered.connect(self._on_open_questions_answered)
         self.sign_in_card.sign_in.connect(lambda: self.navigate.emit("chatgpt"))
@@ -696,11 +701,32 @@ class CoachPage(Page):
         if self._card is not None:
             self._card.show_answer(answer)
 
+    # ---- the overlay ----------------------------------------------------------------------
+
+    def set_overlay_hint(self, hint: str) -> None:
+        """Say in the Overlay button's tooltip how to open the overlay (for example the key)."""
+        self.header.set_overlay_hint(hint)
+
+    def set_in_overlay(self, in_overlay: bool) -> None:
+        """The page is inside the overlay panel (or back in the main window).
+
+        In the panel the Overlay button is pointless (the panel has its own Hide button).
+        """
+        self.header.overlay_button.setVisible(not in_overlay)
+
+    def focus_composer(self) -> None:
+        """Put the cursor in the question box (the overlay does this so the player can type)."""
+        self.composer.focus_input()
+
     def _raise_main_window(self) -> None:
-        window = self.window()
-        window.showNormal()
-        window.raise_()
-        window.activateWindow()
+        # ``self.window()`` would be the overlay panel while the page is inside it, so look
+        # for the real main window instead.
+        for widget in QApplication.topLevelWidgets():
+            if isinstance(widget, QMainWindow):
+                widget.showNormal()
+                widget.raise_()
+                widget.activateWindow()
+                return
 
     def _close_card(self) -> None:
         if self._card is not None:

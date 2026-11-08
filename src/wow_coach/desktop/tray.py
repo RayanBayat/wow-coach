@@ -15,6 +15,7 @@ from wow_coach.desktop.icons import app_icon
 TRAY_MESSAGE: Final = (
     "WoW Coach keeps running here so it can answer questions from the game. Quit from this menu."
 )
+OVERLAY_TOOLTIP: Final = "Show the coach as a see-through panel on top of the game."
 _MESSAGE_SHOWN_KEY: Final = "tray/hint_shown"
 _MESSAGE_MS: Final = 8000
 
@@ -29,6 +30,8 @@ class AppTray(QObject):
 
     # The player wants the window (menu entry or click on the icon).
     open_requested = Signal()
+    # The player chose "Show or hide the overlay".
+    overlay_requested = Signal()
     # The player chose Quit.
     quit_requested = Signal()
 
@@ -63,12 +66,20 @@ class AppTray(QObject):
         open_action = QAction("Open WoW Coach", self._menu)
         open_action.setToolTip("Show the WoW Coach window")
         open_action.triggered.connect(self.open_requested)
+        self._overlay_action = QAction("Show or hide the overlay", self._menu)
+        self._overlay_action.setToolTip(OVERLAY_TOOLTIP)
+        self._overlay_action.triggered.connect(self.overlay_requested)
         quit_action = QAction("Quit", self._menu)
         quit_action.setToolTip("Stop WoW Coach completely")
         quit_action.triggered.connect(self.quit_requested)
         self._menu.addAction(open_action)
+        self._menu.addAction(self._overlay_action)
         self._menu.addSeparator()
         self._menu.addAction(quit_action)
+
+    def set_overlay_hint(self, hint: str) -> None:
+        """Say in the menu entry's tooltip how to open the overlay (for example the key)."""
+        self._overlay_action.setToolTip(f"{OVERLAY_TOOLTIP} {hint}")
 
     @property
     def menu(self) -> QMenu:

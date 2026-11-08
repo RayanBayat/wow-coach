@@ -208,13 +208,17 @@ def test_the_gui_entry_hands_its_arguments_to_the_app(
 ) -> None:
     seen: dict[str, object] = {}
 
-    def fake_run_desktop(*, wow_dir_flag: Path | None, start_hidden: bool) -> int:
-        seen.update(flag=wow_dir_flag, hidden=start_hidden)
+    def fake_run_desktop(
+        *, wow_dir_flag: Path | None, start_hidden: bool, toggle_overlay: bool
+    ) -> int:
+        seen.update(flag=wow_dir_flag, hidden=start_hidden, toggle=toggle_overlay)
         return 0
 
     monkeypatch.setattr(run, "run_desktop", fake_run_desktop)
     assert launcher.main(["--hidden", "--wow-dir", str(tmp_path)]) == 0
-    assert seen == {"flag": tmp_path, "hidden": True}
+    assert seen == {"flag": tmp_path, "hidden": True, "toggle": False}
+    assert launcher.main(["--toggle-overlay"]) == 0
+    assert seen == {"flag": None, "hidden": False, "toggle": True}
 
 
 def test_the_gui_entry_survives_missing_output_streams(

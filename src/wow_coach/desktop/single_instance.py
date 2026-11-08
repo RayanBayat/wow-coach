@@ -7,7 +7,9 @@ twice. Two things work together:
   one step that cannot be split, so when two copies start at the same moment exactly one wins.
   If a copy crashes, the lock is recognised as stale (its program is gone) and can be taken.
 * A small local **socket** (a private channel between programs on the same computer) lets the
-  copy that lost say "show" to the winner, which then brings its window to the front.
+  copy that lost talk to the winner. It sends one short message: "show" (bring the window to
+  the front) or "toggle-overlay" (show or hide the overlay; this is what the hotkey command
+  ``wow-coach-app --toggle-overlay`` sends). Any other message is ignored.
 
 The socket lives in a folder that only this user can use (``$XDG_RUNTIME_DIR/wow-coach`` on
 Linux). A name in the shared ``/tmp`` could be taken by another user on the same computer, and
@@ -32,6 +34,7 @@ from wow_coach.datafolder import data_folder
 _log = logging.getLogger(__name__)
 
 SHOW_MESSAGE: Final = b"show"
+TOGGLE_OVERLAY_MESSAGE: Final = b"toggle-overlay"
 CONNECT_TIMEOUT_MS: Final = 500
 READ_TIMEOUT_MS: Final = 200
 LOCK_FILE_NAME: Final = "instance.lock"
@@ -117,6 +120,8 @@ class SingleInstance(QObject):
 
     # Another copy was started: bring the window to the front.
     show_requested = Signal()
+    # Another copy was started with ``--toggle-overlay``: show or hide the overlay.
+    toggle_overlay_requested = Signal()
 
     def __init__(
         self,
@@ -149,11 +154,12 @@ class SingleInstance(QObject):
         """Where the running copy listens (a file path, or a name on Windows)."""
         return self._address
 
-    def claim(self) -> bool:
+    def claim(self, message: bytes = SHOW_MESSAGE) -> bool:
         """Try to become the one running copy.
 
         Returns True when this copy won the lock and should go on. Returns False when another
-        copy was already running: it was told to show its window, and this copy should exit.
+        copy was already running: it was sent ``message`` (by default "show your window"), and
+        this copy should exit.
         """
         Path(self._lock.fileName()).parent.mkdir(parents=True, exist_ok=True)
         if self._lock.tryLock(0):
@@ -166,7 +172,7 @@ class SingleInstance(QObject):
             self._listen()
             return True
         # Someone else holds the lock, so a copy is running (or starting). Tell it to show.
-        self._tell_the_running_copy()
+        self._tell_the_running_copy(message)
         return False
 
     def close(self) -> None:
@@ -178,8 +184,8 @@ class SingleInstance(QObject):
 
     # ---- the second copy -----------------------------------------------------------------
 
-    def _tell_the_running_copy(self) -> bool:
-        """Say "show" to the running copy. False when it never answers."""
+    def _tell_the_running_copy(self, message: bytes) -> bool:
+        """Send ``message`` to the running copy. False when it never answers."""
         for attempt in range(TELL_ATTEMPTS):
             if attempt:
                 QThread.msleep(TELL_PAUSE_MS)
@@ -187,7 +193,7 @@ class SingleInstance(QObject):
             socket.connectToServer(self._address)
             if not socket.waitForConnected(CONNECT_TIMEOUT_MS):
                 continue
-            socket.write(SHOW_MESSAGE)
+            socket.write(message)
             socket.flush()
             socket.waitForBytesWritten(CONNECT_TIMEOUT_MS)
             socket.disconnectFromServer()
@@ -224,7 +230,10 @@ class SingleInstance(QObject):
         harmless and keeps the code simple (no connections to keep track of).
         """
         got_data = socket.bytesAvailable() > 0 or socket.waitForReadyRead(READ_TIMEOUT_MS)
-        if got_data and bytes(socket.readAll().data()) == SHOW_MESSAGE:
+        message = bytes(socket.readAll().data()) if got_data else b""
+        if message == SHOW_MESSAGE:
             self.show_requested.emit()
+        elif message == TOGGLE_OVERLAY_MESSAGE:
+            self.toggle_overlay_requested.emit()
         socket.disconnectFromServer()
         socket.deleteLater()

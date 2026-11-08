@@ -23,12 +23,13 @@ from PySide6.QtWidgets import (
 )
 
 from wow_coach.desktop.bridge import CoreBridge
+from wow_coach.desktop.hotkey import GlobalHotkey
 from wow_coach.desktop.icons import ICON_NAMES, app_icon, icon
 from wow_coach.desktop.pages import build_pages
 from wow_coach.desktop.pages.base import Page
 from wow_coach.desktop.pages.setup import SetupPage
 from wow_coach.desktop.state import StateView
-from wow_coach.desktop.theme import SIDEBAR_WIDTH, SPACE, SPACE_SMALL, current_colors
+from wow_coach.desktop.theme import SIDEBAR_WIDTH, SPACE, SPACE_LARGE, SPACE_SMALL, current_colors
 from wow_coach.desktop.tray import AppTray
 
 APP_TITLE: Final = "WoW Coach"
@@ -42,6 +43,8 @@ class MainWindow(QMainWindow):
 
     # The player pressed "Restart WoW Coach" (on the Setup page). ``run.py`` does the restart.
     restart_requested = Signal()
+    # The player pressed "Show it here again" on a page that is out on loan (the overlay).
+    page_wanted_back = Signal()
 
     def __init__(
         self,
@@ -64,6 +67,9 @@ class MainWindow(QMainWindow):
         self.bridge = bridge
         self._tray = tray
         self._really_quitting = False
+        # Pages that are out on loan (the Coach page while the overlay shows it), and the
+        # note shown in their place so the sidebar keeps working.
+        self._placeholders: dict[str, QWidget] = {}
         self.setWindowIcon(app_icon())
         self.pages: list[Page] = list(pages) if pages is not None else build_pages(bridge)
         self.setWindowTitle(APP_TITLE)
@@ -132,13 +138,71 @@ class MainWindow(QMainWindow):
 
     # ---- using it -----------------------------------------------------------------------
 
+    def use_hotkey(self, hotkey: GlobalHotkey) -> None:
+        """Give the Setup page the overlay hotkey, so its card can show how it is doing."""
+        for page in self.pages:
+            if isinstance(page, SetupPage):
+                page.set_hotkey(hotkey)
+
     def show_page(self, name: str) -> None:
         """Switch to the page with this name (unknown names are ignored)."""
         for page in self.pages:
             if page.name == name:
-                self._stack.setCurrentWidget(page)
+                self._stack.setCurrentWidget(self._placeholders.get(name, page))
                 self._nav_buttons[name].setChecked(True)
                 return
+
+    # ---- lending a page (the overlay shows the Coach page) -------------------------------
+
+    def take_page(self, name: str) -> Page | None:
+        """Lend a page to another window. A note takes its place in the stack.
+
+        Returns the page, or None when there is no such page or it is already out on loan.
+        """
+        page = next((candidate for candidate in self.pages if candidate.name == name), None)
+        if page is None or name in self._placeholders:
+            return None
+        was_current = self._stack.currentWidget() is page
+        index = self._stack.indexOf(page)
+        placeholder = self._build_placeholder(page)
+        self._placeholders[name] = placeholder
+        self._stack.removeWidget(page)
+        self._stack.insertWidget(index, placeholder)
+        if was_current:
+            self._stack.setCurrentWidget(placeholder)
+        return page
+
+    def return_page(self, page: Page) -> None:
+        """Put a lent page back where it was (the note goes away)."""
+        placeholder = self._placeholders.pop(page.name, None)
+        if placeholder is None:
+            return
+        was_current = self._stack.currentWidget() is placeholder
+        index = self._stack.indexOf(placeholder)
+        self._stack.removeWidget(placeholder)
+        placeholder.deleteLater()
+        self._stack.insertWidget(index, page)
+        if was_current:
+            self._stack.setCurrentWidget(page)
+
+    def _build_placeholder(self, page: Page) -> QWidget:
+        """The note that stands in for a page that is out on loan."""
+        note = QWidget()
+        note.setObjectName("page")
+        text = QLabel(f"The {page.title} page is open as an overlay on top of your game.")
+        text.setProperty("role", "muted")
+        text.setWordWrap(True)
+        button = QPushButton("Show it here again")
+        button.setProperty("kind", "secondary")
+        button.setToolTip("Close the overlay and bring the page back into this window.")
+        button.clicked.connect(self.page_wanted_back)
+        column = QVBoxLayout(note)
+        column.setContentsMargins(SPACE_LARGE, SPACE_LARGE, SPACE_LARGE, SPACE_LARGE)
+        column.setSpacing(SPACE)
+        column.addWidget(text)
+        column.addWidget(button, 0, Qt.AlignmentFlag.AlignLeft)
+        column.addStretch(1)
+        return note
 
     def bring_to_front(self) -> None:
         """Show the window, raise it above other windows and give it the keyboard."""

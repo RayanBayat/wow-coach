@@ -1,6 +1,7 @@
 """The Settings page: filling, auto-saving, validating and not overwriting edits."""
 
 from desktop_support import FakeCore, make_bridge, sample_state
+from PySide6.QtGui import QKeySequence
 from pytestqt.qtbot import QtBot
 
 from wow_coach.app_settings import AppSettings, settings_to_dict
@@ -181,3 +182,49 @@ def test_the_claude_chats_toggle_shows_and_saves_the_setting(qtbot: QtBot) -> No
     page.use_claude_chats.check.setChecked(True)
     page.save_now()
     assert core.changes == [{"use_claude_chats": True}]
+
+
+# ---- the overlay card ------------------------------------------------------------------
+
+
+def test_the_overlay_fields_show_the_saved_values(qtbot: QtBot) -> None:
+    saved = AppSettings(overlay_opacity=70, overlay_hotkey="Ctrl+Alt+F9")
+    page, _bridge, _core = make_page(qtbot, **settings_state(saved))
+    assert page.opacity_slider.value() == 70
+    assert page.opacity_value.text() == "70 %"
+    assert page.hotkey_edit.keySequence().toString() == "Ctrl+Alt+F9"
+
+
+def test_old_settings_without_overlay_values_show_the_defaults(qtbot: QtBot) -> None:
+    page, _bridge, core = make_page(qtbot, settings={"notify": True})
+    assert page.opacity_slider.value() == 92
+    assert page.hotkey_edit.keySequence().toString() == "Ctrl+Shift+Space"
+    assert core.changes == []  # filling never saves
+
+
+def test_the_slider_only_allows_60_to_100(qtbot: QtBot) -> None:
+    page, _bridge, _core = make_page(qtbot)
+    assert (page.opacity_slider.minimum(), page.opacity_slider.maximum()) == (60, 100)
+
+
+def test_moving_the_slider_saves_only_the_opacity(qtbot: QtBot) -> None:
+    page, _bridge, core = make_page(qtbot)
+    page.opacity_slider.setValue(75)
+    page.save_now()
+    assert core.changes == [{"overlay_opacity": 75}]
+    assert core.settings.overlay_opacity == 75
+
+
+def test_choosing_a_new_key_saves_it(qtbot: QtBot) -> None:
+    page, _bridge, core = make_page(qtbot)
+    page.hotkey_edit.setKeySequence(QKeySequence("Ctrl+Alt+F9"))
+    page.save_now()
+    assert core.changes == [{"overlay_hotkey": "Ctrl+Alt+F9"}]
+    assert core.settings.overlay_hotkey == "Ctrl+Alt+F9"
+
+
+def test_clearing_the_key_box_does_not_save_an_empty_key(qtbot: QtBot) -> None:
+    page, _bridge, core = make_page(qtbot)
+    page.hotkey_edit.clear()
+    page.save_now()
+    assert core.changes == []

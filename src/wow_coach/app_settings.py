@@ -20,6 +20,15 @@ from wow_coach.triggers.settings import trigger_settings_from_dict, trigger_sett
 SETTINGS_FILE_NAME: Final = "settings.json"
 MAX_SETTINGS_BYTES: Final = 64_000
 MAX_MODEL_CHARS: Final = 80
+# The overlay (the coach as a see-through panel on top of the game): how solid it is, in
+# percent, and the key that shows or hides it. Below 60 % the text is too hard to read.
+MIN_OVERLAY_OPACITY: Final = 60
+MAX_OVERLAY_OPACITY: Final = 100
+DEFAULT_OVERLAY_OPACITY: Final = 92
+# Ctrl+Shift+Space: WoW's default keys are mostly single keys, Shift+key and Ctrl+key, so
+# this three-key chord does not clash (Space alone is "jump").
+DEFAULT_OVERLAY_HOTKEY: Final = "Ctrl+Shift+Space"
+MAX_HOTKEY_CHARS: Final = 40
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +62,10 @@ class AppSettings:
     show_lookups: bool = True
     # "When the game saves": what the coach tells you after a save (notes, optionally advice).
     triggers: TriggerSettings = field(default_factory=TriggerSettings)
+    # The overlay panel's see-through level (60-100 %; 100 = solid).
+    overlay_opacity: int = DEFAULT_OVERLAY_OPACITY
+    # The key that shows or hides the overlay, in Qt's portable text ("Ctrl+Shift+Space").
+    overlay_hotkey: str = DEFAULT_OVERLAY_HOTKEY
 
 
 DEFAULTS: Final = AppSettings()
@@ -75,6 +88,23 @@ def _clean_flag(value: object, default: bool) -> bool:
     return value if isinstance(value, bool) else default
 
 
+def _clean_opacity(value: object) -> int:
+    """A whole number from 60 to 100, else the default (a bool is not a number)."""
+    if isinstance(value, bool) or not isinstance(value, int):
+        return DEFAULT_OVERLAY_OPACITY
+    in_range = MIN_OVERLAY_OPACITY <= value <= MAX_OVERLAY_OPACITY
+    return value if in_range else DEFAULT_OVERLAY_OPACITY
+
+
+def _clean_hotkey(value: object) -> str:
+    """Key text such as "Ctrl+Shift+Space": plain printable characters, not too long."""
+    if not isinstance(value, str):
+        return DEFAULT_OVERLAY_HOTKEY
+    value = value.strip()
+    plain = value.isascii() and value.isprintable()
+    return value if plain and 0 < len(value) <= MAX_HOTKEY_CHARS else DEFAULT_OVERLAY_HOTKEY
+
+
 def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
     """Build settings from loose data (a file, or a form in the window), fixing bad values."""
     return AppSettings(
@@ -93,6 +123,8 @@ def settings_from_dict(data: Mapping[str, object]) -> AppSettings:
         save_notes=_clean_flag(data.get("save_notes"), DEFAULTS.save_notes),
         show_lookups=_clean_flag(data.get("show_lookups"), DEFAULTS.show_lookups),
         triggers=trigger_settings_from_dict(data.get("triggers")),
+        overlay_opacity=_clean_opacity(data.get("overlay_opacity")),
+        overlay_hotkey=_clean_hotkey(data.get("overlay_hotkey")),
     )
 
 

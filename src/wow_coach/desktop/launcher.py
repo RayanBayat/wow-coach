@@ -58,6 +58,12 @@ def _parse(argv: Sequence[str] | None) -> argparse.Namespace:
         action="store_true",
         help="start in the tray without showing the window (the login shortcut uses it)",
     )
+    parser.add_argument(
+        "--toggle-overlay",
+        action="store_true",
+        help="show or hide the coach overlay on top of the game (starts the app if it is not "
+        "running). Bind this command to a key in your system's keyboard settings.",
+    )
     return parser.parse_args(argv)
 
 
@@ -76,7 +82,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     from wow_coach.desktop import run  # noqa: PLC0415 - optional extra, see above
 
     try:
-        return run.run_desktop(wow_dir_flag=arguments.wow_dir, start_hidden=arguments.hidden)
+        return run.run_desktop(
+            wow_dir_flag=arguments.wow_dir,
+            start_hidden=arguments.hidden,
+            toggle_overlay=arguments.toggle_overlay,
+        )
     except (WowCoachError, OSError) as error:
         _say(f"wow-coach-app: {error}")
         return 1

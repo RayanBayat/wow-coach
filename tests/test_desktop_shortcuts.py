@@ -18,6 +18,7 @@ from wow_coach.desktop.shortcuts import (
     find_stable_program,
     is_supported,
     is_temporary_program,
+    overlay_command,
     quote_exec_argument,
     windows_link_command,
 )
@@ -350,3 +351,20 @@ def test_macos_is_not_supported(tmp_path: Path) -> None:
     assert not is_supported("darwin")
     assert is_supported("linux")
     assert is_supported("win32")
+
+
+def test_the_overlay_command_uses_the_stable_program() -> None:
+    program = Path("/home/me/.local/bin/wow-coach-app")
+    assert overlay_command(program, "linux") == "/home/me/.local/bin/wow-coach-app --toggle-overlay"
+
+
+def test_the_overlay_command_quotes_for_the_system() -> None:
+    spaced = Path("/home/my name/wow-coach-app")
+    assert overlay_command(spaced, "linux") == "'/home/my name/wow-coach-app' --toggle-overlay"
+    windows = Path("C:/Users/My Name/wow-coach-app.exe")
+    expected = '"C:/Users/My Name/wow-coach-app.exe" --toggle-overlay'
+    assert overlay_command(windows, "win32") == expected
+
+
+def test_the_overlay_command_without_a_stable_program_is_the_bare_name() -> None:
+    assert overlay_command(None, "linux") == "wow-coach-app --toggle-overlay"
