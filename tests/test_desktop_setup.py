@@ -1,10 +1,13 @@
 """The Setup page: every check state, install/update, folder choice and the page itself."""
 
 import io
+import subprocess
 import zipfile
 from pathlib import Path
 
+import pytest
 from desktop_support import make_bridge, run_now
+from PySide6.QtCore import Qt
 from pytestqt.qtbot import QtBot
 
 from wow_coach.config import load_saved_wow_dir
@@ -92,6 +95,23 @@ def test_a_linked_addon_is_ok_and_never_replaced(tmp_path: Path) -> None:
 
     assert install_or_update_addon(game, VERSION, no_download).ok
     assert not (source / "CoachLink.toc").exists()
+
+
+def test_a_windows_junction_copy_is_left_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A junction is Windows' folder link; Python's is_symlink() says False for it.
+    game = make_game(tmp_path)
+    install_fake_addon(game, "0.0.1")
+    addon = game / "Interface" / "AddOns" / "CoachLink"
+    real_is_junction = Path.is_junction
+    monkeypatch.setattr(Path, "is_junction", lambda self: self == addon or real_is_junction(self))
+    assert check_addon(game, VERSION)[2] is True
+
+    def no_download(_url: str) -> bytes:
+        raise AssertionError("a junction must not be downloaded over")
+
+    assert install_or_update_addon(game, VERSION, no_download).ok
 
 
 def test_answers_folder_check_and_create(tmp_path: Path) -> None:
@@ -213,6 +233,27 @@ def test_the_page_installs_the_addon_in_the_background(qtbot: QtBot, tmp_path: P
     assert "up to date" in page.addon_card.sentence.text()
 
 
+@pytest.mark.parametrize(
+    "error",
+    [zipfile.BadZipFile("bad CRC"), subprocess.TimeoutExpired("powershell", 20), RuntimeError("x")],
+)
+def test_any_failure_in_an_action_ends_the_working_state(
+    qtbot: QtBot, tmp_path: Path, error: Exception
+) -> None:
+    game = make_game(tmp_path)
+
+    def broken_download(_url: str) -> bytes:
+        raise error
+
+    services = make_services(tmp_path)
+    services.download = broken_download
+    page = make_page(qtbot, services, game)
+    page.addon_card.button.click()
+    assert page.message.text().startswith("That didn't work")
+    assert "Troubleshooting" in page.message.text()
+    assert page.addon_card.button.isEnabled()  # not stuck on "Working on it..."
+
+
 def test_the_page_offers_an_update_for_an_old_addon(qtbot: QtBot, tmp_path: Path) -> None:
     game = make_game(tmp_path)
     install_fake_addon(game, "1.0.0")
@@ -252,6 +293,17 @@ def test_choosing_the_right_folder_saves_it_and_says_to_restart(
     assert "Restart WoW Coach" in page.message.text()
     assert page.game_card.sentence.text() == str(new)
     assert load_saved_wow_dir(tmp_path / "config.json") == new
+    # A button does the restart, so the player need not know that closing only hides the window.
+    assert not page.restart_button.isHidden()
+    with qtbot.waitSignal(page.restart_requested, timeout=1000):
+        page.restart_button.click()
+
+
+def test_the_restart_button_only_shows_after_a_folder_change(qtbot: QtBot, tmp_path: Path) -> None:
+    page = make_page(qtbot, make_services(tmp_path), make_game(tmp_path))
+    assert page.restart_button.isHidden()
+    page.addon_card.button.click()  # some other action
+    assert page.restart_button.isHidden()
 
 
 def test_cancelling_the_folder_dialog_changes_nothing(qtbot: QtBot, tmp_path: Path) -> None:
@@ -265,6 +317,14 @@ def test_the_page_hides_shortcut_cards_where_unsupported(qtbot: QtBot, tmp_path:
     assert page.menu_card.isHidden()
     assert page.login_card.isHidden()
     assert "macOS" in page.no_shortcuts.text()
+
+
+def test_paths_and_error_texts_are_shown_as_plain_text(qtbot: QtBot, tmp_path: Path) -> None:
+    # A folder called "<b>x</b>" must not turn into bold text (Qt's AutoText would).
+    page = make_page(qtbot, make_services(tmp_path), None)
+    assert page.message.textFormat() == Qt.TextFormat.PlainText
+    for card in (page.game_card, page.addon_card, page.answers_card, page.menu_card):
+        assert card.sentence.textFormat() == Qt.TextFormat.PlainText
 
 
 def test_the_key_card_explains_the_keybinding(qtbot: QtBot, tmp_path: Path) -> None:

@@ -31,7 +31,10 @@ from wow_coach.desktop.icons import APP_ICON_SVG, save_app_ico
 
 _log = logging.getLogger(__name__)
 
-PROGRAM_NAME: Final = "wow-coach"
+# The program the shortcuts start: the app's own "GUI script" (see ``launcher.py``). Unlike
+# ``wow-coach``, on Windows it opens no console window, so closing a console cannot kill the
+# coach. Linux uses the same program, so both systems behave the same.
+PROGRAM_NAME: Final = "wow-coach-app"
 DISPLAY_NAME: Final = "WoW Coach"
 INSTALL_COMMAND: Final = (
     'uv tool install "wow-coach[desktop] @ git+https://github.com/RayanBayat/wow-coach"'
@@ -42,10 +45,10 @@ UNSTABLE_SENTENCE: Final = (
 )
 UNSUPPORTED_SENTENCE: Final = "Shortcuts are not available on this system yet."
 
-# Arguments added after the program's path.
-MENU_ARGUMENTS: Final = ("app",)
+# Arguments added after the program's path (the menu entry needs none).
+MENU_ARGUMENTS: Final[tuple[str, ...]] = ()
 # At login the window stays in the tray, so it does not jump in front of the game.
-AUTOSTART_ARGUMENTS: Final = ("app", "--hidden")
+AUTOSTART_ARGUMENTS: Final = ("--hidden",)
 
 # Parts of a path that show a temporary program (the uv / uvx cache and similar), lowercase,
 # written with "/" (paths are changed to that form before the check).
@@ -160,28 +163,35 @@ def is_temporary_program(path: Path, temp_roots: Sequence[Path] = ()) -> bool:
     return False
 
 
+def _program_file(folder: Path, platform: str) -> Path:
+    """Where the app's program would be inside ``folder`` (Windows adds ``.exe``)."""
+    return folder / (PROGRAM_NAME + (".exe" if platform == "win32" else ""))
+
+
 def find_stable_program(
     *,
     which: Callable[[str], str | None] = shutil.which,
-    argv0: str | None = None,
+    executable: str | None = None,
     platform: str = sys.platform,
     temp_roots: Sequence[Path] | None = None,
 ) -> Path | None:
-    """The absolute path of the ``wow-coach`` program, or None when it is not stable.
+    """The absolute path of the app's program, or None when it is not stable.
 
-    It looks on the PATH first (that is where ``uv tool install`` puts it) and then at how
-    this program was started. A path inside a cache or temporary folder gives None.
+    The program that belongs to the RUNNING environment wins: the script that sits next to
+    ``sys.executable``. A ``wow-coach-app`` further along the PATH may be another install (an
+    older one, or one without the ``desktop`` extra), so the PATH is only used when what it
+    finds resolves to a script in this same environment. A path inside a cache or temporary
+    folder gives None, because it may vanish later.
     """
     roots = [Path(tempfile.gettempdir())] if temp_roots is None else list(temp_roots)
+    environment_folder = Path(sys.executable if executable is None else executable).parent
+    own_script = _program_file(environment_folder, platform)
+    candidates = [own_script]
     found = which(PROGRAM_NAME)
-    candidates = [Path(found)] if found else []
-    started_as = sys.argv[0] if argv0 is None else argv0
-    if started_as and Path(started_as).name.lower().startswith(PROGRAM_NAME):
-        candidates.append(Path(started_as))
+    if found and Path(found).resolve().parent == environment_folder.resolve():
+        candidates.append(Path(found))
     for candidate in candidates:
         path = candidate.absolute()
-        if not path.is_file() and platform == "win32":
-            path = path.with_name(path.name + ".exe")
         if path.is_file() and not is_temporary_program(path, roots):
             return path
     return None

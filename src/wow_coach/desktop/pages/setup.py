@@ -7,6 +7,7 @@ and ``shortcuts.py`` and know nothing about Qt.
 """
 
 import importlib.metadata
+import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -51,8 +52,9 @@ from wow_coach.desktop.shortcuts import (
     is_supported,
 )
 from wow_coach.desktop.theme import SPACE, SPACE_LARGE, SPACE_SMALL, Colors, current_colors
-from wow_coach.errors import WowCoachError
 from wow_coach.web import FetchBytes, PoliteFetcher, build_user_agent
+
+_log = logging.getLogger(__name__)
 
 STATUS_ICONS = {Status.OK: "ok", Status.ATTENTION: "attention", Status.PROBLEM: "problem"}
 STATUS_ICON_SIZE = 26
@@ -129,6 +131,7 @@ class SetupCard(QFrame):
         self._title.setProperty("role", "cardtitle")
         self.sentence = QLabel()
         self.sentence.setWordWrap(True)
+        self.sentence.setTextFormat(Qt.TextFormat.PlainText)  # paths and OS errors, never markup
         self.sentence.setProperty("role", "muted")
         self.sentence.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.command = QLabel(INSTALL_COMMAND)
@@ -191,6 +194,8 @@ class SetupPage(Page):
     # Results come from a background thread; signals bring them to the window's thread.
     _snapshot_ready = Signal(object)
     _action_finished = Signal(object)
+    # The player pressed "Restart WoW Coach" (after changing the game folder).
+    restart_requested = Signal()
 
     def __init__(
         self,
@@ -217,7 +222,13 @@ class SetupPage(Page):
         intro.setProperty("role", "muted")
         self.message = QLabel()
         self.message.setWordWrap(True)
+        self.message.setTextFormat(Qt.TextFormat.PlainText)
         self.message.hide()
+        self.restart_button = QPushButton("Restart WoW Coach")
+        self.restart_button.setProperty("kind", "primary")
+        self.restart_button.setToolTip("Close WoW Coach and open it again, using the new folder.")
+        self.restart_button.clicked.connect(self.restart_requested)
+        self.restart_button.hide()
 
         self.game_card = SetupCard("Game folder")
         self.addon_card = SetupCard("CoachLink addon")
@@ -240,6 +251,7 @@ class SetupPage(Page):
         column.addWidget(heading)
         column.addWidget(intro)
         column.addWidget(self.message)
+        column.addWidget(self.restart_button, 0, Qt.AlignmentFlag.AlignLeft)
         for card in (self.game_card, self.addon_card, self.answers_card, self.key_card):
             column.addWidget(card)
         column.addWidget(self.menu_card)
@@ -439,16 +451,24 @@ class SetupPage(Page):
         def job() -> None:
             try:
                 result = work()
-            except (WowCoachError, OSError, ValueError) as error:
-                result = ActionResult(False, f"That did not work: {error}. Please try again.")
+            except Exception as error:
+                # A corrupt download (BadZipFile) or a slow PowerShell (TimeoutExpired) are not
+                # our own error types. If one escaped, the finished signal would never fire and
+                # every button would stay off for good. So catch everything, log it, say it.
+                _log.exception("A Setup action failed")
+                result = ActionResult(
+                    False, f"That didn't work: {error}. Try again, or see Troubleshooting."
+                )
             self._action_finished.emit(result)
 
         self.services.runner(job)
 
     def _on_action_finished(self, result: object) -> None:
         self._busy = False
+        self.restart_button.hide()
         if isinstance(result, ActionResult):
             self._show_message(result.sentence, error=not result.ok)
+            self.restart_button.setVisible(result.ok and result.needs_restart)
         self.refresh()
 
     def _apply_busy(self) -> None:

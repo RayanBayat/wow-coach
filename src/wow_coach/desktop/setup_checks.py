@@ -22,6 +22,7 @@ from wow_coach.setup import (
     has_wtf,
     install_addon,
     installed_addon_version,
+    is_link,
 )
 from wow_coach.web import FetchBytes
 
@@ -51,6 +52,7 @@ class ActionResult:
 
     ok: bool
     sentence: str
+    needs_restart: bool = False  # the app must be started again for this to take effect
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,7 +98,7 @@ def check_addon(game_dir: Path, app_version: str) -> tuple[Check, str | None, bo
     folder is a link (a developer's copy, which the app never replaces).
     """
     addon = addons_folder(game_dir) / ADDON_FOLDER
-    if addon.is_symlink():
+    if is_link(addon):
         return Check(Status.OK, "CoachLink is linked from a development copy."), None, True
     installed = installed_addon_version(addon)
     if installed is None:
@@ -150,7 +152,7 @@ def change_game_folder(chosen: Path, config_file: Path) -> ActionResult:
         save_wow_dir(config_file, chosen)
     except OSError as error:
         return ActionResult(False, f"I could not save the folder: {error}. Please try again.")
-    return ActionResult(True, "Saved. Restart WoW Coach so it watches this folder.")
+    return ActionResult(True, "Saved. Restart WoW Coach so it watches this folder.", True)
 
 
 def install_or_update_addon(game_dir: Path, app_version: str, download: FetchBytes) -> ActionResult:
@@ -160,7 +162,7 @@ def install_or_update_addon(game_dir: Path, app_version: str, download: FetchByt
     The answers folder is created too, because the addon needs it.
     """
     addons = addons_folder(game_dir)
-    if (addons / ADDON_FOLDER).is_symlink():
+    if is_link(addons / ADDON_FOLDER):
         return ActionResult(True, "CoachLink is a linked development copy, so I left it alone.")
     try:
         install_addon(addons, app_version, download)

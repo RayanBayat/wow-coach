@@ -201,9 +201,9 @@ def test_every_theme_picture_exists_and_matches_its_colors() -> None:
             assert asset_url(picture, colors) in stylesheet(colors)
 
 
-def test_wayland_with_xwayland_runs_as_an_x11_app_so_keep_on_top_works() -> None:
+def test_wayland_with_xwayland_prefers_x11_but_falls_back_to_wayland() -> None:
     environ = {"XDG_SESSION_TYPE": "wayland", "WAYLAND_DISPLAY": "wayland-0", "DISPLAY": ":0"}
-    assert platform_arguments(environ, "linux") == ["-platform", "xcb"]
+    assert platform_arguments(environ, "linux") == ["-platform", "xcb;wayland"]
 
 
 def test_the_players_own_qt_platform_choice_wins() -> None:

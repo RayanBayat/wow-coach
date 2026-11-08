@@ -27,7 +27,7 @@ def make_folders(root: Path) -> ShortcutFolders:
     return ShortcutFolders(root / "apps", root / "autostart", root / "icons" / "wow-coach.svg")
 
 
-def make_program(root: Path, name: str = "wow-coach") -> Path:
+def make_program(root: Path, name: str = "wow-coach-app") -> Path:
     program = root / "bin" / name
     program.parent.mkdir(parents=True, exist_ok=True)
     program.write_text("#!/bin/sh\n")
@@ -62,21 +62,21 @@ def test_a_line_break_in_an_argument_is_refused() -> None:
 
 
 def test_the_desktop_file_content(tmp_path: Path) -> None:
-    program = Path("/home/me/my tools/wow-coach")
-    text = desktop_entry_text(program, ("app",), tmp_path / "wow-coach.svg")
+    program = Path("/home/me/my tools/wow-coach-app")
+    text = desktop_entry_text(program, ("--hidden",), tmp_path / "wow-coach.svg")
     lines = text.splitlines()
     assert lines[0] == "[Desktop Entry]"
     assert "Type=Application" in lines
     assert "Name=WoW Coach" in lines
     # Quoted for the Exec rules, then every backslash doubled for the file format.
-    assert 'Exec="/home/me/my tools/wow-coach" app' in lines
+    assert 'Exec="/home/me/my tools/wow-coach-app" --hidden' in lines
     assert f"Icon={tmp_path / 'wow-coach.svg'}" in lines
     assert "Terminal=false" in lines
 
 
 def test_backslashes_are_doubled_in_the_file() -> None:
-    text = desktop_entry_text(Path('/a/"b"/wow-coach'), ("app",), Path("/i.svg"))
-    assert 'Exec="/a/\\\\"b\\\\"/wow-coach" app' in text.splitlines()
+    text = desktop_entry_text(Path('/a/"b"/wow-coach-app'), ("app",), Path("/i.svg"))
+    assert 'Exec="/a/\\\\"b\\\\"/wow-coach-app" app' in text.splitlines()
 
 
 # ---- adding and removing on Linux ------------------------------------------------------------
@@ -89,7 +89,7 @@ def test_adding_the_menu_entry_writes_the_launcher_and_the_icon(tmp_path: Path) 
     assert not maker.state().in_menu
     maker.set_in_menu(True)
     launcher = folders.menu_dir / "wow-coach.desktop"
-    assert f"Exec={program} app" in launcher.read_text()
+    assert f"Exec={program}\n" in launcher.read_text()
     assert folders.icon_file.read_text().startswith("<svg")
     assert maker.state().in_menu
     maker.set_in_menu(False)
@@ -103,7 +103,7 @@ def test_autostart_toggles_and_starts_hidden(tmp_path: Path) -> None:
     maker = ShortcutMaker(folders, program=program, platform="linux")
     maker.set_at_login(True)
     entry = folders.autostart_dir / "wow-coach.desktop"
-    assert f"Exec={program} app --hidden" in entry.read_text()
+    assert f"Exec={program} --hidden" in entry.read_text()
     assert maker.state().at_login
     assert not maker.state().in_menu
     maker.set_at_login(False)
@@ -144,35 +144,81 @@ def test_a_program_in_a_temp_root_is_temporary(tmp_path: Path) -> None:
     assert not is_temporary_program(program, [])
 
 
-def test_the_program_on_the_path_is_used(tmp_path: Path) -> None:
-    program = make_program(tmp_path)
-    found = find_stable_program(which=lambda _name: str(program), argv0="", temp_roots=[])
+def python_in(root: Path) -> str:
+    """A pretend ``sys.executable`` inside an environment folder (``root/bin``)."""
+    return str(root / "bin" / "python")
+
+
+def test_the_program_of_the_running_environment_is_used(tmp_path: Path) -> None:
+    program = make_program(tmp_path / "env")
+    found = find_stable_program(
+        which=lambda _name: None, executable=python_in(tmp_path / "env"), temp_roots=[]
+    )
     assert found == program
 
 
-def test_the_start_command_is_used_when_the_path_has_nothing(tmp_path: Path) -> None:
-    program = make_program(tmp_path)
-    found = find_stable_program(which=lambda _name: None, argv0=str(program), temp_roots=[])
-    assert found == program
+def test_another_install_on_the_path_is_not_used(tmp_path: Path) -> None:
+    # The wow-coach-app on the PATH may be an old copy without Qt; the running one wins.
+    mine = make_program(tmp_path / "env")
+    other = make_program(tmp_path / "other")
+    found = find_stable_program(
+        which=lambda _name: str(other), executable=python_in(tmp_path / "env"), temp_roots=[]
+    )
+    assert found == mine
+
+
+def test_another_install_is_never_chosen_when_this_one_has_no_program(tmp_path: Path) -> None:
+    other = make_program(tmp_path / "other")
+    (tmp_path / "env" / "bin").mkdir(parents=True)
+    found = find_stable_program(
+        which=lambda _name: str(other), executable=python_in(tmp_path / "env"), temp_roots=[]
+    )
+    assert found is None
+
+
+def test_a_path_link_into_this_environment_is_accepted(tmp_path: Path) -> None:
+    # "uv tool install" puts a link on the PATH that points into the tool's own environment.
+    # Only the path link exists as a candidate here: the environment has no script of its own
+    # under the python's folder, but the link resolves to a script next to it.
+    real = make_program(tmp_path / "env")
+    link = tmp_path / "local-bin" / "wow-coach-app"
+    link.parent.mkdir()
+    link.symlink_to(real)
+    found = find_stable_program(
+        which=lambda _name: str(link), executable=python_in(tmp_path / "env"), temp_roots=[]
+    )
+    assert found in (real, link)
+
+
+def test_the_windows_program_has_the_exe_suffix(tmp_path: Path) -> None:
+    scripts = tmp_path / "env" / "bin"
+    scripts.mkdir(parents=True)
+    exe = scripts / "wow-coach-app.exe"
+    exe.write_text("")
+    found = find_stable_program(
+        which=lambda _name: None,
+        executable=str(scripts / "python.exe"),
+        platform="win32",
+        temp_roots=[],
+    )
+    assert found == exe
 
 
 def test_a_cache_program_is_refused(tmp_path: Path) -> None:
-    cached = make_program(tmp_path / ".cache" / "uv" / "archive-v0" / "abc")
+    cache = tmp_path / ".cache" / "uv" / "archive-v0" / "abc"
+    make_program(cache)
     assert (
-        find_stable_program(which=lambda _n: str(cached), argv0=str(cached), temp_roots=[]) is None
+        find_stable_program(which=lambda _n: None, executable=python_in(cache), temp_roots=[])
+        is None
     )
 
 
-def test_a_cache_program_on_the_path_falls_back_to_a_stable_start_command(tmp_path: Path) -> None:
-    cached = make_program(tmp_path / ".cache" / "uv" / "archive-v0" / "abc")
-    stable = make_program(tmp_path / "stable")
-    found = find_stable_program(which=lambda _n: str(cached), argv0=str(stable), temp_roots=[])
-    assert found == stable
-
-
-def test_other_program_names_are_ignored(tmp_path: Path) -> None:
-    other = make_program(tmp_path, "pytest")
-    assert find_stable_program(which=lambda _n: None, argv0=str(other), temp_roots=[]) is None
+def test_a_program_in_a_temp_root_is_refused(tmp_path: Path) -> None:
+    make_program(tmp_path / "env")
+    found = find_stable_program(
+        which=lambda _n: None, executable=python_in(tmp_path / "env"), temp_roots=[tmp_path]
+    )
+    assert found is None
 
 
 def test_no_stable_program_means_no_file_is_written_and_the_command_is_shown(
@@ -196,7 +242,7 @@ def test_no_stable_program_means_no_file_is_written_and_the_command_is_shown(
 
 def test_windows_link_command_passes_paths_only_through_the_environment() -> None:
     link = Path("C:/Users/me/Start Menu/Programs/WoW Coach.lnk")
-    program = Path("C:/Users/me/.local/bin/wow-coach.exe")
+    program = Path("C:/Users/me/.local/bin/wow-coach-app.exe")
     command, env = windows_link_command("powershell.exe", link, program, ("app",), Path("C:/i.ico"))
     assert command[0] == "powershell.exe"
     assert command[1:4] == ["-NoProfile", "-NonInteractive", "-Command"]
@@ -227,7 +273,7 @@ def test_windows_shortcuts_are_made_through_the_runner(
 
     maker = ShortcutMaker(
         folders,
-        program=Path("C:/tools/wow-coach.exe"),
+        program=Path("C:/tools/wow-coach-app.exe"),
         platform="win32",
         environ={},
         runner=runner,
@@ -239,7 +285,7 @@ def test_windows_shortcuts_are_made_through_the_runner(
     argv, env = calls[0]
     assert argv[0] == "powershell.exe"
     assert env[shortcuts.LINK_VARIABLE] == str(folders.autostart_dir / "WoW Coach.lnk")
-    assert env[shortcuts.ARGUMENTS_VARIABLE] == "app --hidden"
+    assert env[shortcuts.ARGUMENTS_VARIABLE] == "--hidden"
     assert icons_written == [folders.icon_file]
 
 
@@ -247,7 +293,7 @@ def test_a_failing_powershell_is_reported(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(shortcuts, "find_powershell", lambda *_args, **_kw: "powershell.exe")
     maker = ShortcutMaker(
         make_folders(tmp_path),
-        program=Path("C:/tools/wow-coach.exe"),
+        program=Path("C:/tools/wow-coach-app.exe"),
         platform="win32",
         runner=lambda _argv, _env, _timeout: 1,
         write_ico=lambda _target: True,
@@ -259,7 +305,7 @@ def test_a_failing_powershell_is_reported(tmp_path: Path, monkeypatch: pytest.Mo
 def test_no_powershell_is_reported(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shortcuts, "find_powershell", lambda *_args, **_kw: None)
     maker = ShortcutMaker(
-        make_folders(tmp_path), program=Path("C:/tools/wow-coach.exe"), platform="win32"
+        make_folders(tmp_path), program=Path("C:/tools/wow-coach-app.exe"), platform="win32"
     )
     with pytest.raises(ShortcutError, match="PowerShell"):
         maker.set_in_menu(True)

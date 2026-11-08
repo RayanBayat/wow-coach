@@ -15,7 +15,7 @@ class Calls:
     """What the fake desktop and browser windows were asked to do."""
 
     def __init__(self) -> None:
-        self.desktop: list[tuple[Path, bool]] = []
+        self.desktop: list[tuple[Path | None, bool]] = []
         self.browser: list[tuple[Path, int, bool]] = []
 
 
@@ -23,8 +23,8 @@ class Calls:
 def calls(monkeypatch: pytest.MonkeyPatch) -> Calls:
     recorded = Calls()
 
-    def fake_run_desktop(*, wow_dir: Path, start_hidden: bool = False) -> int:
-        recorded.desktop.append((wow_dir, start_hidden))
+    def fake_run_desktop(*, wow_dir_flag: Path | None, start_hidden: bool = False) -> int:
+        recorded.desktop.append((wow_dir_flag, start_hidden))
         return 0
 
     def fake_run_app(*, wow_dir: Path, port: int, open_in_browser: bool) -> None:
@@ -60,6 +60,29 @@ def test_the_desktop_app_opens_when_qt_is_installed(
     pretend_qt(monkeypatch, installed=True)
     assert main(["app", "--wow-dir", str(game)]) == 0
     assert calls.desktop == [(game, False)]
+    assert calls.browser == []
+
+
+def test_the_desktop_app_opens_even_when_the_game_folder_is_missing(
+    monkeypatch: pytest.MonkeyPatch, calls: Calls, tmp_path: Path
+) -> None:
+    # The desktop app shows its own "I can't find your game" window, so the command must not
+    # fail first. The folder is looked up inside the app.
+    pretend_qt(monkeypatch, installed=True)
+    missing = tmp_path / "not-there"
+    assert main(["app", "--wow-dir", str(missing)]) == 0
+    assert calls.desktop == [(missing, False)]
+
+
+def test_the_browser_window_still_needs_the_game_folder(
+    monkeypatch: pytest.MonkeyPatch,
+    calls: Calls,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    pretend_qt(monkeypatch, installed=True)
+    assert main(["app", "--wow-dir", str(tmp_path / "not-there"), "--browser"]) == 1
+    assert "does not exist" in capsys.readouterr().err
     assert calls.browser == []
 
 

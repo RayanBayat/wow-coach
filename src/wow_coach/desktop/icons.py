@@ -88,15 +88,23 @@ def icon_svg(name: str, color: str) -> str:
     return f"{_LINE_START}{_SHAPES[name]}</svg>".replace(COLOR, color)
 
 
-def _render(svg: str, size: int) -> QPixmap:
-    """Draw SVG text into a transparent square picture of ``size`` pixels."""
+def _render_image(svg: str, size: int) -> QImage:
+    """Draw SVG text into a transparent square image of ``size`` pixels.
+
+    A ``QImage`` (unlike a ``QPixmap``) is safe to use in any thread.
+    """
     renderer = QSvgRenderer(QByteArray(svg.encode("utf-8")))
     image = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
     image.fill(Qt.GlobalColor.transparent)
     painter = QPainter(image)
     renderer.render(painter)
     painter.end()
-    return QPixmap.fromImage(image)
+    return image
+
+
+def _render(svg: str, size: int) -> QPixmap:
+    """Like ``_render_image`` but as a ``QPixmap`` (window's thread only)."""
+    return QPixmap.fromImage(_render_image(svg, size))
 
 
 def icon(name: str, color: str, size: int = 20) -> QIcon:
@@ -120,6 +128,7 @@ def app_icon() -> QIcon:
 def save_app_ico(target: Path) -> bool:
     """Write the app icon as a Windows ``.ico`` file (shortcuts need that format).
 
-    Returns True when the file was written.
+    Returns True when the file was written. It only uses a ``QImage``, because the Setup page
+    calls this from a background thread.
     """
-    return _render(APP_ICON_SVG, 256).save(str(target), "ICO")
+    return _render_image(APP_ICON_SVG, 256).save(str(target))
