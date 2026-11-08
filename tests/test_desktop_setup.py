@@ -1,6 +1,7 @@
 """The Setup page: every check state, install/update, folder choice and the page itself."""
 
 import io
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -95,7 +96,9 @@ def test_a_linked_addon_is_ok_and_never_replaced(tmp_path: Path) -> None:
     assert not (source / "CoachLink.toc").exists()
 
 
-def test_a_windows_junction_copy_is_left_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_windows_junction_copy_is_left_alone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     # A junction is Windows' folder link; Python's is_symlink() says False for it.
     game = make_game(tmp_path)
     install_fake_addon(game, "0.0.1")
@@ -227,6 +230,27 @@ def test_the_page_installs_the_addon_in_the_background(qtbot: QtBot, tmp_path: P
     assert page.message.text() == RESTART_WOW_HINT
     assert page.addon_card.button.isHidden()  # up to date now
     assert "up to date" in page.addon_card.sentence.text()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [zipfile.BadZipFile("bad CRC"), subprocess.TimeoutExpired("powershell", 20), RuntimeError("x")],
+)
+def test_any_failure_in_an_action_ends_the_working_state(
+    qtbot: QtBot, tmp_path: Path, error: Exception
+) -> None:
+    game = make_game(tmp_path)
+
+    def broken_download(_url: str) -> bytes:
+        raise error
+
+    services = make_services(tmp_path)
+    services.download = broken_download
+    page = make_page(qtbot, services, game)
+    page.addon_card.button.click()
+    assert page.message.text().startswith("That didn't work")
+    assert "Troubleshooting" in page.message.text()
+    assert page.addon_card.button.isEnabled()  # not stuck on "Working on it..."
 
 
 def test_the_page_offers_an_update_for_an_old_addon(qtbot: QtBot, tmp_path: Path) -> None:

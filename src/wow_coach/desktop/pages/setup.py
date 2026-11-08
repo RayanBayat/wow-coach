@@ -7,6 +7,7 @@ and ``shortcuts.py`` and know nothing about Qt.
 """
 
 import importlib.metadata
+import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -51,8 +52,9 @@ from wow_coach.desktop.shortcuts import (
     is_supported,
 )
 from wow_coach.desktop.theme import SPACE, SPACE_LARGE, SPACE_SMALL, Colors, current_colors
-from wow_coach.errors import WowCoachError
 from wow_coach.web import FetchBytes, PoliteFetcher, build_user_agent
+
+_log = logging.getLogger(__name__)
 
 STATUS_ICONS = {Status.OK: "ok", Status.ATTENTION: "attention", Status.PROBLEM: "problem"}
 STATUS_ICON_SIZE = 26
@@ -439,8 +441,14 @@ class SetupPage(Page):
         def job() -> None:
             try:
                 result = work()
-            except (WowCoachError, OSError, ValueError) as error:
-                result = ActionResult(False, f"That did not work: {error}. Please try again.")
+            except Exception as error:
+                # A corrupt download (BadZipFile) or a slow PowerShell (TimeoutExpired) are not
+                # our own error types. If one escaped, the finished signal would never fire and
+                # every button would stay off for good. So catch everything, log it, say it.
+                _log.exception("A Setup action failed")
+                result = ActionResult(
+                    False, f"That didn't work: {error}. Try again, or see Troubleshooting."
+                )
             self._action_finished.emit(result)
 
         self.services.runner(job)

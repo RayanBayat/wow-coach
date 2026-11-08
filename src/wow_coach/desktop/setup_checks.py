@@ -21,8 +21,8 @@ from wow_coach.setup import (
     create_advice_folder,
     has_wtf,
     install_addon,
-    is_link,
     installed_addon_version,
+    is_link,
 )
 from wow_coach.web import FetchBytes
 
