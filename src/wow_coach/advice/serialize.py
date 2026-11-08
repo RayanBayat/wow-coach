@@ -11,6 +11,7 @@ Rules that keep it safe:
 """
 
 from collections.abc import Sequence
+from dataclasses import replace
 
 from wow_coach.advice.contract import (
     ADVICE_FORMAT_VERSION,
@@ -21,7 +22,7 @@ from wow_coach.advice.contract import (
     CharacterAdvice,
     CoachPlan,
 )
-from wow_coach.advice.limits import limit_advice
+from wow_coach.advice.limits import AdviceInvalid, limit_advice
 from wow_coach.errors import WowCoachError
 from wow_coach.lua_table import parse_saved_variables
 
@@ -33,7 +34,7 @@ type Data = str | int | bool | list[Data] | dict[str, Data]
 
 
 class AdviceTooLarge(WowCoachError):  # noqa: N818  (reads better than "...Error")
-    """The advice is bigger than the allowed file size, even after cutting."""
+    """The file would be over the size limit even with only one answer left in it."""
 
 
 class AdviceNotRepeatable(WowCoachError):  # noqa: N818
@@ -69,8 +70,9 @@ def _escape_char(char: str) -> str:
 
 # ---- advice -> plain data ------------------------------------------------------
 # We first build plain nested data, then write it as text, then parse the text and
-# compare with the data. Strings in the data already have their "|" doubled, because
-# that is what the parser will see in the file.
+# compare with the data. Display strings in the data already have their "|" doubled, because
+# that is what the parser will see in the file. Character keys and question ids are checked
+# in ``limits`` to have no "|" at all, so they are written as they are.
 
 
 def _pipes(text: str) -> str:
@@ -90,7 +92,7 @@ def _answer_data(answer: AdviceAnswer) -> dict[str, Data]:
     if answer.warnings:
         data["warnings"] = [_pipes(warning) for warning in answer.warnings]
     if answer.question_id is not None:
-        data["questionId"] = _pipes(answer.question_id)
+        data["questionId"] = answer.question_id
     if answer.question is not None:
         data["question"] = _pipes(answer.question)
     if answer.asked_at is not None:
@@ -114,13 +116,15 @@ def _character_data(character: CharacterAdvice) -> dict[str, Data]:
         data["answers"] = [_answer_data(answer) for answer in character.answers]
     if character.plan is not None:
         data["plan"] = _plan_data(character.plan)
+    if character.answered_ids:
+        data["answeredIds"] = list(character.answered_ids)
     return data
 
 
 def advice_data(advice: AdviceFile) -> dict[str, Data]:
     """The whole file as plain nested data (what ``CoachLinkAdvice`` should contain)."""
     characters: dict[str, Data] = {
-        _pipes(key): _character_data(value) for key, value in sorted(advice.characters.items())
+        key: _character_data(value) for key, value in sorted(advice.characters.items())
     }
     return {
         "formatVersion": ADVICE_FORMAT_VERSION,
@@ -142,7 +146,9 @@ def _render(value: Data, depth: int) -> str:
         return lua_string(value)
     if isinstance(value, list):
         return _render_table([(None, item) for item in value], depth)
-    return _render_table(list(value.items()), depth)
+    if isinstance(value, dict):
+        return _render_table(list(value.items()), depth)
+    raise AdviceInvalid(f"Can't write a value of type {type(value).__name__}.")
 
 
 def _render_table(entries: Sequence[tuple[str | None, Data]], depth: int) -> str:
@@ -160,24 +166,57 @@ def _render_table(entries: Sequence[tuple[str | None, Data]], depth: int) -> str
 # ---- public ---------------------------------------------------------------------
 
 
+def _render_file(data: dict[str, Data]) -> str:
+    return f"{HEADER}{ADVICE_GLOBAL} = {_render(data, 0)}\n"
+
+
+def _drop_oldest_answer(advice: AdviceFile) -> AdviceFile | None:
+    """Remove the answer written longest ago, across all characters (None if none left).
+
+    The question id stays in ``answered_ids``, so that question does not look open again.
+    """
+    oldest: tuple[int, str] | None = None
+    for key, character in advice.characters.items():
+        if character.answers and (oldest is None or character.answers[0].answered_at < oldest[0]):
+            oldest = (character.answers[0].answered_at, key)
+    if oldest is None:
+        return None
+    character = advice.characters[oldest[1]]
+    shorter = replace(character, answers=character.answers[1:])
+    return replace(advice, characters={**advice.characters, oldest[1]: shorter})
+
+
 def advice_to_lua(advice: AdviceFile) -> str:
     """Return the full text of ``Advice.lua`` for ``advice``.
 
-    The advice is first cut to the contract's limits.
+    The advice is first cut to the contract's limits. If the file is still too big, the
+    oldest answers (of any character) are dropped until it fits.
 
     Raises:
-        AdviceTooLarge: If the text is bigger than ``MAX_FILE_BYTES`` bytes.
+        AdviceInvalid: For a bad character key or a value of the wrong type.
+        AdviceTooLarge: If even one answer would not fit in ``MAX_FILE_BYTES`` bytes.
         AdviceNotRepeatable: If reading the text back does not give the same data.
     """
-    data = advice_data(limit_advice(advice))
-    text = f"{HEADER}{ADVICE_GLOBAL} = {_render(data, 0)}\n"
+    limited = limit_advice(advice)
+    text = _render_file(advice_data(limited))
+    while len(text.encode("utf-8")) > MAX_FILE_BYTES and _answer_count(limited) > 1:
+        shorter = _drop_oldest_answer(limited)
+        if shorter is None:
+            break
+        limited = shorter
+        text = _render_file(advice_data(limited))
     size = len(text.encode("utf-8"))
     if size > MAX_FILE_BYTES:
         raise AdviceTooLarge(
-            f"The advice would be {size} bytes, more than the {MAX_FILE_BYTES} allowed."
+            f"The Coach panel file would be {size} bytes even with a single answer, "
+            f"more than the {MAX_FILE_BYTES} allowed."
         )
-    _check_round_trip(text, data)
+    _check_round_trip(text, advice_data(limited))
     return text
+
+
+def _answer_count(advice: AdviceFile) -> int:
+    return sum(len(character.answers) for character in advice.characters.values())
 
 
 def _check_round_trip(text: str, data: dict[str, Data]) -> None:

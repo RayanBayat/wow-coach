@@ -90,13 +90,12 @@ def test_a_failed_write_keeps_the_old_file(addons: Path, monkeypatch: pytest.Mon
     assert sorted(p.name for p in path.parent.iterdir()) == ["Advice.lua", "CoachLink_Advice.toc"]
 
 
-def test_too_large_advice_changes_nothing(addons: Path) -> None:
+def test_too_large_advice_changes_nothing(addons: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     path = write_advice(addons, advice_with("old"), interface="16001")
     before = path.read_bytes()
-    big = AdviceAnswer(1, "S", "t", text="\x01" * 4000)
-    characters = {f"C{n}-R": CharacterAdvice(1, tuple(big for _ in range(10))) for n in range(6)}
+    monkeypatch.setattr("wow_coach.advice.serialize.MAX_FILE_BYTES", 100)
     with pytest.raises(AdviceTooLarge):
-        write_advice(addons, AdviceFile(1, characters), interface="16001")
+        write_advice(addons, advice_with("x" * 70), interface="16001")
     assert path.read_bytes() == before
 
 

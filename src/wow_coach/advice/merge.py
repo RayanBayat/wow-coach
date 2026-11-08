@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from wow_coach.advice.contract import (
+    MAX_ANSWERED_IDS,
     MAX_ANSWERS_PER_CHARACTER,
     AdviceAnswer,
     AdviceFile,
@@ -30,6 +31,8 @@ def add_answer(
 
     * An older answer to the same question is replaced, so a question has one answer.
     * Only the newest ``MAX_ANSWERS_PER_CHARACTER`` answers are kept.
+    * The question id is remembered in ``answered_ids`` (newest last, capped), so the question
+      does not look open again once its answer is pushed out.
     * ``based_on_save`` replaces the old value unless it is None.
     """
     current = advice.characters.get(character_key, CharacterAdvice(based_on_save=None))
@@ -42,6 +45,7 @@ def add_answer(
     updated = replace(
         current,
         answers=answers,
+        answered_ids=_remember_id(current.answered_ids, answer.question_id),
         based_on_save=current.based_on_save if based_on_save is None else based_on_save,
     )
     return _with_character(advice, character_key, updated, now)
@@ -63,3 +67,11 @@ def set_plan(
         based_on_save=current.based_on_save if based_on_save is None else based_on_save,
     )
     return _with_character(advice, character_key, updated, now)
+
+
+def _remember_id(ids: tuple[str, ...], question_id: str | None) -> tuple[str, ...]:
+    """Add ``question_id`` as the newest answered id (once), keeping the newest few."""
+    if question_id is None:
+        return ids
+    others = [old for old in ids if old != question_id]
+    return tuple([*others, question_id][-MAX_ANSWERED_IDS:])

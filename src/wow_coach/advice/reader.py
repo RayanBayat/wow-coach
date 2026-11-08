@@ -16,19 +16,16 @@ from wow_coach.advice.contract import (
     CharacterAdvice,
     CoachPlan,
 )
+from wow_coach.advice.limits import is_valid_character_key, is_valid_question_id
+from wow_coach.advice.safefile import read_plain_text
 from wow_coach.errors import WowCoachError
 from wow_coach.lua_table import LuaValue, parse_saved_variables
 
 
 def read_advice_file(path: Path) -> AdviceFile | None:
     """Read the advice file at ``path``. Returns None if it is missing or unusable."""
-    try:
-        if path.stat().st_size > MAX_FILE_BYTES * 2:
-            return None
-        text = path.read_text(encoding="utf-8")
-    except OSError, UnicodeDecodeError:
-        return None
-    return parse_advice_text(text)
+    text = read_plain_text(path, MAX_FILE_BYTES * 2)
+    return None if text is None else parse_advice_text(text)
 
 
 def parse_advice_text(text: str) -> AdviceFile | None:
@@ -45,8 +42,11 @@ def parse_advice_text(text: str) -> AdviceFile | None:
     characters: dict[str, CharacterAdvice] = {}
     if isinstance(characters_table, dict):
         for key, value in characters_table.items():
-            if isinstance(key, str) and (character := _read_character(value)) is not None:
-                characters[_unpipe(key)] = character
+            if not isinstance(key, str) or not is_valid_character_key(key):
+                continue
+            character = _read_character(value)
+            if character is not None:
+                characters[key] = character
     return AdviceFile(written_at=written_at or 0, characters=characters)
 
 
@@ -73,6 +73,13 @@ def _read_strings(value: LuaValue) -> tuple[str, ...]:
     return tuple(_unpipe(item) for item in value if isinstance(item, str))
 
 
+def _read_raw_strings(value: LuaValue) -> tuple[str, ...]:
+    """Like ``_read_strings`` but for identifiers, which are never pipe-doubled."""
+    if not isinstance(value, list):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
+
+
 # ---- entries ---------------------------------------------------------------------
 
 
@@ -89,7 +96,14 @@ def _read_character(value: LuaValue) -> CharacterAdvice | None:
         based_on_save=_read_int(value.get("basedOnSave")),
         answers=answers,
         plan=_read_plan(value.get("plan")),
+        answered_ids=tuple(
+            i for i in _read_raw_strings(value.get("answeredIds")) if is_valid_question_id(i)
+        ),
     )
+
+
+def _read_question_id(value: LuaValue) -> str | None:
+    return value if isinstance(value, str) and is_valid_question_id(value) else None
 
 
 def _read_answer(value: LuaValue) -> AdviceAnswer | None:
@@ -107,7 +121,7 @@ def _read_answer(value: LuaValue) -> AdviceAnswer | None:
         steps=_read_strings(value.get("steps")),
         text=_read_str(value.get("text")) or "",
         warnings=_read_strings(value.get("warnings")),
-        question_id=_read_str(value.get("questionId")),
+        question_id=_read_question_id(value.get("questionId")),
         question=_read_str(value.get("question")),
         asked_at=_read_int(value.get("askedAt")),
     )
