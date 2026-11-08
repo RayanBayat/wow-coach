@@ -21,7 +21,7 @@ It runs only on your computer. Only you can open it, and it never talks to other
    **wow-coach** there; wow-coach never sees your password.
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach signin
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach signin
    ```
 
    **You should see:** "Signed in as <your email>" and "You're using your ChatGPT plan."
@@ -30,7 +30,7 @@ It runs only on your computer. Only you can open it, and it never talks to other
 2. Open the coach window:
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach app
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach app
    ```
 
    Your browser opens the window. Keep the terminal open while you play; press Ctrl+C there

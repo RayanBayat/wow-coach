@@ -59,7 +59,7 @@ new terminal window. If it still fails, follow the uv page above.
 ## Step 2: Check the helper runs
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach check
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach check
 ```
 
 **You should see:** lines saying whether your game folder was found and whether a saved
@@ -70,7 +70,7 @@ If the game folder is not found, run this once. It asks you to paste the path of
 app does not need to be told:
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach setup
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach setup
 ```
 
 (As another way, you can give the folder to your app as `WOW_COACH_WOW_DIR`, below.) The helper looks by itself in the usual places: Windows
@@ -89,7 +89,7 @@ Optional settings (environment variables, which are named values you hand to a p
 ## Step 3: Add it to your app
 
 Pick your app. Every section runs the same command:
-`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach mcp`.
+`uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach mcp`.
 Each config file holds **JSON** or **TOML**, two ways of writing settings as text. Copy the
 block exactly, including quotes and commas. Edit the file with a plain text editor such as
 Notepad, TextEdit (plain text mode) or any code editor.
@@ -115,7 +115,7 @@ If your app can't find `uvx`, replace `"uvx"` with the full path that `where uvx
   "mcpServers": {
     "wow-coach": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.8.0", "wow-coach", "mcp"],
+      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.9.0", "wow-coach", "mcp"],
       "env": { "WOW_COACH_WOW_DIR": "C:\\Program Files (x86)\\World of Warcraft\\_forever_" }
     }
   }
@@ -132,13 +132,13 @@ Source: https://modelcontextprotocol.io/docs/develop/connect-local-servers (veri
 Claude Code is Claude's command-line app. In a terminal:
 
 ```
-claude mcp add --transport stdio wow-coach -- uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach mcp
+claude mcp add --transport stdio wow-coach -- uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach mcp
 ```
 
 With the game folder set (put an option between `--env` and the name, as shown):
 
 ```
-claude mcp add --env WOW_COACH_WOW_DIR="/path/to/_forever_" --transport stdio wow-coach -- uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach mcp
+claude mcp add --env WOW_COACH_WOW_DIR="/path/to/_forever_" --transport stdio wow-coach -- uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach mcp
 ```
 
 Add `--scope user` to make it available in every folder. Check it with `claude mcp list`:
@@ -154,7 +154,7 @@ Add this (TOML uses `[section]` headings):
 ```toml
 [mcp_servers.wow-coach]
 command = "uvx"
-args = ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.8.0", "wow-coach", "mcp"]
+args = ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.9.0", "wow-coach", "mcp"]
 
 [mcp_servers.wow-coach.env]
 WOW_COACH_WOW_DIR = "C:\\Program Files (x86)\\World of Warcraft\\_forever_"
@@ -163,7 +163,7 @@ WOW_COACH_WOW_DIR = "C:\\Program Files (x86)\\World of Warcraft\\_forever_"
 Or on the command line:
 
 ```
-codex mcp add wow-coach --env WOW_COACH_WOW_DIR="/path/to/_forever_" -- uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach mcp
+codex mcp add wow-coach --env WOW_COACH_WOW_DIR="/path/to/_forever_" -- uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach mcp
 ```
 
 Restart the app. Source: https://learn.chatgpt.com/docs/extend/mcp?surface=cli (verified). We
@@ -179,7 +179,7 @@ Edit `~/.gemini/settings.json` (user) or `.gemini/settings.json` (one project):
   "mcpServers": {
     "wow-coach": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.8.0", "wow-coach", "mcp"],
+      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.9.0", "wow-coach", "mcp"],
       "env": { "WOW_COACH_WOW_DIR": "/path/to/_forever_" }
     }
   }
@@ -203,7 +203,7 @@ Edit `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project):
     "wow-coach": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.8.0", "wow-coach", "mcp"],
+      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.9.0", "wow-coach", "mcp"],
       "env": { "WOW_COACH_WOW_DIR": "/path/to/_forever_" }
     }
   }
@@ -223,7 +223,7 @@ Cmd+Shift+P on Mac) and run **MCP: Open User Configuration**, then add:
     "wow-coach": {
       "type": "stdio",
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.8.0", "wow-coach", "mcp"],
+      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.9.0", "wow-coach", "mcp"],
       "env": { "WOW_COACH_WOW_DIR": "/path/to/_forever_" }
     }
   }
@@ -244,7 +244,7 @@ mcp.json**. Add (inside the `mcpServers` section, if one exists):
   "mcpServers": {
     "wow-coach": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.8.0", "wow-coach", "mcp"],
+      "args": ["--from", "git+https://github.com/RayanBayat/wow-coach@v0.9.0", "wow-coach", "mcp"],
       "env": { "WOW_COACH_WOW_DIR": "/path/to/_forever_" }
     }
   }
@@ -259,7 +259,7 @@ support tool use.
 ### Other apps
 
 Any app that supports MCP "stdio" servers needs three things: the command `uvx`, the arguments
-`--from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach mcp`, and optionally the
+`--from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach mcp`, and optionally the
 environment variable. Look for "add MCP server" in its settings.
 
 ## Step 4: Test it
@@ -274,7 +274,7 @@ describes your character. For best results add the coach instructions too; see
 If it fails, run this in a terminal and read what it says:
 
 ```
-uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach check
+uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach check
 ```
 
 You can also print your character in the terminal with `... wow-coach status`, your characters

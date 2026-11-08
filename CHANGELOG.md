@@ -4,7 +4,11 @@ All notable changes to this project are written here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.9.0] - 2026-11-08
+
+Your own coach with your ChatGPT plan: the coach window answers your questions from the game by
+itself, shows the answer at once (no second reload), can notify you or read it aloud, and can
+speak up when something happens, if you want it to.
 
 ### Added
 

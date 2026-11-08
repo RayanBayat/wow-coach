@@ -27,7 +27,7 @@ the CoachLink addon from version 0.8.0.
    writes its answers (`Interface/AddOns/CoachLink_Advice`):
 
    ```
-   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.8.0 wow-coach setup
+   uvx --from git+https://github.com/RayanBayat/wow-coach@v0.9.0 wow-coach setup
    ```
 
    **You should see:** "Setup finished", and a line that says it created `CoachLink_Advice`.
