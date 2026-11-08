@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>wow-coach</title>
+  <link rel="stylesheet" href="/app.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <h1>wow-coach</h1>
+    <nav aria-label="Screens">
+      <button type="button" class="tab" data-screen="coach" aria-current="page">Coach</button>
+      <button type="button" class="tab" data-screen="chatgpt">ChatGPT</button>
+      <button type="button" class="tab" data-screen="settings">Settings</button>
+      <button type="button" class="tab" data-screen="privacy">Privacy</button>
+    </nav>
+  </header>
+
+  <p id="banner" class="banner" role="status" hidden></p>
+
+  <main>
+    <!-- Screen 1: the coach -->
+    <section id="screen-coach" class="screen">
+      <div class="row">
+        <label for="character">Character</label>
+        <select id="character"></select>
+        <span id="last-save" class="muted"></span>
+      </div>
+
+      <p id="problem" class="notice" hidden></p>
+
+      <div id="questions-box" class="card" hidden>
+        <h2>Questions from the game</h2>
+        <ul id="questions" class="plain-list"></ul>
+        <button type="button" id="answer-now" class="primary">Answer now</button>
+      </div>
+
+      <form id="ask-form" class="card">
+        <label for="ask-input">Ask your coach</label>
+        <textarea id="ask-input" rows="3" maxlength="500"
+                  placeholder="For example: where do I go to level up next?"></textarea>
+        <div class="row">
+          <button type="submit" id="ask-button" class="primary">Ask</button>
+          <button type="button" id="next-button">What next?</button>
+          <span id="thinking" class="muted" hidden>The coach is thinking...</span>
+        </div>
+      </form>
+
+      <article id="newest" class="card answer" hidden></article>
+      <section id="older-box" hidden>
+        <h2>Older answers</h2>
+        <div id="older"></div>
+      </section>
+      <p id="empty" class="muted">
+        No answers yet. Ask a question above, or press "What next?".
+      </p>
+    </section>
+
+    <!-- Screen 2: ChatGPT -->
+    <section id="screen-chatgpt" class="screen" hidden>
+      <div class="card">
+        <h2>ChatGPT</h2>
+        <div id="signed-out-box">
+          <p>
+            wow-coach uses your own ChatGPT plan to think. OpenAI shows its own sign-in page
+            in your browser, and wow-coach never sees your password.
+          </p>
+          <button type="button" id="signin-button" class="primary">Continue with ChatGPT</button>
+          <p id="signin-waiting" class="muted" hidden>
+            Waiting for you to finish in your browser...
+            <a id="signin-link" href="#" target="_blank" rel="noopener noreferrer" hidden>
+              Open the sign-in page again
+            </a>
+          </p>
+        </div>
+        <div id="signed-in-box" hidden>
+          <h3>You're using your ChatGPT plan</h3>
+          <p>
+            Eligible usage in this app uses your ChatGPT plan. Manage usage in your ChatGPT
+            settings.
+          </p>
+          <p>
+            <a href="https://chatgpt.com/settings/usage" target="_blank"
+               rel="noopener noreferrer">Manage usage</a>
+          </p>
+          <button type="button" id="signout-button">Sign out</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>Your use of the plan</h2>
+        <p id="usage-text"></p>
+      </div>
+    </section>
+
+    <!-- Screen 3: settings -->
+    <section id="screen-settings" class="screen" hidden>
+      <form id="settings-form" class="card">
+        <h2>Settings</h2>
+        <label class="check">
+          <input type="checkbox" data-setting="answer_questions_from_game">
+          Answer questions from the game automatically
+        </label>
+        <label class="check">
+          <input type="checkbox" data-setting="notify">
+          Show a notification when an answer is ready
+          <span id="notify-warning" class="muted" hidden>(this computer can't show them)</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" data-setting="speak">
+          Read answers aloud
+          <span id="speak-warning" class="muted" hidden>(this computer can't read aloud)</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" data-setting="share_other_player_names">
+          Share other players' names with the AI
+        </label>
+        <p class="muted">
+          Off means names of group members, mail senders and so on are replaced by "a player"
+          before anything leaves this computer.
+        </p>
+
+        <h3>Limits that protect your plan</h3>
+        <label for="max-hour">Most AI calls per hour</label>
+        <input type="number" id="max-hour" data-setting="max_calls_per_hour" min="0" max="200">
+        <label for="max-day">Most AI calls per day</label>
+        <input type="number" id="max-day" data-setting="max_calls_per_day" min="0" max="2000">
+
+        <h3>Model</h3>
+        <label for="model">Which model to use</label>
+        <select id="model" data-setting="model"></select>
+        <p id="models-note" class="muted"></p>
+
+        <button type="submit" class="primary">Save settings</button>
+        <span id="settings-saved" class="muted" hidden>Saved.</span>
+      </form>
+    </section>
+
+    <!-- Screen 4: privacy -->
+    <section id="screen-privacy" class="screen" hidden>
+      <div class="card">
+        <h2>What goes where</h2>
+        <ul>
+          <li>
+            Your character's data from the game goes only to OpenAI, through your own ChatGPT
+            sign-in, and only when you ask a question or the game asks one.
+          </li>
+          <li>Nobody else gets it. wow-coach has no server and no telemetry.</li>
+          <li>
+            Everything else stays on this computer: your settings, your usage counts (only
+            numbers, never your questions), and the answers in the game's addon folder.
+          </li>
+          <li>
+            Other players' names are hidden from the AI unless you turn that off in Settings.
+          </li>
+          <li>
+            This window only works on this computer. No other computer can open it.
+          </li>
+        </ul>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
