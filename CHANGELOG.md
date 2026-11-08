@@ -59,12 +59,24 @@ All notable changes to this project are written here. The format follows
 
 ### Removed
 
+- The small-AI "triage" step and its "in your own words" text, plus the timer, quiet hours and
+  cooldown for the coach speaking up by itself (see Changed).
 - Reading answers aloud. Notifications still tell you when an answer is ready.
 - Your own usage limits (calls per hour and per day). Only your ChatGPT plan's own limits
   apply.
 
 ### Changed
 
+- **"Coach on its own" is now one setting, "When the game saves".** Choose Off, **Tell me
+  what's worth knowing** (the default: one free notification listing what changed, such as a
+  level-up, full bags, a finished quest or a death, worked out without any AI) or **Tell me
+  and add the coach's advice** (the same plus one coach answer). The timer, quiet hours, the
+  per-event rules, the waiting time between answers and the small-AI filter are gone, because
+  the game only shares your data when it saves, so nothing could ever be live. "Stay quiet in
+  dungeons and raids" stays. Older settings files still work and are mapped to the new choice.
+- The Notebook page starts collapsed and opens sections when you click them.
+- An At a glance summary of your notes (goal, next steps, where you are, choices, latest
+  progress) on the Notebook page and beside the chat.
 - The "From ChatGPT · 10 min ago" line under answers is gone; the time shows when you point at
   an answer.
 - `wow-coach app` opens the new app when it is installed, and the browser window otherwise.

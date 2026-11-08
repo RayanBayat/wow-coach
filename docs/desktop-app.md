@@ -95,8 +95,9 @@ itself, while you play. When you close the window, the coach keeps running next 
 
 - **Settings:** the **Coach tools** (let the coach look things up, search the web, update your
   notebook, and show what it looked up; all on at first), notifications, answering game questions by itself, when the
-  coach should speak up on its own (when you die, level up, need repairs...), quiet hours,
-  and what is shared with the AI. Changes save by themselves. More about speaking up: [the coach window guide](coach-window.md#when-the-coach-speaks-up-by-itself).
+  coach tells you what changed after the game saves (**Coach on its own**: off, a free
+  notification, or a notification plus advice), and what is shared with the AI. Changes save
+  by themselves. More: [the coach window guide](coach-window.md#when-the-game-saves).
 - **ChatGPT:** your sign-in, how many questions you asked in the last hour and day,
   **Manage usage** (your ChatGPT settings), the model, and **Sign out**.
 - **Setup:** the checks above, any time. After changing the game folder, click **Restart WoW
