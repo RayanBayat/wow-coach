@@ -15,6 +15,7 @@ from pathlib import Path
 
 from wow_coach.advice.contract import AdviceAnswer, AdviceFile, CharacterAdvice
 from wow_coach.advice.serialize import advice_to_lua
+from wow_coach.ai.base import Provider
 from wow_coach.ai.chatgpt_plan import PlanModel
 from wow_coach.app.core import AppCore
 from wow_coach.app.events import Mailbox
@@ -28,8 +29,20 @@ KEY = "Testchar-Testrealm"
 # ---- a fake game folder --------------------------------------------------------------
 
 
-def write_save(wow_dir: Path, *questions: tuple[str, str], mtime: int = 1_000) -> Path:
-    """Write a CoachLink.lua with one character and the given (id, text) questions."""
+def write_save(
+    wow_dir: Path,
+    *questions: tuple[str, str],
+    mtime: int = 1_000,
+    deaths_at: tuple[int, ...] = (),
+    levels_at: tuple[int, ...] = (),
+    in_instance: bool = False,
+) -> Path:
+    """Write a CoachLink.lua with one character, its (id, text) questions and some deaths."""
+    instance = '["instance"] = {["name"] = "Deadmines"},\n' if in_instance else ""
+    deaths = "".join(
+        f'{{["time"] = {t}, ["kind"] = "death", ["text"] = "Died in Brill (level 8)."}},\n'
+        for t in deaths_at
+    ) + "".join(f'{{["time"] = {t}, ["kind"] = "level"}},\n' for t in levels_at)
     folder = wow_dir / "WTF" / "Account" / "ACC" / "SavedVariables"
     folder.mkdir(parents=True, exist_ok=True)
     asked = "".join(
@@ -40,7 +53,9 @@ def write_save(wow_dir: Path, *questions: tuple[str, str], mtime: int = 1_000) -
     path.write_text(
         'CoachLinkDB = {\n["formatVersion"] = 1,\n["characters"] = {\n'
         f'["{KEY}"] = {{\n["snapshot"] = {{\n["name"] = "Testchar",\n["level"] = 8,\n'
-        f'["savedAt"] = {mtime},\n["reason"] = "ask",\n}},\n["questions"] = {{\n{asked}}},\n'
+        f'["savedAt"] = {mtime},\n["reason"] = "ask",\n{instance}}},\n'
+        f'["questions"] = {{\n{asked}}},\n'
+        f'["history"] = {{\n{deaths}}},\n'
         "},\n},\n}\n",
         encoding="utf-8",
     )
@@ -174,7 +189,13 @@ class Rig:
     settings_file: Path
 
 
-def make_rig(tmp_path: Path, *, signed_in: bool = True) -> Rig:
+def make_rig(
+    tmp_path: Path,
+    *,
+    signed_in: bool = True,
+    triage_provider: Provider | None = None,
+    small_model: str | None = "model-luna",
+) -> Rig:
     wow_dir = tmp_path / "wow"
     wow_dir.mkdir()
     write_save(wow_dir)
@@ -190,6 +211,8 @@ def make_rig(tmp_path: Path, *, signed_in: bool = True) -> Rig:
         settings_file=settings_file,
         wow_dir=wow_dir,
         usage=FakeUsage(),
+        triage_provider=triage_provider,
+        small_model=lambda: small_model,
     )
     return Rig(core, coach, signin, alerts, wow_dir, settings_file)
 

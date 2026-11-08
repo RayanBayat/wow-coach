@@ -67,3 +67,10 @@ def test_the_built_wheel_contains_the_static_files(tmp_path: Path) -> None:
     names = zipfile.ZipFile(wheel).namelist()
     for name in STATIC_FILES:
         assert f"wow_coach/app/static/{name}" in names
+
+
+def test_the_privacy_notice_comes_before_the_sign_in_button() -> None:
+    text = (STATIC / "index.html").read_text(encoding="utf-8")
+    assert text.index("sends your character's data, your questions") < text.index("signin-button")
+    assert "docs/privacy.md" in text and "Got it" in text
+    assert not list(STATIC.glob("*.png")) and "<img" not in text

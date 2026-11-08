@@ -5,10 +5,11 @@ import os
 import sys
 import threading
 import webbrowser
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TextIO
 
+from wow_coach.ai.base import AIError
 from wow_coach.ai.chatgpt_plan import ChatGPTPlan
 from wow_coach.alerts import SystemAlerts
 from wow_coach.app.core import AppCore
@@ -16,6 +17,7 @@ from wow_coach.app.server import CoachServer
 from wow_coach.app.watcher import Watcher
 from wow_coach.app_settings import AppSettings, load_settings, settings_path
 from wow_coach.companion import LiveCoach, build_sign_in, build_usage_log
+from wow_coach.engine.model import choose_model
 from wow_coach.usage import UsageLog
 
 
@@ -82,7 +84,24 @@ def _build_core(wow_dir: Path, environ: Mapping[str, str]) -> AppCore:
         wow_dir=wow_dir,
         usage=usage,
         on_settings_changed=lambda new: _apply_caps(usage, new),
+        triage_provider=plan,
+        small_model=_small_model_finder(plan),
     )
+
+
+def _small_model_finder(plan: ChatGPTPlan) -> Callable[[], str | None]:
+    """A function giving the small model for triage; the plan's list is fetched only once."""
+    cache: list[str | None] = []
+
+    def find() -> str | None:
+        if not cache:
+            try:
+                cache.append(choose_model([m.slug for m in plan.list_models()], None))
+            except AIError:
+                return None  # not signed in, or offline: skip triage this time, try again later
+        return cache[0]
+
+    return find
 
 
 def _apply_caps(usage: UsageLog, settings: AppSettings) -> None:

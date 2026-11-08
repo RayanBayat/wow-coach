@@ -167,6 +167,11 @@ a {
   color: var(--accent);
 }
 
+.button-link {
+  margin-left: 8px;
+  font-weight: 600;
+}
+
 :focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 2px;

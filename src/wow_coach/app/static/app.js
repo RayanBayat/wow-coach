@@ -10,7 +10,29 @@ const SIGN_IN_PAGE_START = "https://auth.openai.com/";
 const NEXT_QUESTION = "What should I do next?";
 
 let state = null; // the last state the server sent
-let selectedCharacter = null; // "Name-Realm" shown on the Coach screen
+let selectedCharacter = null;
+const recentDecisions = []; // newest first, kept only while the window is open
+const MAX_DECISIONS = 8;
+
+// The rules the player can set, in the order shown. "asked" is not here: questions you
+// type are always answered.
+const TRIGGER_KINDS = [
+  ["died", "You die"],
+  ["died_again_soon", "You die again soon after coming back"],
+  ["level_up", "You level up"],
+  ["quest_done", "A quest is ready to turn in"],
+  ["bags_nearly_full", "Your bags are nearly full"],
+  ["new_zone", "You enter a new zone"],
+  ["talent_points", "You have unspent talent points"],
+  ["gear_hint", "The coach spots a possible gear upgrade"],
+  ["durability_low", "Your gear needs repair"],
+  ["timer", "The timer goes off"],
+];
+const MODE_LABELS = [
+  ["off", "Off"],
+  ["notify", "Notify me"],
+  ["coach", "Ask the coach"],
+]; // "Name-Realm" shown on the Coach screen
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,9 +71,11 @@ async function api(path, method, body) {
   }
 }
 
-function showBanner(message, isError) {
+/** Show a message at the top. `isLimit` adds the "Manage usage" button (usage limit hit). */
+function showBanner(message, isError, isLimit) {
   const banner = $("banner");
-  banner.textContent = message;
+  $("banner-text").textContent = message;
+  $("banner-link").hidden = !isLimit;
   banner.className = isError ? "banner error" : "banner";
   banner.hidden = !message;
 }
@@ -158,6 +182,9 @@ function renderProblem() {
 // ---- drawing the other screens ------------------------------------------------------
 
 function renderChatGpt() {
+  $("welcome").hidden = !(state.signed_in && state.welcome_pending);
+  $("ask-privacy").hidden = state.signed_in;
+  $("plan-line").hidden = !state.signed_in;
   $("signed-in-box").hidden = !state.signed_in;
   $("signed-out-box").hidden = state.signed_in;
   if (state.signed_in) {
@@ -185,6 +212,51 @@ function renderSettings() {
   $("speak-warning").hidden = state.alerts.speak;
 }
 
+function buildTriggerRules() {
+  const container = $("trigger-rules");
+  container.replaceChildren();
+  for (const [kind, label] of TRIGGER_KINDS) {
+    const row = make("div", "", "row");
+    const id = "mode-" + kind;
+    const labelElement = make("label", label);
+    labelElement.htmlFor = id;
+    const select = make("select");
+    select.id = id;
+    select.dataset.kind = kind;
+    for (const [mode, text] of MODE_LABELS) {
+      const option = make("option", text);
+      option.value = mode;
+      select.append(option);
+    }
+    row.append(labelElement, select);
+    container.append(row);
+  }
+}
+
+function renderTriggers() {
+  const rules = state.settings.triggers;
+  for (const select of document.querySelectorAll("#trigger-rules select")) {
+    select.value = rules.modes[select.dataset.kind] || "off";
+  }
+  $("every-minutes").value = rules.every_minutes;
+  $("cooldown").value = rules.cooldown_minutes;
+  $("quiet-instances").checked = rules.quiet_in_instances;
+  $("quiet-from").value = rules.quiet_from_hour === null ? "" : rules.quiet_from_hour;
+  $("quiet-to").value = rules.quiet_to_hour === null ? "" : rules.quiet_to_hour;
+  $("use-triage").checked = rules.use_triage;
+  $("rules-text").value = rules.rules_text;
+}
+
+function renderDecisions() {
+  const list = $("decisions");
+  list.replaceChildren();
+  for (const decision of recentDecisions) {
+    const text = decision.summary + " (" + decision.action + ": " + decision.reason + ")";
+    list.append(make("li", text));
+  }
+  $("decisions-box").hidden = recentDecisions.length === 0;
+}
+
 function render() {
   renderCharacters();
   renderAnswers();
@@ -192,6 +264,8 @@ function render() {
   renderProblem();
   renderChatGpt();
   renderSettings();
+  renderTriggers();
+  renderDecisions();
 }
 
 // ---- loading ------------------------------------------------------------------------
@@ -278,6 +352,40 @@ async function saveSettings(event) {
   await loadState();
 }
 
+function hourOrNull(text) {
+  return text.trim() === "" ? null : Number(text);
+}
+
+async function saveTriggers(event) {
+  event.preventDefault();
+  const modes = {};
+  for (const select of document.querySelectorAll("#trigger-rules select")) {
+    modes[select.dataset.kind] = select.value;
+  }
+  const triggers = {
+    modes,
+    every_minutes: Number($("every-minutes").value),
+    cooldown_minutes: Number($("cooldown").value),
+    quiet_in_instances: $("quiet-instances").checked,
+    quiet_from_hour: hourOrNull($("quiet-from").value),
+    quiet_to_hour: hourOrNull($("quiet-to").value),
+    use_triage: $("use-triage").checked,
+    rules_text: $("rules-text").value,
+  };
+  const result = await api("/api/settings", "POST", { changes: { triggers } });
+  if (!result.ok) {
+    showBanner(result.data.error || "Could not save.", true);
+    return;
+  }
+  $("triggers-saved").hidden = false;
+  await loadState();
+}
+
+async function dismissWelcome() {
+  $("welcome").hidden = true;
+  await api("/api/welcome-seen", "POST");
+}
+
 async function signIn() {
   $("signin-button").disabled = true;
   const result = await api("/api/signin", "POST");
@@ -322,8 +430,16 @@ function onError(event) {
   showThinking(false);
   $("signin-waiting").hidden = true;
   $("signin-button").disabled = false;
-  showBanner(readEvent(event).message || "Something went wrong.", true);
+  const data = readEvent(event);
+  showBanner(data.message || "Something went wrong.", true, data.kind === "limit");
   loadState();
+}
+
+function onDecision(event) {
+  const data = readEvent(event);
+  recentDecisions.unshift(data);
+  recentDecisions.length = Math.min(recentDecisions.length, MAX_DECISIONS);
+  renderDecisions();
 }
 
 function onSignIn(event) {
@@ -354,6 +470,7 @@ function connectEvents() {
     }
   });
   source.addEventListener("signin", onSignIn);
+  source.addEventListener("decision", onDecision);
 }
 
 // ---- start ----------------------------------------------------------------------------
@@ -387,7 +504,10 @@ function wireUp() {
   $("next-button").addEventListener("click", () => ask(NEXT_QUESTION));
   $("answer-now").addEventListener("click", answerNow);
   $("settings-form").addEventListener("submit", saveSettings);
+  $("triggers-form").addEventListener("submit", saveTriggers);
+  buildTriggerRules();
   $("signin-button").addEventListener("click", signIn);
+  $("welcome-ok").addEventListener("click", dismissWelcome);
   $("signout-button").addEventListener("click", signOut);
 }
 
