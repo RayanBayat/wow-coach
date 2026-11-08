@@ -86,6 +86,7 @@ class ChatCoach:
         self._settings = settings
         self._now = now
         self._memory = LocalMemory(environ=environ)
+        self._own_characters: frozenset[str] = frozenset()  # every character in the save
 
     # ---- the Coach contract ---------------------------------------------------------
 
@@ -118,6 +119,7 @@ class ChatCoach:
             raise NoSuchCharacterError(
                 f"No saved character matches {wanted!r}. Characters in the save: {known}."
             )
+        self._own_characters = frozenset(key.split("-", 1)[0] for key in characters)
         return found
 
     def _prompt_data(self, found: Character, question: str, turns: list[Turn]) -> PromptData:
@@ -139,10 +141,12 @@ class ChatCoach:
         """Other players' names in this save plus those seen in earlier saves."""
         if self._settings.share_other_player_names:
             return set()
-        current = other_player_names(found)
+        current = other_player_names(found, own=self._own_characters)
         with contextlib.suppress(OSError):
             self._memory.add_seen_names(found.key, current)
-        return without_own_names(current | self._memory.seen_names(found.key), found)
+        return without_own_names(
+            current | self._memory.seen_names(found.key), found, own=self._own_characters
+        )
 
     def _answer(self, found: Character, question: str, asked: Question | None) -> CoachReply:
         turns = load_turns(conversation_path(found.key, environ=self._environ))

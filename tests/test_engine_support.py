@@ -36,7 +36,7 @@ CoachLinkDB = {
 ["history"] = {
 { ["time"] = 1793899500, ["kind"] = "death", ["text"] = "Died to Zandor in Brill",
   ["attackers"] = { { ["name"] = "Zandor", ["level"] = 9, ["isPlayer"] = true },
-                    { ["name"] = "Wolf", ["level"] = 3, ["isPlayer"] = false } } },
+                    { ["name"] = "Wolf", ["level"] = 3 } } },
 { ["time"] = 1793899800, ["kind"] = "item", ["text"] = "Got Linen Cloth from Mirela",
   ["from"] = "Mirela" },
 },
