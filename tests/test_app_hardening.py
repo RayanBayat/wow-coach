@@ -120,6 +120,39 @@ def test_a_locked_keychain_means_not_signed_in_for_the_watcher(tmp_path: Path) -
     assert rig.coach.answered_calls == []
 
 
+def test_an_outside_answer_written_during_our_own_call_is_still_announced(
+    tmp_path: Path,
+) -> None:
+    rig = make_rig(tmp_path)
+    watcher = Watcher(rig.core, rig.wow_dir)
+    mailbox = rig.core.bus.subscribe()
+
+    class Both(FakeCoach):
+        def ask(self, question: str, *, character: str | None = None) -> CoachReply:
+            del question, character
+            own = make_answer("Ours", 9_000)
+            outside = make_answer("From Claude Code", 9_001)
+            path = write_advice_file(self.wow_dir, [own, outside], mtime=9_500)
+            del path
+            return CoachReply(KEY, own, True, "ok")
+
+    rig.core.coach = Both(rig.wow_dir)
+    assert rig.core.start_ask("hi", None)
+    for _ in range(100):
+        if not rig.core.ai_lock.locked():
+            break
+        import time  # noqa: PLC0415
+
+        time.sleep(0.05)
+    watcher.check_once()
+    titles = []
+    while not mailbox.empty():
+        event = mailbox.get_nowait()
+        if event is not None and event.kind == "answer":
+            titles.append(event.data["answer"]["title"])  # type: ignore[index]
+    assert titles == ["Ours", "From Claude Code"]  # ours once (the reply), theirs once
+
+
 # ---- outside writes during an AI call ----------------------------------------------------------
 
 

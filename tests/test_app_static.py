@@ -78,8 +78,10 @@ def test_the_privacy_notice_comes_before_the_sign_in_button() -> None:
 
 def test_the_session_secret_stays_in_memory() -> None:
     text = (STATIC / "app.js").read_text(encoding="utf-8")
-    assert "localStorage" not in text and "sessionStorage" not in text
-    assert "document.cookie" not in text and "EventSource" not in text
+    # sessionStorage (this tab, this exact address) may hold the session secret, nothing else.
+    assert "localStorage" not in text and "document.cookie" not in text
+    assert "EventSource" not in text
+    assert "STORAGE_KEY" in text and text.count("setItem(") == 1
     assert "X-Wow-Coach-Session" in text
 
 

@@ -102,6 +102,8 @@ class FakeCoach:
     asked: list[str] = field(default_factory=list)
     answered_calls: list[str | None] = field(default_factory=list)
     clock: int = 5_000
+    reply_nothing: bool = False  # answer_open_questions finds everything already answered
+    during_call: Callable[[], None] | None = None  # runs in the middle of a call
 
     def _reply(self, title: str, question_id: str | None) -> CoachReply:
         answer = make_answer(title, self.clock, question_id)
@@ -126,6 +128,8 @@ class FakeCoach:
         self.answered_calls.append(character)
         if self.error is not None:
             raise self.error
+        if self.reply_nothing:
+            return []
         return [self._reply("Open answer", "1-1")]
 
 

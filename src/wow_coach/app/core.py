@@ -49,6 +49,7 @@ WELCOME_FILE_NAME = "welcome-seen.flag"
 KEYCHAIN_PROBLEM = (
     "Your password keychain could not be used. It may be locked: unlock it and try again."
 )
+NOTHING_TO_ANSWER = "Those questions were already answered."
 BUSY_MESSAGE = "The coach is still busy with another answer. Try again in a moment."
 
 
@@ -236,22 +237,19 @@ class AppCore:
         return True
 
     def _ask_now(self, question: str, character: str | None) -> None:
-        try:
-            reply = self.coach.ask(question, character=character)
-        finally:
-            self.baseline.refresh()  # our own write is not an "outside change"
+        reply = self.coach.ask(question, character=character)
         self.publish_reply(reply)
 
     def answer_open_now(self, character: str | None, *, alert: bool) -> None:
         """Answer open questions now. The caller must hold ``ai_lock``."""
         waiting = self._open_ids(character)
-        try:
-            replies = self.coach.answer_open_questions(character=character)
-        finally:
-            self.baseline.refresh()
-        # The engine answers the oldest questions first. Remember them as answered even if
-        # a reply lacks its question id, so one save can never cost the plan twice.
-        self._answered.update(waiting[: len(replies)])
+        replies = self.coach.answer_open_questions(character=character)
+        # The engine skips questions it already answered (its own list), and replies lack an
+        # id at worst. Either way, every question that was waiting now counts as answered, so
+        # one save can never cost the plan twice.
+        self._answered.update(waiting)
+        if not replies:
+            self.bus.publish("info", {"text": NOTHING_TO_ANSWER})
         for reply in replies:
             self.publish_reply(reply)
             if alert:
@@ -296,7 +294,12 @@ class AppCore:
         self.bus.publish("error", {"message": message, "kind": kind})
 
     def publish_reply(self, reply: CoachReply) -> None:
-        """Send a finished answer to the window (and remember its question as answered)."""
+        """Send a finished answer to the window (and remember its question as answered).
+
+        The answer was just written by wow-coach, so it is also noted as "our own": only
+        answers written by someone else count as outside changes.
+        """
+        self.baseline.note_own_answer(reply.character_key, reply.answer)
         if reply.answer.question_id is not None:
             self._answered.add((reply.character_key, reply.answer.question_id))
         self.bus.publish(

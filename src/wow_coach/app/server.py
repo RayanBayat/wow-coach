@@ -1,15 +1,25 @@
 """The coach window's web server (standard library only).
 
-It listens on 127.0.0.1 only, so nothing outside this computer can reach it. Because other
-web pages open in the same browser could still try to talk to it, every request is checked:
+It listens on 127.0.0.1 only, so nothing outside this computer can reach it. Other programs
+on this computer (and other web pages in the same browser) can still try to talk to it, so
+every request is checked:
 
 * **Host header** must be exactly ``127.0.0.1:<port>`` (stops "DNS rebinding").
-* **Session cookie** (``HttpOnly``, ``SameSite=Strict``) is needed for every ``/api/`` call.
-  The page gets it by trading a one-time token, which is only in the start link's ``#`` part
-  (a browser never sends that part to any server).
-* **``X-Wow-Coach: 1`` header** is needed on every request that changes something, and an
-  ``Origin`` header, when present, must be this server (stops cross-site form posts).
-* **Strict Content-Security-Policy** and friends on every response, no CORS at all.
+* **Session header.** Every ``/api/`` call needs ``X-Wow-Coach-Session: <secret>``. There is
+  NO cookie: cookies ignore ports, so any other server on 127.0.0.1 would receive it. The page
+  gets the secret by trading a one-time token (only in the start link's ``#`` part, which a
+  browser never sends to any server) at ``POST /api/session``, and sends it itself. The custom
+  header also forces browsers to ask first (a "preflight"); we answer OPTIONS with 405, so
+  other sites cannot make the page's requests. ``/api/session`` itself needs ``X-Wow-Coach: 1``.
+* **``Sec-Fetch-Site``.** Browsers say where a request comes from. Only ``same-origin``,
+  ``none`` or a missing header are allowed (403 for ``same-site``/``cross-site``). One
+  exception: opening the page itself (a top-level navigation to ``/``). The start page in the
+  temp folder (a ``file://`` page, see ``launcher.py``) forwards to the window, which browsers
+  call cross-site. The page holds no data, so this is safe; its files and the API stay strict.
+* **``Origin``**, when present on a POST, must be this server.
+* **Strict Content-Security-Policy**, cross-origin isolation headers, ``no-store``, and no CORS.
+* **Limits:** small request bodies, a 30 s socket timeout, at most 32 connections and 4 live
+  event streams.
 
 Errors that the player can see are always one plain sentence, never a traceback.
 """
@@ -39,7 +49,7 @@ from wow_coach.errors import WowCoachError
 # A cookie would be sent to ANY server on 127.0.0.1 (cookies ignore ports), a header is not.
 SESSION_HEADER: Final = "X-Wow-Coach-Session"
 START_HEADER: Final = "X-Wow-Coach"  # on /api/session: a custom header forces a preflight
-SESSION_GONE: Final = "Open the window again from the terminal link."
+SESSION_GONE: Final = "Press Enter in the wow-coach terminal for a new link, then open it."
 REQUEST_TIMEOUT_SECONDS: Final = 30.0  # an idle or stalled connection is dropped after this
 STREAM_WRITE_TIMEOUT_SECONDS: Final = 10.0  # a stuck page cannot hold an events thread forever
 MAX_CONNECTIONS: Final = 32
@@ -98,6 +108,7 @@ class CoachServer(http.server.ThreadingHTTPServer):
         self.core = core
         self.heartbeat_seconds = heartbeat_seconds
         self.host_header = f"127.0.0.1:{self.server_address[1]}"
+        self.instance_id = secrets.token_hex(8)  # tells the page "this is still the same run"
         self._token: str | None = secrets.token_urlsafe(32)
         self._sessions: set[bytes] = set()
         self._lock = threading.Lock()
@@ -113,10 +124,20 @@ class CoachServer(http.server.ThreadingHTTPServer):
         return int(self.server_address[1])
 
     def start_url(self) -> str:
-        """The link to open in the browser. The token is only in the ``#`` part."""
-        if self._token is None:
-            raise RuntimeError("The start link was already used.")
-        return f"http://{self.host_header}/#{self._token}"
+        """The link to open in the browser. The token is only in the ``#`` part.
+
+        If the one-time token was already used, a new one is made.
+        """
+        with self._lock:
+            if self._token is None:
+                self._token = secrets.token_urlsafe(32)
+            return f"http://{self.host_header}/#{self._token}"
+
+    def fresh_start_url(self) -> str:
+        """A new link with a new token; any unused older token stops working."""
+        with self._lock:
+            self._token = secrets.token_urlsafe(32)
+            return f"http://{self.host_header}/#{self._token}"
 
     def start(self) -> None:
         """Serve in a background thread."""
@@ -378,7 +399,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
 
     def _get_state(self, query: str) -> None:
         wanted = parse_qs(query).get("character", [None])[0]
-        self._json(200, self.app.core.state(wanted))
+        state = self.app.core.state(wanted)
+        state["instance"] = self.app.instance_id
+        self._json(200, state)
 
     def _get_models(self) -> None:
         try:
@@ -430,7 +453,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         session = self.app.trade_token_for_session(token) if isinstance(token, str) else None
         if session is None:
             return self._fail(403, "This start link was already used. Run `wow-coach app` again.")
-        return self._json(200, {"session": session})
+        return self._json(200, {"session": session, "instance": self.app.instance_id})
 
     def _post_ask(self, body: Json) -> None:
         question = body.get("question")

@@ -12,11 +12,16 @@ the file is only read after its change time moved.
 import threading
 from pathlib import Path
 
-from wow_coach.advice.contract import AdviceAnswer
+from wow_coach.advice.contract import MAX_TITLE_CHARS, AdviceAnswer
 from wow_coach.advice.paths import advice_file_path
 from wow_coach.advice.reader import read_advice_file
 
 type AnswerId = tuple[str, int, str]  # (character key, answered_at, title)
+
+
+def _answer_id(character_key: str, answer: AdviceAnswer) -> AnswerId:
+    """How an answer is recognised. The writer cuts long titles, so compare the cut title."""
+    return (character_key, answer.answered_at, answer.title[:MAX_TITLE_CHARS])
 
 
 class AdviceBaseline:
@@ -34,6 +39,15 @@ class AdviceBaseline:
         with self._lock:
             self._stamp = self._file_stamp()
             self._known = {item for item, _ in self._read_answers()}
+
+    def note_own_answer(self, character_key: str, answer: AdviceAnswer) -> None:
+        """Remember an answer wow-coach itself just wrote, so it is not "an outside answer".
+
+        Only this one answer is added: if someone else wrote another answer while the coach
+        was working, it stays unknown and is announced by the next ``outside_changes``.
+        """
+        with self._lock:
+            self._known.add(_answer_id(character_key, answer))
 
     def outside_changes(self) -> list[tuple[str, AdviceAnswer]]:
         """Answers that appeared since the last refresh, oldest first (empty if unchanged)."""
@@ -58,7 +72,7 @@ class AdviceBaseline:
         if advice is None:
             return []
         return [
-            ((key, answer.answered_at, answer.title), answer)
+            (_answer_id(key, answer), answer)
             for key, character in advice.characters.items()
             for answer in character.answers
         ]
