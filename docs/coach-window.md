@@ -34,7 +34,9 @@ It runs only on your computer. Only you can open it, and it never talks to other
    ```
 
    Your browser opens the window. Keep the terminal open while you play; press Ctrl+C there
-   to close the window.
+   to close the window. If the browser shows an error or doesn't open, paste the link the
+   terminal printed into it. Need a new link (for example in another browser)? Press Enter in
+   the terminal.
 
 ## Use it
 
@@ -107,5 +109,7 @@ coach** (the coach looks at it and gives advice, using your plan).
 | A limit message | Wait until the time it says, or raise the limits in Settings |
 | No notifications on Linux | Install `libnotify` (the `notify-send` program); for read-aloud, `speech-dispatcher` (`spd-say`) or `espeak-ng` |
 | The window says no saved game data | In the game, type `/coach` once |
+| "Press Enter in the wow-coach terminal for a new link" | The window's session ended (for example a new tab). Press Enter in the terminal and open the new link |
+| "wow-coach was closed" | Start `wow-coach app` again |
 
 More help: [troubleshooting](troubleshooting.md).

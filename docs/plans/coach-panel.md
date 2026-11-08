@@ -1,6 +1,7 @@
 # Plan: the in-game Coach panel and the wow-coach companion app
 
-Status: the Coach panel is built (0.8.0); the companion app is planned (0.9.0 and later).
+Status: the Coach panel shipped in 0.8.0; the companion app, Sign in with ChatGPT and "when to
+speak up" are built for 0.9.0. Installers and the CurseForge listing (1.0.0) are still to come.
 Last updated 2026-11-08. Facts marked *verified* were checked in Blizzard's Forever UI source
 (github.com/Gethe/wow-ui-source, branch `forever`) or on the official page linked. Everything
 else is a design choice.
