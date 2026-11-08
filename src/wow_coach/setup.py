@@ -147,6 +147,14 @@ def _find_game_folder(choices: SetupChoices, world: SetupWorld, say: Say) -> Pat
 # ---------------------------------------------------------------------------
 
 
+def is_link(path: Path) -> bool:
+    """True when ``path`` is a link to another folder (a developer's copy).
+
+    On Windows a folder link is often a "junction", which ``is_symlink()`` does not see.
+    """
+    return path.is_symlink() or path.is_junction()
+
+
 def installed_addon_version(addon: Path) -> str | None:
     """The version written in the installed addon's .toc file, or None when not installed."""
     toc = addon / f"{ADDON_FOLDER}.toc"
@@ -241,7 +249,7 @@ def install_addon(addons: Path, version: str, download: FetchBytes) -> None:
 def _setup_addon(game: Path, world: SetupWorld, say: Say) -> bool:
     addons = game / "Interface" / "AddOns"
     addon = addons / ADDON_FOLDER
-    if addon.is_symlink():
+    if is_link(addon):
         say(f"  OK: {addon} is a link (a developer's copy). I left it alone.")
         return True
     version = world.package_version
@@ -334,7 +342,7 @@ def _wants_claude_code(choices: SetupChoices, world: SetupWorld, say: Say) -> bo
 
 def _copy_claude_file(content: bytes, target: Path, say: Say) -> bool:
     """Copy one packaged file to ``target``; links are left alone, other files get a backup."""
-    if target.is_symlink() or target.parent.is_symlink():
+    if is_link(target) or is_link(target.parent):
         say(f"  OK: {target} is a link (a developer's copy). I left it alone.")
         return True
     try:

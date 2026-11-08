@@ -4,6 +4,7 @@ import io
 import zipfile
 from pathlib import Path
 
+import pytest
 from desktop_support import make_bridge, run_now
 from pytestqt.qtbot import QtBot
 
@@ -92,6 +93,21 @@ def test_a_linked_addon_is_ok_and_never_replaced(tmp_path: Path) -> None:
 
     assert install_or_update_addon(game, VERSION, no_download).ok
     assert not (source / "CoachLink.toc").exists()
+
+
+def test_a_windows_junction_copy_is_left_alone(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # A junction is Windows' folder link; Python's is_symlink() says False for it.
+    game = make_game(tmp_path)
+    install_fake_addon(game, "0.0.1")
+    addon = game / "Interface" / "AddOns" / "CoachLink"
+    real_is_junction = Path.is_junction
+    monkeypatch.setattr(Path, "is_junction", lambda self: self == addon or real_is_junction(self))
+    assert check_addon(game, VERSION)[2] is True
+
+    def no_download(_url: str) -> bytes:
+        raise AssertionError("a junction must not be downloaded over")
+
+    assert install_or_update_addon(game, VERSION, no_download).ok
 
 
 def test_answers_folder_check_and_create(tmp_path: Path) -> None:

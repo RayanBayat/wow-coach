@@ -21,6 +21,7 @@ from wow_coach.setup import (
     create_advice_folder,
     has_wtf,
     install_addon,
+    is_link,
     installed_addon_version,
 )
 from wow_coach.web import FetchBytes
@@ -96,7 +97,7 @@ def check_addon(game_dir: Path, app_version: str) -> tuple[Check, str | None, bo
     folder is a link (a developer's copy, which the app never replaces).
     """
     addon = addons_folder(game_dir) / ADDON_FOLDER
-    if addon.is_symlink():
+    if is_link(addon):
         return Check(Status.OK, "CoachLink is linked from a development copy."), None, True
     installed = installed_addon_version(addon)
     if installed is None:
@@ -160,7 +161,7 @@ def install_or_update_addon(game_dir: Path, app_version: str, download: FetchByt
     The answers folder is created too, because the addon needs it.
     """
     addons = addons_folder(game_dir)
-    if (addons / ADDON_FOLDER).is_symlink():
+    if is_link(addons / ADDON_FOLDER):
         return ActionResult(True, "CoachLink is a linked development copy, so I left it alone.")
     try:
         install_addon(addons, app_version, download)
