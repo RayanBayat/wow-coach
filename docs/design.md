@@ -273,8 +273,9 @@ question and does nothing in combat (`InCombatLockdown()`).
 
 - At most 20 are kept, the newest. The text is at most 500 bytes, cut on a whole letter.
 - `id` is "time-counter", unique per character.
-- A question whose `id` appears as a `questionId` in the advice file counts as answered and
-  is dropped the next time the player asks.
+- A question whose `id` is in the advice file's `answeredIds` (or is the `questionId` of an
+  answer there) counts as answered, and is dropped the next time the player asks.
+  `answeredIds` is kept separately because old answers are pushed out of the file.
 - Python: `Character.questions`.
 
 **Advice (wow-coach to game).** wow-coach writes a small data-only addon of its own into the
@@ -299,6 +300,7 @@ CoachLinkAdvice = {
           ["askedAt"] = 1794100000 },
       },
       ["plan"] = { ["goal"] = "Level 20 by Sunday", ["steps"] = { "..." }, ["updatedAt"] = 1794100090 },
+      ["answeredIds"] = { "1794100000-1" },  -- every answered question id, newest last, at most 40
     },
   },
 }

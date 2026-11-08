@@ -1804,13 +1804,21 @@ local function myAdvice()
     return type(mine) == "table" and mine or nil
 end
 
--- The ids of this character's questions that wow-coach has answered.
+-- The ids of this character's questions that wow-coach has answered: the list
+-- `answeredIds` (kept even after an old answer is dropped from the file), plus the
+-- questionId of every answer still in it.
 local function answeredQuestionIds()
     local ids = {}
     local mine = myAdvice()
+    local answered = mine and type(mine.answeredIds) == "table" and mine.answeredIds or {}
+    for _, id in ipairs(answered) do
+        if type(id) == "string" then
+            ids[id] = true
+        end
+    end
     local answers = mine and type(mine.answers) == "table" and mine.answers or {}
     for _, answer in ipairs(answers) do
-        if type(answer) == "table" and answer.questionId then
+        if type(answer) == "table" and type(answer.questionId) == "string" then
             ids[answer.questionId] = true
         end
     end

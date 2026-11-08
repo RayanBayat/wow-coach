@@ -24,6 +24,15 @@ from wow_coach.errors import LuaParseError
 
 type LuaValue = str | int | float | bool | list[LuaValue] | dict[str | int, LuaValue] | None
 
+_ASCII_DIGITS = "0123456789"
+_MAX_BYTE = 255
+
+
+def _is_ascii_digit(char: str) -> bool:
+    """True for exactly one of 0-9 (an empty string is not a digit)."""
+    return len(char) == 1 and char in _ASCII_DIGITS
+
+
 _SIMPLE_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "'": "'"}
 _NUMBER_CHARS = set("0123456789.-+eExXabcdefABCDEF")
 
@@ -161,11 +170,15 @@ class _Parser:
         if char in _SIMPLE_ESCAPES:
             self._pos += 1
             return _SIMPLE_ESCAPES[char]
-        if char.isdigit():
+        # \ddd is one byte value (0-255) in up to three ASCII digits. str.isdigit() would
+        # also accept "²" or "①", which int() then rejects, so test for the ASCII digits.
+        if _is_ascii_digit(char):
             digits = ""
-            while len(digits) < 3 and self._text[self._pos : self._pos + 1].isdigit():
+            while len(digits) < 3 and _is_ascii_digit(self._text[self._pos : self._pos + 1]):
                 digits += self._text[self._pos]
                 self._pos += 1
+            if int(digits) > _MAX_BYTE:
+                raise self._error("a number escape of at most 255")
             return chr(int(digits))
         raise self._error('a valid escape such as \\n or \\"')
 
