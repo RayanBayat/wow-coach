@@ -2,7 +2,9 @@
 
 import http.client
 import json
+import socket
 import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -10,6 +12,7 @@ import pytest
 from test_app_support import (
     KEY,
     Client,
+    FakeSignIn,
     Rig,
     make_answer,
     make_rig,
@@ -19,8 +22,9 @@ from test_app_support import (
 )
 
 from wow_coach.advice.contract import MAX_QUESTION_CHARS
-from wow_coach.ai.base import NotSignedIn, PlanLimitReached
+from wow_coach.ai.base import AIError, NotSignedIn, PlanLimitReached
 from wow_coach.app.server import MAX_BODY_BYTES, STATIC_FILES, CoachServer
+from wow_coach.errors import WowCoachError
 
 
 @pytest.fixture
@@ -58,24 +62,33 @@ def test_api_needs_a_session(server: CoachServer) -> None:
     assert page.request("POST", "/api/ask", {"question": "hi"})[0] == 401
 
 
-def test_a_made_up_cookie_is_refused(server: CoachServer) -> None:
+def test_a_made_up_session_is_refused(server: CoachServer) -> None:
     page = Client(server)
-    page.cookie = "wow_coach_session=not-a-real-session"
+    page.session = "not-a-real-session"
     assert page.request("GET", "/api/state")[0] == 401
+
+
+def test_a_cookie_is_neither_needed_nor_used(server: CoachServer, client: Client) -> None:
+    # A junk cookie from another 127.0.0.1 app changes nothing.
+    junk = {"Cookie": 'dev={"x": 1}; wow_coach_session=whatever'}
+    assert client.request("GET", "/api/state", headers=junk)[0] == 200
+    no_session = Client(server)
+    assert no_session.request("GET", "/api/state", headers=junk)[0] == 401
+    _, headers, _ = client.request("GET", "/api/state")
+    assert "set-cookie" not in headers
 
 
 def test_the_token_works_only_once(server: CoachServer) -> None:
     token = server.start_url().split("#", 1)[1]
     page = Client(server)
-    status, headers, _ = page.request("POST", "/api/session", {"token": token})
-    assert status == 200
-    cookie = headers["set-cookie"]
-    assert "HttpOnly" in cookie and "SameSite=Strict" in cookie and "Path=/" in cookie
+    status, headers, body = page.request("POST", "/api/session", {"token": token})
+    assert status == 200 and "set-cookie" not in headers
+    assert len(json.loads(body)["session"]) >= 32
     assert page.request("POST", "/api/session", {"token": token})[0] == 403
     assert page.request("POST", "/api/session", {"token": "wrong"})[0] == 403
 
 
-def test_the_session_cookie_opens_the_api(client: Client) -> None:
+def test_the_session_header_opens_the_api(client: Client) -> None:
     status, state = client.json("GET", "/api/state")
     assert status == 200
     assert state["selected"] == KEY
@@ -88,8 +101,37 @@ def test_a_wrong_host_header_is_refused(server: CoachServer, client: Client) -> 
     assert client.request("POST", "/api/settings", {"changes": {}}, host="evil.example")[0] == 403
 
 
-def test_a_post_without_the_csrf_header_is_refused(client: Client) -> None:
-    assert client.request("POST", "/api/settings", {"changes": {}}, csrf=False)[0] == 403
+def test_starting_a_session_needs_the_custom_header(server: CoachServer) -> None:
+    token = server.start_url().split("#", 1)[1]
+    page = Client(server)
+    assert page.request("POST", "/api/session", {"token": token}, start_header=False)[0] == 403
+    assert page.request("POST", "/api/session", {"token": token})[0] == 200
+
+
+def test_a_post_without_the_session_header_is_refused(client: Client) -> None:
+    assert client.request("POST", "/api/settings", {"changes": {}}, with_session=False)[0] == 401
+
+
+@pytest.mark.parametrize("site", ["cross-site", "same-site", "weird"])
+def test_requests_from_other_sites_are_refused(client: Client, site: str) -> None:
+    headers = {"Sec-Fetch-Site": site}
+    assert client.request("GET", "/api/state", headers=headers)[0] == 403
+    assert client.request("GET", "/", headers=headers)[0] == 403
+    assert client.request("POST", "/api/settings", {"changes": {}}, headers=headers)[0] == 403
+
+
+@pytest.mark.parametrize("site", ["same-origin", "none"])
+def test_same_origin_requests_are_allowed(client: Client, site: str) -> None:
+    assert client.request("GET", "/api/state", headers={"Sec-Fetch-Site": site})[0] == 200
+
+
+def test_a_non_ascii_token_gets_a_proper_answer(server: CoachServer) -> None:
+    connection = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
+    headers = {"Host": server.host_header, "X-Wow-Coach": "1", "Content-Type": "application/json"}
+    body = json.dumps({"token": "t\u00f6ken-\u4e2d"}, ensure_ascii=False).encode("utf-8")
+    connection.request("POST", "/api/session", body=body, headers=headers)
+    response = connection.getresponse()
+    assert response.status == 403 and "error" in json.loads(response.read())
 
 
 def test_a_post_from_another_site_is_refused(client: Client) -> None:
@@ -110,7 +152,7 @@ def test_security_headers_are_on_every_response(client: Client) -> None:
         client.request("GET", "/"),
         client.request("GET", "/api/state"),
         client.request("GET", "/nope"),
-        client.request("GET", "/api/state", with_cookie=False),
+        client.request("GET", "/api/state", with_session=False),
         client.request("GET", "/api/state", host="evil.example"),
     ]
     for _, headers, _ in responses:
@@ -121,6 +163,8 @@ def test_security_headers_are_on_every_response(client: Client) -> None:
         assert headers["cache-control"] == "no-store"
         assert headers["x-frame-options"] == "DENY"
         assert "access-control-allow-origin" not in headers
+        assert headers["cross-origin-resource-policy"] == "same-origin"
+        assert headers["cross-origin-opener-policy"] == "same-origin"
 
 
 @pytest.mark.parametrize("name", sorted(STATIC_FILES))
@@ -231,7 +275,7 @@ def test_a_huge_body_is_refused(client: Client) -> None:
 
 def test_a_body_that_is_not_json_is_refused(server: CoachServer, client: Client) -> None:
     connection = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
-    headers = {"Host": server.host_header, "X-Wow-Coach": "1", "Cookie": client.cookie or ""}
+    headers = {"Host": server.host_header, "X-Wow-Coach-Session": client.session or ""}
     connection.request("POST", "/api/ask", body=b"{not json", headers=headers)
     assert connection.getresponse().status == 400
 
@@ -340,7 +384,7 @@ def test_events_stream_sends_heartbeats_and_events(
     rig: Rig, server: CoachServer, client: Client
 ) -> None:
     connection = http.client.HTTPConnection("127.0.0.1", server.port, timeout=10)
-    headers = {"Host": server.host_header, "Cookie": client.cookie or ""}
+    headers = {"Host": server.host_header, "X-Wow-Coach-Session": client.session or ""}
     connection.request("GET", "/api/events", headers=headers)
     response = connection.getresponse()
     assert response.status == 200
@@ -381,3 +425,78 @@ def test_the_welcome_message_shows_once_after_sign_in(rig: Rig, client: Client) 
 def test_no_welcome_message_while_signed_out(tmp_path: Path) -> None:
     rig = make_rig(tmp_path, signed_in=False)
     assert rig.core.state(None)["welcome_pending"] is False
+
+
+def test_a_locked_keychain_gives_a_sentence_not_a_crash(rig: Rig, client: Client) -> None:
+    class Locked(FakeSignIn):
+        @property
+        def is_signed_in(self) -> bool:
+            raise AIError("keychain is locked, technical words")
+
+        def sign_out(self) -> bool:
+            raise AIError("The keychain is locked.")
+
+    rig.core.signin = Locked()
+    status, state = client.json("GET", "/api/state")
+    assert status == 200 and state["signed_in"] is False
+    assert "password keychain" in state["problem"] and "unlock" in state["problem"]
+    status, reply = client.json("POST", "/api/signout")
+    assert status == 503 and reply["error"] == "The keychain is locked."
+
+
+def test_a_surprise_failure_in_a_route_is_json_without_a_traceback(
+    rig: Rig, client: Client
+) -> None:
+    def broken(*_: object) -> None:
+        raise RuntimeError("secret /home/x/file.py")
+
+    rig.core.change_settings = broken  # type: ignore[method-assign]
+    status, reply = client.json("POST", "/api/settings", {"changes": {}})
+    assert status == 500 and "secret" not in reply["error"] and "Traceback" not in reply["error"]
+
+
+def test_an_engine_error_in_a_route_keeps_its_sentence(rig: Rig, client: Client) -> None:
+    def failing(*_: object) -> None:
+        raise WowCoachError("The game's save file is damaged.")
+
+    rig.core.change_settings = failing  # type: ignore[method-assign]
+    status, reply = client.json("POST", "/api/settings", {"changes": {}})
+    assert status == 500 and reply["error"] == "The game's save file is damaged."
+
+
+def test_too_many_connections_are_refused(rig: Rig) -> None:
+    server = CoachServer(rig.core, 0, max_connections=3)
+    server.start()
+    idle = []
+    try:
+        for _ in range(3):
+            idle.append(socket.create_connection(("127.0.0.1", server.port), timeout=5))
+        time.sleep(0.3)
+        extra = socket.create_connection(("127.0.0.1", server.port), timeout=5)
+        extra.sendall(b"GET / HTTP/1.0\r\n\r\n")
+        assert extra.recv(100).startswith(b"HTTP/1.0 503")
+        extra.close()
+    finally:
+        for sock in idle:
+            sock.close()
+        server.stop()
+
+
+def test_only_a_few_event_streams_may_be_open(rig: Rig) -> None:
+    server = CoachServer(rig.core, 0, max_streams=2)
+    server.start()
+    page = Client(server)
+    page.sign_in_page()
+    streams = []
+    try:
+        for _ in range(2):
+            conn = http.client.HTTPConnection("127.0.0.1", server.port, timeout=5)
+            headers = {"Host": server.host_header, "X-Wow-Coach-Session": page.session or ""}
+            conn.request("GET", "/api/events", headers=headers)
+            assert conn.getresponse().status == 200
+            streams.append(conn)
+        assert page.request("GET", "/api/events")[0] == 503
+    finally:
+        for conn in streams:
+            conn.close()
+        server.stop()

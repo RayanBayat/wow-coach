@@ -74,3 +74,17 @@ def test_the_privacy_notice_comes_before_the_sign_in_button() -> None:
     assert text.index("sends your character's data, your questions") < text.index("signin-button")
     assert "docs/privacy.md" in text and "Got it" in text
     assert not list(STATIC.glob("*.png")) and "<img" not in text
+
+
+def test_the_session_secret_stays_in_memory() -> None:
+    text = (STATIC / "app.js").read_text(encoding="utf-8")
+    assert "localStorage" not in text and "sessionStorage" not in text
+    assert "document.cookie" not in text and "EventSource" not in text
+    assert "X-Wow-Coach-Session" in text
+
+
+def test_the_privacy_screen_lists_everything_that_is_sent() -> None:
+    text = (STATIC / "index.html").read_text(encoding="utf-8")
+    for needed in ("your question", "last few messages", "coach's notes", "docs/privacy.md"):
+        assert needed in text
+    assert 'data-setting="send_coach_notes"' in text

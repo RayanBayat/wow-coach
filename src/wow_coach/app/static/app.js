@@ -11,6 +11,10 @@ const NEXT_QUESTION = "What should I do next?";
 
 let state = null; // the last state the server sent
 let selectedCharacter = null;
+// The session secret lives ONLY in this variable (never in a cookie or in browser storage), so no
+// other program on this computer can get it from the browser. Reloading the page loses it.
+let sessionSecret = null;
+const SESSION_GONE = "Open the window again from the terminal link.";
 const recentDecisions = []; // newest first, kept only while the window is open
 const MAX_DECISIONS = 8;
 
@@ -56,9 +60,15 @@ function formatTime(seconds) {
 
 /** Talk to the server. Resolves to {ok, status, data}; never throws for HTTP errors. */
 async function api(path, method, body) {
-  const options = { method, credentials: "same-origin", headers: {} };
+  if (!sessionSecret && path !== "/api/session") {
+    return { ok: false, status: 401, data: { error: SESSION_GONE } };
+  }
+  const options = { method, credentials: "omit", headers: {} };
+  if (sessionSecret) {
+    options.headers["X-Wow-Coach-Session"] = sessionSecret;
+  }
   if (method === "POST") {
-    options.headers["X-Wow-Coach"] = "1"; // proves the request came from this window
+    options.headers["X-Wow-Coach"] = "1"; // a custom header: other sites cannot send it
     options.headers["Content-Type"] = "application/json";
     options.body = JSON.stringify(body || {});
   }
@@ -457,20 +467,71 @@ function onSignIn(event) {
   }
 }
 
-function connectEvents() {
-  const source = new EventSource("/api/events");
-  source.addEventListener("open", loadState); // also catches anything missed while offline
-  source.addEventListener("answer", onAnswer);
-  source.addEventListener("question", loadState);
-  source.addEventListener("save", loadState);
-  source.addEventListener("error", (event) => {
-    // The browser fires "error" for a lost connection too, but then there is no data.
-    if (event.data) {
-      onError(event);
+/** Handle one complete event block ("event: x" and "data: {...}" lines). */
+function handleEventBlock(block) {
+  let name = "message";
+  let data = "";
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) {
+      name = line.slice(6).trim();
+    } else if (line.startsWith("data:")) {
+      data += line.slice(5).trim();
     }
+  }
+  const handlers = {
+    answer: onAnswer,
+    question: loadState,
+    save: loadState,
+    error: onError,
+    signin: onSignIn,
+    decision: onDecision,
+  };
+  if (handlers[name]) {
+    handlers[name]({ data });
+  }
+}
+
+/** Read the live-update stream with fetch (so the session header can be sent). */
+async function listenForEvents() {
+  const response = await fetch("/api/events", {
+    credentials: "omit",
+    headers: { "X-Wow-Coach-Session": sessionSecret },
   });
-  source.addEventListener("signin", onSignIn);
-  source.addEventListener("decision", onDecision);
+  if (!response.ok || !response.body) {
+    showBanner(response.status === 401 ? SESSION_GONE : "Live updates are not available.", true);
+    return response.status !== 401; // try again later, unless the session is gone
+  }
+  await loadState(); // also catches anything missed while the stream was down
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      return true;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    let end = buffer.indexOf("\n\n");
+    while (end !== -1) {
+      handleEventBlock(buffer.slice(0, end));
+      buffer = buffer.slice(end + 2);
+      end = buffer.indexOf("\n\n");
+    }
+  }
+}
+
+async function connectEvents() {
+  let again = true;
+  while (again) {
+    try {
+      again = await listenForEvents();
+    } catch (error) {
+      again = true; // the connection dropped: wait and reconnect
+    }
+    if (again) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+    }
+  }
 }
 
 // ---- start ----------------------------------------------------------------------------
@@ -481,7 +542,10 @@ async function startSession() {
   if (!token) {
     return;
   }
-  await api("/api/session", "POST", { token });
+  const result = await api("/api/session", "POST", { token });
+  if (result.ok) {
+    sessionSecret = result.data.session;
+  }
   // Remove the token from the address bar and the browser history.
   history.replaceState(null, "", window.location.pathname);
 }

@@ -13,6 +13,7 @@ from wow_coach.ai.base import AIError
 from wow_coach.ai.chatgpt_plan import ChatGPTPlan
 from wow_coach.alerts import SystemAlerts
 from wow_coach.app.core import AppCore
+from wow_coach.app.launcher import open_start_page
 from wow_coach.app.server import CoachServer
 from wow_coach.app.watcher import Watcher
 from wow_coach.app_settings import AppSettings, load_settings, settings_path
@@ -48,11 +49,12 @@ def run_app(
     url = server.start_url()
     print(f"The wow-coach window is open at {url}", file=out, flush=True)
     print("It only works on this computer. Press Ctrl+C to close it.", file=out, flush=True)
-    if open_in_browser:
-        webbrowser.open(url)
+    clean_up = open_start_page(url, webbrowser.open) if open_in_browser else None
     try:
         _wait_for_ctrl_c()
     finally:
+        if clean_up is not None:
+            clean_up()
         watcher.stop()
         server.stop()
 

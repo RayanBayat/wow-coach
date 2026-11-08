@@ -46,6 +46,9 @@ UNEXPECTED_ERROR = (
     "Please try again, and if it keeps happening, report it on the wow-coach GitHub page."
 )
 WELCOME_FILE_NAME = "welcome-seen.flag"
+KEYCHAIN_PROBLEM = (
+    "Your password keychain could not be used. It may be locked: unlock it and try again."
+)
 BUSY_MESSAGE = "The coach is still busy with another answer. Try again in a moment."
 
 
@@ -145,16 +148,32 @@ class AppCore:
 
     def state(self, wanted_character: str | None) -> dict[str, object]:
         """Everything the page needs to draw itself."""
+        signed_in, keychain_problem = self._read_signed_in()
         state = build_state(
             self.game(),
             wanted=wanted_character,
-            signed_in=self.signin.is_signed_in,
+            signed_in=signed_in,
             settings=self.settings,
             counter=self._usage,
             alerts_available=self.alerts_available(),
         )
-        state["welcome_pending"] = self.welcome_pending()
+        state["welcome_pending"] = signed_in and not self._welcome_file.exists()
+        if keychain_problem is not None:
+            state["problem"] = " ".join(
+                filter(None, [str(state["problem"] or ""), keychain_problem])
+            )
         return state
+
+    def _read_signed_in(self) -> tuple[bool, str | None]:
+        """(signed in?, a sentence when the keychain could not be read, e.g. it is locked)."""
+        try:
+            return self.signin.is_signed_in, None
+        except AIError:
+            return False, KEYCHAIN_PROBLEM
+
+    def signed_in(self) -> bool:
+        """True when signed in. A locked keychain counts as "not signed in", not as a crash."""
+        return self._read_signed_in()[0]
 
     # ---- the welcome message (shown once, after the first sign-in) -----------------------
 
@@ -164,7 +183,7 @@ class AppCore:
         The "seen" flag is a tiny file next to settings.json (in wow-coach's data folder),
         so it survives a different browser or a cleared browser cache.
         """
-        return self.signin.is_signed_in and not self._welcome_file.exists()
+        return self.signed_in() and not self._welcome_file.exists()
 
     def dismiss_welcome(self) -> None:
         """Remember that the welcome message was read."""
@@ -225,14 +244,26 @@ class AppCore:
 
     def answer_open_now(self, character: str | None, *, alert: bool) -> None:
         """Answer open questions now. The caller must hold ``ai_lock``."""
+        waiting = self._open_ids(character)
         try:
             replies = self.coach.answer_open_questions(character=character)
         finally:
             self.baseline.refresh()
+        # The engine answers the oldest questions first. Remember them as answered even if
+        # a reply lacks its question id, so one save can never cost the plan twice.
+        self._answered.update(waiting[: len(replies)])
         for reply in replies:
             self.publish_reply(reply)
             if alert:
                 self.alert(reply.answer, allow_speak=True)
+
+    def _open_ids(self, character: str | None) -> list[tuple[str, str]]:
+        """(character, question id) of every open question of this character, oldest first."""
+        game = self.game()
+        chosen = select_character(game, character)
+        if chosen is None:
+            return []
+        return [(chosen.key, q.id) for q in open_questions_for(game, chosen)]
 
     def unanswered_questions(self, character_key: str, game: GameView) -> bool:
         """True when this character has open questions we have not answered yet."""

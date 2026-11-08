@@ -100,7 +100,7 @@ class Watcher:
             core.publish_questions(key, game)
         settings = core.settings
         try:
-            if waiting and settings.answer_questions_from_game and core.signin.is_signed_in:
+            if waiting and settings.answer_questions_from_game and core.signed_in():
                 self._answer(waiting)
         finally:
             self._speak_up.on_save(game.characters)  # runs even if answering failed
@@ -117,8 +117,14 @@ class Watcher:
 
     def _on_advice_file_change(self) -> None:
         core = self._core
-        if core.ai_lock.locked():
-            return  # our own engine may be writing right now; look again next time
-        for key, answer in core.baseline.outside_changes():
+        # Look while holding the AI lock: the coach's own writes are never announced as
+        # outside answers, and an outside write during a call is announced after it.
+        if not core.ai_lock.acquire(blocking=False):
+            return  # the coach is busy right now; look again next time
+        try:
+            changes = core.baseline.outside_changes()
+        finally:
+            core.ai_lock.release()
+        for key, answer in changes:
             core.publish_outside_answer(key, answer)
             core.alert(answer, allow_speak=False)
