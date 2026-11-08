@@ -45,6 +45,10 @@ Changelog = "https://github.com/RayanBayat/wow-coach/blob/main/CHANGELOG.md"
 wow-coach = "wow_coach.cli:main"
 wow-coach-mcp = "wow_coach.server:main"
 
+# A "GUI script": on Windows it starts without a console window. Shortcuts point to it.
+[project.gui-scripts]
+wow-coach-app = "wow_coach.desktop.launcher:main"
+
 [build-system]
 requires = ["uv_build>=0.12.24,<0.14.0"]
 build-backend = "uv_build"
