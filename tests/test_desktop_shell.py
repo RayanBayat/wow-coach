@@ -13,6 +13,7 @@ from pytestqt.qtbot import QtBot
 from wow_coach.desktop import icons
 from wow_coach.desktop.main_window import MainWindow
 from wow_coach.desktop.single_instance import (
+    TOGGLE_OVERLAY_MESSAGE,
     SingleInstance,
     default_name,
     socket_address,
@@ -101,6 +102,34 @@ def test_the_second_copy_wakes_the_first_and_exits(qtbot: QtBot, tmp_path: Path)
         assert first.claim() is True
         with qtbot.waitSignal(first.show_requested, timeout=3000):
             assert second.claim() is False
+    finally:
+        first.close()
+
+
+def test_the_toggle_message_reaches_the_running_copy(qtbot: QtBot, tmp_path: Path) -> None:
+    first = make_instance(tmp_path)
+    try:
+        assert first.claim() is True
+        shown: list[bool] = []
+        first.show_requested.connect(lambda: shown.append(True))
+        with qtbot.waitSignal(first.toggle_overlay_requested, timeout=3000):
+            assert make_instance(tmp_path).claim(TOGGLE_OVERLAY_MESSAGE) is False
+        assert shown == []  # a toggle is not also a "show the window"
+    finally:
+        first.close()
+
+
+def test_an_unknown_message_does_nothing(qtbot: QtBot, tmp_path: Path) -> None:
+    first = make_instance(tmp_path)
+    try:
+        assert first.claim() is True
+        seen: list[str] = []
+        first.show_requested.connect(lambda: seen.append("show"))
+        first.toggle_overlay_requested.connect(lambda: seen.append("toggle"))
+        with qtbot.waitSignal(first.show_requested, timeout=3000):
+            assert make_instance(tmp_path).claim(b"format-the-disk") is False
+            assert make_instance(tmp_path).claim() is False  # a real "show" follows
+        assert seen == ["show"]
     finally:
         first.close()
 
