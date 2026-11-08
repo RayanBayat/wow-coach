@@ -2,7 +2,13 @@
 
 import pytest
 
-from wow_coach.engine.sources import MAX_SOURCES, SourceCollector, SourceLink, is_web_url
+from wow_coach.engine.sources import (
+    MAX_SOURCES,
+    SourceCollector,
+    SourceLink,
+    is_web_url,
+    without_tracking,
+)
 
 
 @pytest.mark.parametrize(
@@ -68,3 +74,13 @@ def test_at_most_eight_sources() -> None:
         collector.add_cited(f"https://example.com/{number}")
     assert len(collector.links()) == MAX_SOURCES == 8
     assert collector.links()[0].url == "https://example.com/0"
+
+
+def test_tracking_tags_are_taken_off_source_links() -> None:
+    # The real web search adds "?utm_source=openai" to every link (seen 2026-11-08).
+    assert without_tracking("https://a.test/q/1959/?utm_source=openai") == "https://a.test/q/1959/"
+    assert without_tracking("https://a.test/p?id=3&utm_medium=x") == "https://a.test/p?id=3"
+    collector = SourceCollector()
+    collector.add_cited("https://a.test/q/?utm_source=openai")
+    collector.add_cited("https://a.test/q/")  # the same page: one source
+    assert [link.url for link in collector.links()] == ["https://a.test/q/"]

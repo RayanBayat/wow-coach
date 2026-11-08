@@ -257,3 +257,22 @@ def test_memory_files_are_capped_atomic_and_tolerate_damage(tmp_path: Path) -> N
     assert memory.seen_names("b") == {"ok"}
     memory.add_answered(KEY, "2-1")  # a damaged file is simply replaced
     assert memory.answered_ids(KEY) == {"2-1"}
+
+
+def test_markdown_links_in_an_answer_become_plain_words() -> None:
+    reply = json.dumps(
+        {
+            "title": "Level-15 [quest](https://x.test/a)",
+            "steps": [
+                "Visit Anastasia ([theforeverera.com](https://theforeverera.com/q?utm_source=openai))."
+            ],
+            "text": (
+                "Sources list it ([1mw.io](https://1mw.io/m)). See [the wiki](http://w.test/b) too."
+            ),
+            "warnings": [],
+        }
+    )
+    answer = parse_answer(reply, answered_at=1, source="t")
+    assert answer.title == "Level-15 quest"
+    assert answer.steps == ("Visit Anastasia.",)
+    assert answer.text == "Sources list it. See the wiki too."

@@ -13,7 +13,7 @@ link can never reach a button in the window.
 
 from dataclasses import dataclass, field
 from typing import Final
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 MAX_SOURCES: Final = 8
 MAX_URL_CHARS: Final = 2_000
@@ -42,6 +42,14 @@ def is_web_url(url: str) -> bool:
     return parts.scheme in ("http", "https") and bool(host)
 
 
+def without_tracking(url: str) -> str:
+    """The address without tracking tags such as ``utm_source=openai`` (the page is the same)."""
+    parts = urlsplit(url)
+    kept = [(key, value) for key, value in parse_qsl(parts.query, keep_blank_values=True)
+            if not key.lower().startswith("utm_")]  # fmt: skip
+    return urlunsplit(parts._replace(query=urlencode(kept)))
+
+
 @dataclass
 class SourceCollector:
     """Collects sources while the coach works, then gives the final list."""
@@ -65,6 +73,7 @@ class SourceCollector:
     def _add(target: dict[str, str], title: str, url: str) -> None:
         if not is_web_url(url):
             return
+        url = without_tracking(url)
         short = " ".join(title.split())[:MAX_TITLE_CHARS]
         if url not in target or (short and not target[url]):  # a title fills a missing one
             target[url] = short
