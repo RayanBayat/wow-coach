@@ -3,8 +3,9 @@
 PowerShell is never run: the Windows tests use a fake runner and only look at the command.
 """
 
+import sys
 from collections.abc import Mapping
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 import pytest
 
@@ -21,6 +22,13 @@ from wow_coach.desktop.shortcuts import (
     overlay_command,
     quote_exec_argument,
     windows_link_command,
+)
+
+# The .desktop launcher is a Linux file format; its backslash rules and the paths used with it
+# are written for Linux paths. The Windows shortcut has its own tests further down.
+linux_launcher_only = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="the .desktop launcher is a Linux format (Windows paths would be escaped differently)",
 )
 
 
@@ -62,6 +70,7 @@ def test_a_line_break_in_an_argument_is_refused() -> None:
         quote_exec_argument("a\nb")
 
 
+@linux_launcher_only
 def test_the_desktop_file_content(tmp_path: Path) -> None:
     program = Path("/home/me/my tools/wow-coach-app")
     text = desktop_entry_text(program, ("--hidden",), tmp_path / "wow-coach.svg")
@@ -75,6 +84,7 @@ def test_the_desktop_file_content(tmp_path: Path) -> None:
     assert "Terminal=false" in lines
 
 
+@linux_launcher_only
 def test_backslashes_are_doubled_in_the_file() -> None:
     text = desktop_entry_text(Path('/a/"b"/wow-coach-app'), ("app",), Path("/i.svg"))
     assert 'Exec="/a/\\\\"b\\\\"/wow-coach-app" app' in text.splitlines()
@@ -83,6 +93,7 @@ def test_backslashes_are_doubled_in_the_file() -> None:
 # ---- adding and removing on Linux ------------------------------------------------------------
 
 
+@linux_launcher_only
 def test_adding_the_menu_entry_writes_the_launcher_and_the_icon(tmp_path: Path) -> None:
     folders = make_folders(tmp_path)
     program = make_program(tmp_path)
@@ -98,6 +109,7 @@ def test_adding_the_menu_entry_writes_the_launcher_and_the_icon(tmp_path: Path) 
     assert not maker.state().in_menu
 
 
+@linux_launcher_only
 def test_autostart_toggles_and_starts_hidden(tmp_path: Path) -> None:
     folders = make_folders(tmp_path)
     program = make_program(tmp_path)
@@ -153,7 +165,10 @@ def python_in(root: Path) -> str:
 def test_the_program_of_the_running_environment_is_used(tmp_path: Path) -> None:
     program = make_program(tmp_path / "env")
     found = find_stable_program(
-        which=lambda _name: None, executable=python_in(tmp_path / "env"), temp_roots=[]
+        which=lambda _name: None,
+        executable=python_in(tmp_path / "env"),
+        temp_roots=[],
+        platform="linux",
     )
     assert found == program
 
@@ -163,7 +178,10 @@ def test_another_install_on_the_path_is_not_used(tmp_path: Path) -> None:
     mine = make_program(tmp_path / "env")
     other = make_program(tmp_path / "other")
     found = find_stable_program(
-        which=lambda _name: str(other), executable=python_in(tmp_path / "env"), temp_roots=[]
+        which=lambda _name: str(other),
+        executable=python_in(tmp_path / "env"),
+        temp_roots=[],
+        platform="linux",
     )
     assert found == mine
 
@@ -172,7 +190,10 @@ def test_another_install_is_never_chosen_when_this_one_has_no_program(tmp_path: 
     other = make_program(tmp_path / "other")
     (tmp_path / "env" / "bin").mkdir(parents=True)
     found = find_stable_program(
-        which=lambda _name: str(other), executable=python_in(tmp_path / "env"), temp_roots=[]
+        which=lambda _name: str(other),
+        executable=python_in(tmp_path / "env"),
+        temp_roots=[],
+        platform="linux",
     )
     assert found is None
 
@@ -186,7 +207,10 @@ def test_a_path_link_into_this_environment_is_accepted(tmp_path: Path) -> None:
     link.parent.mkdir()
     link.symlink_to(real)
     found = find_stable_program(
-        which=lambda _name: str(link), executable=python_in(tmp_path / "env"), temp_roots=[]
+        which=lambda _name: str(link),
+        executable=python_in(tmp_path / "env"),
+        temp_roots=[],
+        platform="linux",
     )
     assert found in (real, link)
 
@@ -209,7 +233,9 @@ def test_a_cache_program_is_refused(tmp_path: Path) -> None:
     cache = tmp_path / ".cache" / "uv" / "archive-v0" / "abc"
     make_program(cache)
     assert (
-        find_stable_program(which=lambda _n: None, executable=python_in(cache), temp_roots=[])
+        find_stable_program(
+            which=lambda _n: None, executable=python_in(cache), temp_roots=[], platform="linux"
+        )
         is None
     )
 
@@ -217,7 +243,10 @@ def test_a_cache_program_is_refused(tmp_path: Path) -> None:
 def test_a_program_in_a_temp_root_is_refused(tmp_path: Path) -> None:
     make_program(tmp_path / "env")
     found = find_stable_program(
-        which=lambda _n: None, executable=python_in(tmp_path / "env"), temp_roots=[tmp_path]
+        which=lambda _n: None,
+        executable=python_in(tmp_path / "env"),
+        temp_roots=[tmp_path],
+        platform="linux",
     )
     assert found is None
 
@@ -244,16 +273,17 @@ def test_no_stable_program_means_no_file_is_written_and_the_command_is_shown(
 def test_windows_link_command_passes_paths_only_through_the_environment() -> None:
     link = Path("C:/Users/me/Start Menu/Programs/WoW Coach.lnk")
     program = Path("C:/Users/me/.local/bin/wow-coach-app.exe")
-    command, env = windows_link_command("powershell.exe", link, program, ("app",), Path("C:/i.ico"))
+    icon = Path("C:/i.ico")
+    command, env = windows_link_command("powershell.exe", link, program, ("app",), icon)
     assert command[0] == "powershell.exe"
     assert command[1:4] == ["-NoProfile", "-NonInteractive", "-Command"]
     assert command[4] == shortcuts.WINDOWS_LINK_SCRIPT
-    for text in (str(link), str(program), "C:/i.ico"):
+    for text in (str(link), str(program), str(icon)):
         assert text not in command[4]
     assert env[shortcuts.LINK_VARIABLE] == str(link)
     assert env[shortcuts.TARGET_VARIABLE] == str(program)
     assert env[shortcuts.ARGUMENTS_VARIABLE] == "app"
-    assert env[shortcuts.ICON_VARIABLE] == "C:/i.ico"
+    assert env[shortcuts.ICON_VARIABLE] == str(icon)
 
 
 def test_windows_shortcuts_are_made_through_the_runner(
@@ -354,15 +384,16 @@ def test_macos_is_not_supported(tmp_path: Path) -> None:
 
 
 def test_the_overlay_command_uses_the_stable_program() -> None:
-    program = Path("/home/me/.local/bin/wow-coach-app")
+    # Pure paths are spelled the same on every system, so this runs everywhere.
+    program = PurePosixPath("/home/me/.local/bin/wow-coach-app")
     assert overlay_command(program, "linux") == "/home/me/.local/bin/wow-coach-app --toggle-overlay"
 
 
 def test_the_overlay_command_quotes_for_the_system() -> None:
-    spaced = Path("/home/my name/wow-coach-app")
+    spaced = PurePosixPath("/home/my name/wow-coach-app")
     assert overlay_command(spaced, "linux") == "'/home/my name/wow-coach-app' --toggle-overlay"
-    windows = Path("C:/Users/My Name/wow-coach-app.exe")
-    expected = '"C:/Users/My Name/wow-coach-app.exe" --toggle-overlay'
+    windows = PureWindowsPath("C:/Users/My Name/wow-coach-app.exe")
+    expected = '"C:\\Users\\My Name\\wow-coach-app.exe" --toggle-overlay'
     assert overlay_command(windows, "win32") == expected
 
 

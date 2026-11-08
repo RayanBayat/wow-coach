@@ -8,7 +8,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from desktop_support import make_bridge, sample_message, sample_state
+from desktop_support import make_bridge, sample_message, sample_state, start_in_another_thread
 from PySide6.QtCore import QPoint, QPointF, QSettings, QSize, Qt
 from PySide6.QtWidgets import QLabel, QPushButton
 from pytestqt.qtbot import QtBot
@@ -237,8 +237,14 @@ def test_the_single_instance_message_toggles(rig: Rig, qtbot: QtBot, tmp_path: P
     try:
         assert first.claim()
         first.toggle_overlay_requested.connect(rig.controller.toggle)
+        # The second copy runs in its own thread, like a second program would; the first one
+        # can only answer while this thread processes events.
+        result = start_in_another_thread(
+            lambda: SingleInstance(name, environ=environ).claim(TOGGLE_OVERLAY_MESSAGE)
+        )
         with qtbot.waitSignal(first.toggle_overlay_requested, timeout=3000):
-            assert SingleInstance(name, environ=environ).claim(TOGGLE_OVERLAY_MESSAGE) is False
+            pass
+        assert result() is False
         assert rig.panel.isVisible()
     finally:
         first.close()

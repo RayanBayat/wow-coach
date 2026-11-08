@@ -25,7 +25,7 @@ import sys
 import tempfile
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Final
 
 from wow_coach.alerts import Runner, default_runner
@@ -201,7 +201,7 @@ def find_stable_program(
     return None
 
 
-def overlay_command(program: Path | None, platform: str = sys.platform) -> str:
+def overlay_command(program: PurePath | None, platform: str = sys.platform) -> str:
     """The command a keyboard shortcut should run to show or hide the overlay.
 
     It uses the same stable program the shortcuts use. When there is none (the app was

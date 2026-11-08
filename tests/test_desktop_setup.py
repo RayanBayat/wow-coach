@@ -4,7 +4,7 @@ import io
 import subprocess
 import sys
 import zipfile
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 import pytest
 from desktop_support import make_bridge, run_now
@@ -523,7 +523,7 @@ def test_the_overlay_card_text_is_plain_text(qtbot: QtBot, tmp_path: Path) -> No
 
 
 def test_on_windows_the_overlay_command_uses_windows_quoting() -> None:
-    command = overlay_command(
-        Path("C:/Program Files/WoW Coach/wow-coach-app.exe"), platform="win32"
-    )
-    assert command == '"C:/Program Files/WoW Coach/wow-coach-app.exe" --toggle-overlay'
+    # A Windows path on purpose (backslashes), whatever system the test runs on.
+    program = PureWindowsPath("C:/Program Files/WoW Coach/wow-coach-app.exe")
+    command = overlay_command(program, platform="win32")
+    assert command == '"C:\\Program Files\\WoW Coach\\wow-coach-app.exe" --toggle-overlay'

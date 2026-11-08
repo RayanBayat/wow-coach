@@ -1,5 +1,6 @@
 """The desktop shell: icons, one instance only, the tray and closing the window."""
 
+import hashlib
 import shutil
 import sys
 import tempfile
@@ -7,7 +8,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from desktop_support import make_bridge
+from desktop_support import make_bridge, start_in_another_thread
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtNetwork import QHostInfo, QLocalServer
@@ -123,8 +124,25 @@ def private_environ(root: Path) -> dict[str, str]:
     return {"WOW_COACH_DATA_DIR": str(root / "data"), "XDG_RUNTIME_DIR": str(_RUN_FOLDERS[root])}
 
 
-def make_instance(root: Path, name: str = "t") -> SingleInstance:
-    return SingleInstance(name, environ=private_environ(root))
+def instance_name(root: Path) -> str:
+    """A channel name of its own for each test folder.
+
+    On Windows two programs can listen on one pipe name, so a listener that an earlier test left
+    behind could answer a later test. ``root`` is different in every test, so a name made from
+    it is too, and the copies of one test (same ``root``) still share their name.
+    """
+    return "t-" + hashlib.sha1(str(root).encode()).hexdigest()[:10]  # noqa: S324 - not security
+
+
+def make_instance(root: Path) -> SingleInstance:
+    return SingleInstance(instance_name(root), environ=private_environ(root))
+
+
+# Unix socket files and their folders do not exist on Windows (it uses a named pipe).
+unix_sockets_only = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="a Unix socket is a file in a private folder; Windows uses a named pipe instead",
+)
 
 
 def test_the_second_copy_wakes_the_first_and_exits(qtbot: QtBot, tmp_path: Path) -> None:
@@ -132,8 +150,11 @@ def test_the_second_copy_wakes_the_first_and_exits(qtbot: QtBot, tmp_path: Path)
     second = make_instance(tmp_path)
     try:
         assert first.claim() is True
+        # The second copy runs in its own thread, like a second program would.
+        result = start_in_another_thread(second.claim)
         with qtbot.waitSignal(first.show_requested, timeout=3000):
-            assert second.claim() is False
+            pass
+        assert result() is False
     finally:
         first.close()
 
@@ -144,8 +165,12 @@ def test_the_toggle_message_reaches_the_running_copy(qtbot: QtBot, tmp_path: Pat
         assert first.claim() is True
         shown: list[bool] = []
         first.show_requested.connect(lambda: shown.append(True))
+        result = start_in_another_thread(
+            lambda: make_instance(tmp_path).claim(TOGGLE_OVERLAY_MESSAGE)
+        )
         with qtbot.waitSignal(first.toggle_overlay_requested, timeout=3000):
-            assert make_instance(tmp_path).claim(TOGGLE_OVERLAY_MESSAGE) is False
+            pass
+        assert result() is False
         assert shown == []  # a toggle is not also a "show the window"
     finally:
         first.close()
@@ -158,9 +183,17 @@ def test_an_unknown_message_does_nothing(qtbot: QtBot, tmp_path: Path) -> None:
         seen: list[str] = []
         first.show_requested.connect(lambda: seen.append("show"))
         first.toggle_overlay_requested.connect(lambda: seen.append("toggle"))
+
+        def two_more_copies() -> list[bool]:
+            return [
+                make_instance(tmp_path).claim(b"format-the-disk"),
+                make_instance(tmp_path).claim(),  # a real "show" follows
+            ]
+
+        results = start_in_another_thread(two_more_copies)
         with qtbot.waitSignal(first.show_requested, timeout=3000):
-            assert make_instance(tmp_path).claim(b"format-the-disk") is False
-            assert make_instance(tmp_path).claim() is False  # a real "show" follows
+            pass
+        assert results() == [False, False]
         assert seen == ["show"]
     finally:
         first.close()
@@ -175,8 +208,9 @@ def test_the_first_instance_raises_its_window(qtbot: QtBot, tmp_path: Path) -> N
         assert first.claim()
         first.show_requested.connect(window.bring_to_front)
         assert not window.isVisible()
-        assert make_instance(tmp_path).claim() is False
+        result = start_in_another_thread(make_instance(tmp_path).claim)
         qtbot.waitUntil(window.isVisible, timeout=3000)
+        assert result() is False
     finally:
         first.close()
 
@@ -191,9 +225,12 @@ def test_only_one_of_two_copies_gets_the_lock_and_the_winner_keeps_its_socket(
         results = [copy.claim() for copy in copies]
         assert results.count(True) == 1
         winner = copies[results.index(True)]
-        assert Path(winner.address).exists()  # the losers did not remove it
+        if sys.platform != "win32":  # on Windows the address is a pipe name, not a file
+            assert Path(winner.address).exists()  # the losers did not remove it
+        result = start_in_another_thread(make_instance(tmp_path).claim)
         with qtbot.waitSignal(winner.show_requested, timeout=3000):
-            assert make_instance(tmp_path).claim() is False
+            pass
+        assert result() is False
     finally:
         for copy in copies:
             copy.close()
@@ -216,13 +253,14 @@ def test_a_lock_left_by_a_crashed_copy_is_taken_over(tmp_path: Path) -> None:
     lock_file = Path(environ["WOW_COACH_DATA_DIR"]) / "instance.lock"
     lock_file.parent.mkdir(parents=True)
     lock_file.write_text(f"2147483646\nwow-coach\n{QHostInfo.localHostName()}\n")
-    instance = SingleInstance("t", environ=environ)
+    instance = SingleInstance(instance_name(tmp_path), environ=environ)
     try:
         assert instance.claim() is True
     finally:
         instance.close()
 
 
+@unix_sockets_only
 def test_a_socket_left_by_a_crash_is_cleaned_up(tmp_path: Path) -> None:
     # A server that was not closed properly leaves its name behind; nobody answers on it.
     fresh = make_instance(tmp_path)
@@ -237,6 +275,7 @@ def test_a_socket_left_by_a_crash_is_cleaned_up(tmp_path: Path) -> None:
         fresh.close()
 
 
+@unix_sockets_only
 def test_somebody_squatting_on_the_name_does_not_stop_us(tmp_path: Path) -> None:
     # Another program listens on our name but holds no lock: we are still the first copy, and
     # we must not tell it "show" as if it were a running coach.
@@ -253,6 +292,7 @@ def test_somebody_squatting_on_the_name_does_not_stop_us(tmp_path: Path) -> None
         squatter.close()
 
 
+@unix_sockets_only
 def test_the_socket_lives_in_a_private_folder(tmp_path: Path) -> None:
     instance = make_instance(tmp_path)
     try:
@@ -264,6 +304,7 @@ def test_the_socket_lives_in_a_private_folder(tmp_path: Path) -> None:
         instance.close()
 
 
+@unix_sockets_only
 def test_a_folder_that_is_really_a_link_is_not_trusted(tmp_path: Path) -> None:
     # Somebody swapped our folder for a link to a place they control: do not listen there.
     elsewhere = tmp_path / "elsewhere"
@@ -278,20 +319,31 @@ def test_a_folder_that_is_really_a_link_is_not_trusted(tmp_path: Path) -> None:
         instance.close()
 
 
-def test_the_socket_folder_follows_the_system() -> None:
-    runtime = {"XDG_RUNTIME_DIR": "/run/user/1000"}
-    assert socket_folder(runtime, "linux") == Path("/run/user/1000/wow-coach")
-    assert socket_folder({}, "linux", user_id=1000, fallback_root=Path("/t")) == Path(
-        "/t/wow-coach-1000"
+def test_the_socket_folder_follows_the_system(tmp_path: Path) -> None:
+    # Built from tmp_path so the paths are absolute (and spelled right) on every system.
+    runtime_folder = tmp_path / "run"
+    runtime = {"XDG_RUNTIME_DIR": str(runtime_folder)}
+    assert socket_folder(runtime, "linux") == runtime_folder / "wow-coach"
+    fallback = tmp_path / "t"
+    assert socket_folder({}, "linux", user_id=1000, fallback_root=fallback) == (
+        fallback / "wow-coach-1000"
     )
     assert socket_folder(runtime, "win32") is None  # Windows uses a named pipe
 
 
-def test_a_long_runtime_folder_falls_back_to_a_short_one() -> None:
-    long_runtime = {"XDG_RUNTIME_DIR": "/very/" + "long/" * 30}
-    address = socket_address("wow-coach-me", long_runtime, "linux", fallback_root=Path("/t"))
+def test_a_long_runtime_folder_falls_back_to_a_short_one(tmp_path: Path) -> None:
+    # Start at the top of the disk ("/" or "C:\\") so the short folder is really short.
+    top = Path(tmp_path.anchor)
+    long_runtime = {"XDG_RUNTIME_DIR": str(top.joinpath("very", *["long"] * 30))}
+    address = socket_address("wow-coach-me", long_runtime, "linux", fallback_root=top / "t")
     assert len(address) < 100
-    assert address.startswith("/t/wow-coach-")
+    assert address.startswith(str(top / "t" / "wow-coach-"))
+
+
+def test_on_windows_the_address_is_a_plain_pipe_name(tmp_path: Path) -> None:
+    # Windows has no socket files: the name itself is the address, whatever the folders say.
+    environ = {"XDG_RUNTIME_DIR": str(tmp_path)}
+    assert socket_address("wow-coach-me", environ, "win32") == "wow-coach-me"
 
 
 def test_the_default_name_is_per_user() -> None:

@@ -5,6 +5,7 @@ Nothing here touches the network, the keychain or a real game folder. Each test 
 window did (``asked``, ``changes``...).
 """
 
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -14,6 +15,36 @@ from wow_coach.app_settings import AppSettings, update_settings
 from wow_coach.desktop.bridge import CoreBridge
 
 KEY = "Testchar-Testrealm"
+
+
+def start_in_another_thread[T](work: Callable[[], T]) -> Callable[[], T]:
+    """Run ``work`` in a second thread; the returned function waits for it and gives the result.
+
+    Two copies of the app are two programs, so the first one keeps answering while the second
+    waits for it. In a test both live in one program: if the second copy waited on the main
+    thread, the first could not answer (on Windows, a named pipe is only served while the
+    event loop runs). So the "second copy" runs in its own thread, and the test lets Qt
+    process events (``qtbot.waitSignal``) before calling the returned function.
+    """
+    outcome: list[T] = []
+    errors: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            outcome.append(work())
+        except BaseException as error:
+            errors.append(error)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+
+    def wait() -> T:
+        thread.join(timeout=10)
+        if errors:
+            raise errors[0]
+        return outcome[0]
+
+    return wait
 
 
 def run_now(work: Callable[[], None]) -> None:
