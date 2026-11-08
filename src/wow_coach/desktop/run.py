@@ -10,7 +10,7 @@ import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from PySide6.QtCore import QProcess
+from PySide6.QtCore import QProcess, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication
 
@@ -19,8 +19,10 @@ from wow_coach.app.watcher import Watcher
 from wow_coach.config import config_path
 from wow_coach.desktop.bridge import CoreBridge
 from wow_coach.desktop.first_run import ask_with_dialog, find_game_folder_or_ask
+from wow_coach.desktop.hotkey import create_hotkey
 from wow_coach.desktop.icons import app_icon
 from wow_coach.desktop.main_window import APP_TITLE, MainWindow
+from wow_coach.desktop.overlay import OverlayController
 from wow_coach.desktop.single_instance import SHOW_MESSAGE, TOGGLE_OVERLAY_MESSAGE, SingleInstance
 from wow_coach.desktop.theme import apply_theme
 from wow_coach.desktop.tray import AppTray, open_settings
@@ -113,7 +115,7 @@ def run_desktop(
         return 0
     try:
         return _run_as_the_only_copy(
-            app, instance, wow_dir_flag, environ, start_hidden or toggle_overlay
+            app, instance, wow_dir_flag, environ, start_hidden or toggle_overlay, toggle_overlay
         )
     finally:
         instance.close()
@@ -125,6 +127,7 @@ def _run_as_the_only_copy(
     wow_dir_flag: Path | None,
     environ: Mapping[str, str],
     start_hidden: bool,
+    show_overlay: bool = False,
 ) -> int:
     config_file = config_path(environ=environ)
     tray = AppTray(open_settings())
@@ -168,6 +171,17 @@ def _run_as_the_only_copy(
 
     window.restart_requested.connect(restart)
 
+    # The overlay (the coach on top of the game): the hotkey, the tray menu, the Overlay
+    # button and ``wow-coach-app --toggle-overlay`` all end up in ``overlay.toggle``.
+    hotkey = create_hotkey()
+    overlay = OverlayController(window, hotkey)
+    window.use_hotkey(hotkey)
+    bridge.state_changed.connect(overlay.on_state)
+    instance.toggle_overlay_requested.connect(overlay.toggle)
+    tray.overlay_requested.connect(overlay.toggle)
+    overlay.hint_changed.connect(tray.set_overlay_hint)
+    overlay.start(core.settings)
+
     def on_scheme_changed() -> None:
         apply_theme(app)
         window.on_theme_changed()
@@ -177,9 +191,14 @@ def _run_as_the_only_copy(
     bridge.start()
     if not (hidden and tray.available):
         window.show()
+    if show_overlay:
+        # Started by the overlay command while no copy was running: show the overlay once the
+        # window is up (the player asked for it, so taking the keyboard is expected).
+        QTimer.singleShot(0, overlay.show_overlay)
     try:
         return app.exec()
     finally:
+        overlay.close()
         tray.hide()
         bridge.stop()
         watcher.stop()

@@ -451,4 +451,4 @@ class OverlayController(QObject):
     def close(self) -> None:
         """The app is closing: hide the panel and let go of the hotkey."""
         self.hide_overlay()
-        self._hotkey.unregister()
+        self._hotkey.close()

@@ -90,6 +90,10 @@ class GlobalHotkey(QObject):
         """Stop listening."""
         raise NotImplementedError
 
+    def close(self) -> None:
+        """Stop and let go of everything (the app is closing)."""
+        self.unregister()
+
     def _set_status(self, state: HotkeyState, message: str = "") -> None:
         status = HotkeyStatus(state, message)
         if status != self._status:

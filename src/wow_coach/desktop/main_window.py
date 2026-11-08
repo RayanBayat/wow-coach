@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from wow_coach.desktop.bridge import CoreBridge
+from wow_coach.desktop.hotkey import GlobalHotkey
 from wow_coach.desktop.icons import ICON_NAMES, app_icon, icon
 from wow_coach.desktop.pages import build_pages
 from wow_coach.desktop.pages.base import Page
@@ -136,6 +137,12 @@ class MainWindow(QMainWindow):
         return sidebar
 
     # ---- using it -----------------------------------------------------------------------
+
+    def use_hotkey(self, hotkey: GlobalHotkey) -> None:
+        """Give the Setup page the overlay hotkey, so its card can show how it is doing."""
+        for page in self.pages:
+            if isinstance(page, SetupPage):
+                page.set_hotkey(hotkey)
 
     def show_page(self, name: str) -> None:
         """Switch to the page with this name (unknown names are ignored)."""
