@@ -3,6 +3,8 @@
 import os
 import stat
 from pathlib import Path
+from urllib.parse import urlsplit
+from urllib.request import url2pathname
 
 from test_app_support import (
     KEY,
@@ -36,12 +38,17 @@ def test_the_launcher_file_and_folder_are_private(tmp_path: Path) -> None:
         page.unlink()
 
 
+def _path_of(uri: str) -> Path:
+    """The file a file:// address points to (on Windows it looks like file:///C:/...)."""
+    return Path(url2pathname(urlsplit(uri).path))
+
+
 def test_the_browser_gets_the_file_not_the_token() -> None:
     opened: list[str] = []
     clean_up = open_start_page(START_URL, opened.append, keep_seconds=60)
     assert len(opened) == 1
     assert opened[0].startswith("file://") and "secret-token" not in opened[0]
-    page = Path(opened[0].removeprefix("file://"))
+    page = _path_of(opened[0])
     assert page.is_file()
     clean_up()
     assert not page.exists() and not page.parent.exists()
@@ -50,7 +57,7 @@ def test_the_browser_gets_the_file_not_the_token() -> None:
 def test_the_launcher_file_deletes_itself() -> None:
     opened: list[str] = []
     open_start_page(START_URL, opened.append, keep_seconds=0.05)
-    page = Path(opened[0].removeprefix("file://"))
+    page = _path_of(opened[0])
     for _ in range(100):
         if not page.exists():
             break
