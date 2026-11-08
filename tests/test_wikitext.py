@@ -3,7 +3,12 @@
 import json
 from pathlib import Path
 
-from wow_coach.wikitext import clean_snippet, find_section, parse_wikitext
+from wow_coach.wikitext import (
+    clean_snippet,
+    find_section,
+    find_unresolved_templates,
+    parse_wikitext,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "wiki"
 
@@ -54,9 +59,61 @@ def test_bold_and_italic_marks_are_removed() -> None:
     assert parse_wikitext("T", "'''Bold''' and ''italic''").sections[0].text == "Bold and italic"
 
 
-def test_unknown_templates_are_dropped_including_nested_ones() -> None:
+def test_noise_templates_are_dropped_including_nested_ones() -> None:
     page = parse_wikitext("T", "Before {{Reflist|{{inner}}}} after")
     assert page.sections[0].text == "Before after"
+
+
+def test_navigation_footers_and_external_links_are_dropped() -> None:
+    page = parse_wikitext("T", "Text\n\n{{Elinks-spell|1296017}}\n\n{{Classfooter|Mage}}")
+    assert page.sections[0].text == "Text"
+
+
+def test_sort_key_magic_word_is_dropped() -> None:
+    page = parse_wikitext("T", "Text\n{{DEFAULTSORT:Shiel, Abigail}}")
+    assert page.sections[0].text == "Text"
+
+
+def test_game_template_becomes_the_game_name() -> None:
+    text = parse_wikitext("T", "found in {{g|sod}} and {{G|forever}}, not {{g|era}}.")
+    assert text.sections[0].text == "found in Season of Discovery and Forever, not Classic."
+
+
+def test_game_template_with_an_unknown_key_keeps_the_key() -> None:
+    assert parse_wikitext("T", "in {{g|zzz}}").sections[0].text == "in zzz"
+
+
+def test_inline_version_icons_become_labels() -> None:
+    assert parse_wikitext("T", "a {{sod-inline}} b {{Forever-inline}}").sections[0].text == (
+        "a [SoD] b [Forever]"
+    )
+
+
+def test_unknown_template_with_arguments_keeps_its_last_plain_argument() -> None:
+    page = parse_wikitext("T", "see {{Mystery|first|style=x|the answer}} now")
+    assert page.sections[0].text == "see the answer now"
+
+
+def test_unknown_template_without_arguments_shows_its_name_in_brackets() -> None:
+    page = parse_wikitext("T", "Scrolls: {{SoD Mage Scroll 20}}")
+    assert page.sections[0].text == "Scrolls: [SoD Mage Scroll 20]"
+
+
+def test_find_unresolved_templates_lists_only_bracketed_ones() -> None:
+    text = "{{g|sod}} {{SoD Mage Scroll 20}} {{Classfooter|Mage}} {{Mystery|arg}} {{Other x}}"
+    assert find_unresolved_templates(text) == ["{{SoD Mage Scroll 20}}", "{{Other x}}"]
+
+
+def test_expansions_replace_unresolved_templates() -> None:
+    expansions = {"{{SoD Mage Scroll 20}}": "\n*[[Scroll of Fire]]\n*[[Scroll of Frost]]"}
+    page = parse_wikitext("T", "Scrolls:\n{{SoD Mage Scroll 20}}\nend", expansions)
+    assert page.sections[0].text == "Scrolls:\n\n- Scroll of Fire\n- Scroll of Frost\nend"
+
+
+def test_real_library_book_page_keeps_the_game_names() -> None:
+    page = parse_wikitext("Library book", _fixture_wikitext("parse_Library_book.json"))
+    assert "found all over Azeroth in Season of Discovery and Forever." in page.sections[0].text
+    assert "Season of Discovery" in page.sections[0].text
 
 
 def test_cost_template_becomes_gold_silver_copper() -> None:

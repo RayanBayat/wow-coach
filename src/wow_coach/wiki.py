@@ -15,7 +15,13 @@ from urllib.parse import quote
 
 from wow_coach.errors import LookupFailed
 from wow_coach.web import Fetch
-from wow_coach.wikitext import WikiPage, clean_snippet, find_section, parse_wikitext
+from wow_coach.wikitext import (
+    WikiPage,
+    clean_snippet,
+    find_section,
+    find_unresolved_templates,
+    parse_wikitext,
+)
 
 WIKI_HOME = "https://warcraft.wiki.gg"
 API_URL = f"{WIKI_HOME}/api.php"
@@ -25,6 +31,12 @@ MAX_LAG_SECONDS = "5"
 MAX_SEARCH_RESULTS = 10
 # Sections with no text (References, External links) are not worth listing.
 DEFAULT_MAX_CHARS = 6000
+# Templates we cannot read ourselves are expanded by the wiki in ONE extra request. These
+# limits keep that request and its answer small.
+MAX_EXPANDED_TEMPLATES = 12
+MAX_EXPANDED_CHARS = 3000
+# Put between the templates we send, so we can cut the wiki's one answer back into pieces.
+EXPANSION_SEPARATOR = "@@WOWCOACH-SPLIT@@"
 
 
 def page_url(title: str) -> str:
@@ -108,10 +120,44 @@ def answer_read_wiki_page(title: str, section: str | None, max_chars: int, fetch
     if not isinstance(parsed, dict) or not isinstance(parsed.get("wikitext"), str):
         return _didnt_answer("unexpected reply")
     real_title = str(parsed.get("title", title))
-    page = parse_wikitext(real_title, str(parsed["wikitext"]))
+    wikitext = str(parsed["wikitext"])
+    page = parse_wikitext(real_title, wikitext, _expand_unknown_templates(wikitext, fetch))
     if section:
         return _render_section(page, section, max_chars)
     return _render_page(page, max_chars)
+
+
+def _expand_unknown_templates(wikitext: str, fetch: Fetch) -> dict[str, str]:
+    """Ask the wiki to expand the templates we cannot read (one request, small and capped).
+
+    Returns template source -> expanded wikitext. Any problem gives an empty dict, so the
+    page is still shown, with ``[Template name]`` where the content would be.
+    """
+    sources = find_unresolved_templates(wikitext)[:MAX_EXPANDED_TEMPLATES]
+    if not sources:
+        return {}
+    try:
+        data = _ask(
+            fetch,
+            {
+                "action": "expandtemplates",
+                "prop": "wikitext",
+                "text": EXPANSION_SEPARATOR.join(sources),
+            },
+        )
+    except LookupFailed:
+        return {}
+    result = data.get("expandtemplates")
+    expanded = result.get("wikitext") if isinstance(result, dict) else None
+    pieces = expanded.split(EXPANSION_SEPARATOR) if isinstance(expanded, str) else []
+    if len(pieces) != len(sources):
+        return {}
+    # A template that expands to a navigation box is page furniture: keep the bracket.
+    return {
+        source: piece[:MAX_EXPANDED_CHARS]
+        for source, piece in zip(sources, pieces, strict=True)
+        if "navbox" not in piece
+    }
 
 
 def _api_error_text(title: str, code: str) -> str:

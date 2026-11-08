@@ -14,6 +14,7 @@ coordinates, prices, tables, sections, version labels) and drop the rest.
 
 import html
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 # Info-box templates hold the key facts (name, level, location). They are named ``Npcbox``,
@@ -24,7 +25,70 @@ SKIPPED_INFOBOX_FIELDS = {"image", "icon", "aggro", "sellprice", "itemid"}
 # Banner templates at the top of a page, and the version they mark.
 BANNERS = {"forever only": "Forever", "classic only": "Classic", "retail only": "Retail"}
 # Short templates that stand for a game version in tables and lists.
-VERSION_LABELS = {"cw": "[Classic]", "fw": "[Forever]", "rw": "[Retail]"}
+VERSION_LABELS = {
+    "cw": "[Classic]",
+    "fw": "[Forever]",
+    "rw": "[Retail]",
+    "sod-inline": "[SoD]",
+    "forever-inline": "[Forever]",
+}
+# ``{{g|key}}`` prints a game name. These are the keys seen on Forever-related pages; the full
+# list lives in Template:Game on the wiki. An unlisted key is printed as it was written.
+GAME_NAMES = {
+    "forever": "Forever",
+    "wowf": "Forever",
+    "sod": "Season of Discovery",
+    "som": "Season of Mastery",
+    "hardcore": "Classic Hardcore",
+    "hc": "Classic Hardcore",
+    "classic": "Classic",
+    "era": "Classic",
+    "cera": "Classic",
+    "classic era": "Classic",
+    "wowc": "Classic",
+    "retail": "Midnight",
+    "mid": "Midnight",
+    "midnight": "Midnight",
+    "tww": "The War Within",
+    "df": "Dragonflight",
+    "sl": "Shadowlands",
+    "bfa": "Battle for Azeroth",
+    "legion": "Legion",
+    "wod": "Warlords of Draenor",
+    "mop": "Mists of Pandaria",
+    "cata": "Cataclysm",
+    "wotlk": "Wrath of the Lich King",
+    "wrath": "Wrath of the Lich King",
+    "tbc": "The Burning Crusade",
+    "bc": "The Burning Crusade",
+    "vanilla": "World of Warcraft",
+    "wow": "World of Warcraft",
+    "mopc": "Mists of Pandaria Classic",
+    "catac": "Cataclysm Classic",
+    "wotlkc": "Wrath of the Lich King Classic",
+    "wrathc": "Wrath of the Lich King Classic",
+    "bcc": "Burning Crusade Classic",
+}
+# Templates that are page furniture, not content: navigation boxes, link lists, references,
+# banners about patches or seasons. An unknown template whose name contains one of these words
+# is dropped instead of being shown in brackets.
+NOISE_WORDS = (
+    "footer",
+    "navbox",
+    "nav",
+    "elinks",
+    "reflist",
+    "references",
+    "documentation",
+    "patchbranch",
+    "defaultsort",
+    "season",
+    "stub",
+    "sidebar",
+    "hatnote",
+    "see also",
+    "main",
+)
 # Plain words some templates stand for.
 WORD_TEMPLATES = {"alliance": "Alliance", "horde": "Horde", "questfinish": "(turn-in)"}
 
@@ -114,15 +178,16 @@ def _money(arguments: list[str]) -> str:
     return " ".join(pieces)
 
 
-def _expand_template(body: str) -> str:
-    """Return the plain text a single (already flattened) template stands for."""
-    parts = _split_arguments(body)
-    name = parts[0].strip().lower()
+def _known_expansion(name: str, parts: list[str]) -> str | None:
+    """Return the text of a template we understand, or None when we do not know it."""
     arguments = [part.strip() for part in parts[1:]]
     if name == "co" and len(arguments) >= 3:
         return f"{ZONE_MARK}{arguments[2]} {arguments[0]}, {arguments[1]}"
     if name in ("c", "f") and arguments:
         return arguments[0]
+    if name == "g":
+        key = arguments[0] if arguments else ""
+        return GAME_NAMES.get(key.lower(), key)
     if name == "cost":
         return _money(parts[1:])
     if name == "qty" and arguments:
@@ -136,7 +201,54 @@ def _expand_template(body: str) -> str:
     if name.startswith("patch "):
         notes = [a.removeprefix("note=") for a in arguments if a.startswith("note=")]
         return f"{parts[0].strip()}: {' '.join(notes)}" if notes else parts[0].strip()
-    return ""
+    return None
+
+
+def _is_noise(name: str) -> bool:
+    """True for templates that are page furniture (see ``NOISE_WORDS``) or parser functions."""
+    return name.startswith("#") or any(word in name for word in NOISE_WORDS)
+
+
+def _last_plain_argument(parts: list[str]) -> str:
+    """The last argument without ``name=``, or an empty string when there is none."""
+    plain = [part.strip() for part in parts[1:] if "=" not in part and part.strip()]
+    return plain[-1] if plain else ""
+
+
+def _expand_template(body: str) -> str:
+    """Return the plain text a single (already flattened) template stands for.
+
+    Unknown templates should not make text vanish: they leave their last plain argument,
+    or their name in brackets, so the reader can see that something was there.
+    """
+    parts = _split_arguments(body)
+    name = parts[0].strip().lower()
+    known = _known_expansion(name, parts)
+    if known is not None:
+        return known
+    if _is_noise(name):
+        return ""
+    return _last_plain_argument(parts) or f"[{parts[0].strip()}]"
+
+
+def find_unresolved_templates(text: str) -> list[str]:
+    """List the templates that would show up as ``[Name]``: the wiki can expand these.
+
+    Only outermost templates are considered, each listed once, in page order. Banners and
+    info boxes are skipped because the parser reads those itself.
+    """
+    found: list[str] = []
+    for start, end in _find_top_level_templates(text):
+        source = text[start:end]
+        parts = _split_arguments(source[2:-2])
+        name = parts[0].strip().lower()
+        if _known_expansion(name, parts) is not None or _is_noise(name):
+            continue
+        if name in BANNERS or INFOBOX_NAME.match(name) or _last_plain_argument(parts):
+            continue
+        if source not in found:
+            found.append(source)
+    return found
 
 
 def _expand_templates(text: str) -> str:
@@ -303,9 +415,17 @@ def _tidy_blank_lines(lines: list[str]) -> str:
     return "\n".join(result).strip()
 
 
-def parse_wikitext(title: str, wikitext: str) -> WikiPage:
-    """Parse a page's source into notes, info box fields and plain-text sections."""
+def parse_wikitext(
+    title: str, wikitext: str, expansions: Mapping[str, str] | None = None
+) -> WikiPage:
+    """Parse a page's source into notes, info box fields and plain-text sections.
+
+    ``expansions`` maps a template's source text to what the wiki expanded it into (see
+    ``find_unresolved_templates``). Those templates are replaced before anything else.
+    """
     text = REFERENCE.sub("", COMMENT.sub("", wikitext))
+    for source, expanded in (expansions or {}).items():
+        text = text.replace(source, expanded)
     text, notes, infobox = _extract_leading_templates(text)
     text = _expand_templates(text)
     sections: list[WikiSection] = []

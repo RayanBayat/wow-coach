@@ -237,9 +237,20 @@ How it works, in plain words:
 2. `read_wiki_page` asks the wiki's parse API for a page's source text, then `wikitext.py`
    pulls the info box (name, level, location...) out, turns coordinates like
    `{{co|61|52|Tirisfal Glades}}` into `Tirisfal Glades 61, 52`, turns links into their text,
-   turns tables into `a | b | c` rows, and drops references, HTML and templates it does not know.
+   turns tables into `a | b | c` rows, and drops references and HTML.
    Version labels are kept: a banner such as `{{Forever only}}` becomes the note "Marked
    Forever-only on the wiki.", and `{{cw}}` / `{{fw}}` become `[Classic]` / `[Forever]`.
+   `{{g|sod}}` (the wiki's game-name template) becomes "Season of Discovery", `{{g|forever}}`
+   becomes "Forever".
+   Templates the reader does not know never make text vanish silently:
+   - Page furniture (navigation boxes, "External links" lists, reference lists, sort keys,
+     season banners) is dropped.
+   - A template with a plain argument leaves its last plain argument.
+   - Any other template, such as an included list like `{{SoD Mage Scroll 20}}`, is first sent
+     to the wiki's `action=expandtemplates` API. That is one extra request per page (at most 12
+     templates, each answer cut at 3000 characters), and only for pages that have such
+     templates. If it fails, the template shows as `[SoD Mage Scroll 20]` so the coach can see
+     something was there.
 3. Every answer ends with a `Source:` line.
 
 Rules we follow:

@@ -157,3 +157,53 @@ def test_busy_wiki_is_reported() -> None:
     body = json.dumps({"error": {"code": "maxlag", "info": "waiting for a database server"}})
     text = answer_read_wiki_page("X", None, 6000, FakeFetch(body))
     assert text.startswith("Warcraft Wiki didn't answer (busy).")
+
+
+class RoutedFetch:
+    """Answers each API action from its own saved body (``parse`` and ``expandtemplates``)."""
+
+    def __init__(self, bodies: dict[str, str]) -> None:
+        self.bodies = bodies
+        self.calls: list[Mapping[str, str]] = []
+
+    def __call__(self, _url: str, params: Mapping[str, str]) -> str:
+        self.calls.append(params)
+        return self.bodies[params["action"]]
+
+
+def _comprehend_scroll_fetch(expansion_body: str) -> RoutedFetch:
+    return RoutedFetch(
+        {"parse": _file("parse_Comprehend_Scroll.json"), "expandtemplates": expansion_body}
+    )
+
+
+def test_included_lists_are_filled_in_by_one_expandtemplates_request() -> None:
+    fetch = _comprehend_scroll_fetch(_file("expandtemplates_scroll.json"))
+    text = answer_read_wiki_page("Comprehend Scroll", None, 20_000, fetch)
+    assert "- Scroll of Strength" in text
+    assert "- Scroll of Reintegration" in text
+    assert "[SoD Mage Scroll" not in text
+    expand_calls = [call for call in fetch.calls if call["action"] == "expandtemplates"]
+    assert len(expand_calls) == 1
+    assert expand_calls[0]["maxlag"] == "5"
+    assert "{{SoD Mage Scroll 10}}" in expand_calls[0]["text"]
+
+
+def test_failed_expansion_leaves_the_template_name_in_brackets() -> None:
+    fetch = _comprehend_scroll_fetch("not json")
+    text = answer_read_wiki_page("Comprehend Scroll", None, 20_000, fetch)
+    assert "[SoD Mage Scroll 10]" in text
+    assert "Enciphered scrolls" in text
+
+
+def test_expansion_with_the_wrong_number_of_pieces_is_ignored() -> None:
+    body = json.dumps({"expandtemplates": {"wikitext": "just one piece"}})
+    text = answer_read_wiki_page("Comprehend Scroll", None, 20_000, _comprehend_scroll_fetch(body))
+    assert "[SoD Mage Scroll 10]" in text
+
+
+def test_pages_without_unknown_templates_make_no_expansion_request() -> None:
+    fetch = FakeFetch(_file("parse_Library_book.json"))
+    text = answer_read_wiki_page("Library book", None, 20_000, fetch)
+    assert "in Season of Discovery and Forever." in text
+    assert [params["action"] for _, params in fetch.calls] == ["parse"]
