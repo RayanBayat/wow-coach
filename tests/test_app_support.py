@@ -238,7 +238,7 @@ class Client:
 
     def __init__(self, server: CoachServer) -> None:
         self.server = server
-        self.cookie: str | None = None
+        self.session: str | None = None
 
     def request(
         self,
@@ -247,18 +247,18 @@ class Client:
         body: object = None,
         *,
         headers: dict[str, str] | None = None,
-        csrf: bool = True,
+        start_header: bool = True,
         host: str | None = None,
-        with_cookie: bool = True,
+        with_session: bool = True,
     ) -> tuple[int, dict[str, str], bytes]:
         connection = http.client.HTTPConnection("127.0.0.1", self.server.port, timeout=10)
         sent = {"Host": host or self.server.host_header}
         if method == "POST":
             sent["Content-Type"] = "application/json"
-            if csrf:
+            if start_header:
                 sent["X-Wow-Coach"] = "1"
-        if with_cookie and self.cookie:
-            sent["Cookie"] = self.cookie
+        if with_session and self.session:
+            sent["X-Wow-Coach-Session"] = self.session
         sent.update(headers or {})
         data = None if body is None else json.dumps(body)
         connection.request(method, path, body=data, headers=sent)
@@ -275,8 +275,8 @@ class Client:
         return status, json.loads(payload or b"{}")
 
     def sign_in_page(self) -> None:
-        """Do what the page does: trade the token from the start link for the cookie."""
+        """Do what the page does: trade the token from the start link for the session secret."""
         token = self.server.start_url().split("#", 1)[1]
-        status, headers, _ = self.request("POST", "/api/session", {"token": token})
+        status, body = self.json("POST", "/api/session", {"token": token})
         assert status == 200
-        self.cookie = headers["set-cookie"].split(";", 1)[0]
+        self.session = body["session"]

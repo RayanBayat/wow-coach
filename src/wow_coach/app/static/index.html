@@ -150,6 +150,14 @@
           <input type="checkbox" data-setting="share_other_player_names">
           Share other players' names with the AI
         </label>
+        <label class="check">
+          <input type="checkbox" data-setting="send_coach_notes">
+          Send the coach's notes to the AI
+        </label>
+        <p class="muted">
+          Your own notes and the character journal, so the coach remembers your goals. Off
+          means they stay on this computer.
+        </p>
         <p class="muted">
           Off means names of group members, mail senders and so on are replaced by "a player"
           before anything leaves this computer.
@@ -212,8 +220,17 @@
         <h2>What goes where</h2>
         <ul>
           <li>
-            Your character's data from the game goes only to OpenAI, through your own ChatGPT
-            sign-in, and only when you ask a question or the game asks one.
+            When the coach thinks, these things go to OpenAI, through your own ChatGPT
+            sign-in, and only then:
+            <ul>
+              <li>your character's data from the game (the report of its latest save),</li>
+              <li>your question,</li>
+              <li>the last few messages of the conversation,</li>
+              <li>
+                the coach's notes: your own notes and the character journal (you can turn
+                this off in Settings, "Send the coach's notes to the AI").
+              </li>
+            </ul>
           </li>
           <li>Nobody else gets it. wow-coach has no server and no telemetry.</li>
           <li>
@@ -225,6 +242,11 @@
           </li>
           <li>
             This window only works on this computer. No other computer can open it.
+          </li>
+          <li>
+            Full details:
+            <a href="https://github.com/RayanBayat/wow-coach/blob/main/docs/privacy.md"
+               target="_blank" rel="noopener noreferrer">the privacy notice</a>.
           </li>
         </ul>
       </div>
