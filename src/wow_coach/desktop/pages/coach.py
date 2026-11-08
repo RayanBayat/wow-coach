@@ -18,12 +18,22 @@ from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import Final, NamedTuple
 
-from PySide6.QtCore import QSettings, QTimer
-from PySide6.QtWidgets import QApplication, QPushButton, QStackedWidget, QVBoxLayout, QWidget
+from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtGui import QResizeEvent
+from PySide6.QtWidgets import (
+    QApplication,
+    QHBoxLayout,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from wow_coach.advice.contract import MAX_QUESTION_CHARS
-from wow_coach.desktop.bridge import CoreBridge
+from wow_coach.desktop.bridge import CoreBridge, Runner, run_in_thread
 from wow_coach.desktop.compact import CompactCard
+from wow_coach.desktop.notebook_summary import summarize
+from wow_coach.desktop.notes_reader import NotebookData, NotesReader
 from wow_coach.desktop.pages.base import Page
 from wow_coach.desktop.quick_actions import QUICK_ACTIONS, QuickAction
 from wow_coach.desktop.state import (
@@ -42,6 +52,7 @@ from wow_coach.desktop.widgets.composer import Composer
 from wow_coach.desktop.widgets.flow import FlowLayout
 from wow_coach.desktop.widgets.formatting import freshness
 from wow_coach.desktop.widgets.header import HeaderCard
+from wow_coach.desktop.widgets.notebook_glance import NotebookGlance
 from wow_coach.desktop.widgets.styles import chat_style
 from wow_coach.desktop.widgets.welcome import WelcomeView
 
@@ -55,6 +66,10 @@ OPEN_BUSY_TEXT: Final = "The coach is still answering. Try again in a moment."
 OPEN_NONE_TEXT: Final = "There are no questions from the game waiting right now."
 TICK_MS: Final = 30_000  # how often "12 min old" is recomputed (no disk reads)
 QUEUE_RETRY_MS: Final = 1_500  # how often a waiting question tries the busy coach again
+# The notes summary beside the chat: how often it checks the notes, and the narrowest page
+# that still has room for it (below that, the chat gets the whole width).
+NOTES_POLL_MS: Final = 10_000
+GLANCE_MIN_PAGE_WIDTH: Final = 900
 
 type AnswerKey = tuple[int, str]  # (when it was answered, its title)
 
@@ -138,6 +153,8 @@ class CoachPage(Page):
         card_settings: QSettings | None = None,
         queue_retry_ms: int = QUEUE_RETRY_MS,
         save_notice_ms: int = SAVE_NOTICE_MS,
+        notes_runner: Runner = run_in_thread,
+        notes_poll_ms: int = NOTES_POLL_MS,
     ) -> None:
         """Build the page.
 
@@ -148,6 +165,8 @@ class CoachPage(Page):
             card_settings: Where the small card remembers its place (tests pass a temp file).
             queue_retry_ms: How often a waiting question tries the busy coach again.
             save_notice_ms: How long "Got your latest game data" stays in the chat.
+            notes_runner: How the notes summary is read in the background (tests: at once).
+            notes_poll_ms: How often the notes summary checks the notes for changes.
         """
         super().__init__(bridge, parent)
         self._now = now
@@ -174,6 +193,15 @@ class CoachPage(Page):
         self._save_notice_timer.setInterval(save_notice_ms)
         self._save_notice_timer.timeout.connect(self._remove_save_notice)
         self._newest: AnswerView | None = None
+        self._notes_key: str | None = None  # the character whose notes the summary shows
+
+        # The "At a glance" card beside the chat reads the coach's notes off the window's
+        # thread, like the Notebook page, and checks them again now and then while shown.
+        self.notes_reader = NotesReader(runner=notes_runner)
+        self.notes_reader.setParent(self)
+        self._notes_timer = QTimer(self)
+        self._notes_timer.setInterval(notes_poll_ms)
+        self._notes_timer.timeout.connect(self._check_notes)
 
         self._build()
         self._wire()
@@ -207,6 +235,7 @@ class CoachPage(Page):
         self.stack.addWidget(self.chat)  # _CHAT_PAGE
         self.stack.addWidget(self.welcome)  # _WELCOME_PAGE
         self.composer = Composer()
+        self.glance = NotebookGlance(compact=True)
 
         column = QVBoxLayout(self)
         column.setContentsMargins(SPACE_LARGE, SPACE_LARGE, SPACE_LARGE, SPACE_LARGE)
@@ -219,8 +248,16 @@ class CoachPage(Page):
             self.chips,
         ):
             column.addWidget(widget)
-        column.addWidget(self.stack, 1)
-        column.addWidget(self.composer)
+        # The chat and the box to type in on the left, the notes summary on the right.
+        chat_column = QVBoxLayout()
+        chat_column.setSpacing(SPACE)
+        chat_column.addWidget(self.stack, 1)
+        chat_column.addWidget(self.composer)
+        row = QHBoxLayout()
+        row.setSpacing(SPACE)
+        row.addLayout(chat_column, 1)
+        row.addWidget(self.glance, 0, Qt.AlignmentFlag.AlignTop)
+        column.addLayout(row, 1)
 
     def _build_chips(self) -> QWidget:
         """The row of quick-action chips (it wraps onto more rows in a narrow window)."""
@@ -244,6 +281,27 @@ class CoachPage(Page):
         self.sign_in_card.sign_in.connect(lambda: self.navigate.emit("chatgpt"))
         self.composer.submitted.connect(self.send_question)
         self.welcome.chosen.connect(self.use_action)
+        self.glance.open_requested.connect(lambda: self.navigate.emit("notebook"))
+        self.notes_reader.loaded.connect(self._show_notes)
+        self._notes_timer.start()
+
+    # ---- the notes summary beside the chat -------------------------------------------------
+
+    def _check_notes(self) -> None:
+        """Now and then: read the notes again if they changed (only while the page is shown)."""
+        if self.isVisible():
+            self.notes_reader.request(self._notes_key)
+
+    def _show_notes(self, data: object) -> None:
+        """New notes arrived from the background read: redraw the summary card."""
+        if not isinstance(data, NotebookData) or data.character_key != self._notes_key:
+            return  # an old read for another character
+        self.glance.show_summary(summarize(data.character_text, data.player_text))
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt's method name
+        """In a narrow window the chat gets the whole width and the summary steps aside."""
+        super().resizeEvent(event)
+        self.glance.setVisible(self.width() >= GLANCE_MIN_PAGE_WIDTH)
 
     # ---- Page hooks ---------------------------------------------------------------------
 
@@ -259,6 +317,9 @@ class CoachPage(Page):
         self._update_signed_in(state.signed_in)
         self._update_chat(state)
         self._sync_stack()
+        if state.selected != self._notes_key:
+            self._notes_key = state.selected
+            self.notes_reader.request(state.selected)
 
     def on_event(self, kind: str, data: Mapping[str, object]) -> None:
         """React to one live event from the core."""
