@@ -66,7 +66,11 @@ SIGNED_OUT_NOT_CONFIRMED: Final = (
     "from your connected apps."
 )
 BUSY_MESSAGE: Final = (
-    "A sign-in is already open. Finish it in your browser, or wait a minute and try again."
+    "Your earlier sign-in is still open. You can finish it in your browser with the buttons "
+    "below. If you leave it, it expires within 5 minutes, and then you can start again."
+)
+HIDE_TOOLTIP: Final = (
+    "Hide this and go back. The sign-in page in your browser stays valid for a few minutes."
 )
 BROWSER_HINT: Final = (
     "OpenAI shows its own sign-in page in your browser. WoW Coach never sees your password."
@@ -222,8 +226,8 @@ class ChatGPTPage(Page):
         )
         card.body.addWidget(
             make_label(
-                "Nothing opened? Use the buttons below. Changed your mind? Press Cancel and "
-                "just close the browser tab.",
+                "Nothing opened? Use the buttons below. Changed your mind? Press Hide this and "
+                "just close the browser tab. An unfinished sign-in expires after a few minutes.",
                 "small",
             )
         )
@@ -238,12 +242,13 @@ class ChatGPTPage(Page):
             "Copy link", "ghost", "Copy the sign-in link, to paste into another browser."
         )
         self.copy_link_button.clicked.connect(self._copy_sign_in_link)
-        self.cancel_button = make_button("Cancel", "ghost", "Stop waiting and go back.")
-        self.cancel_button.clicked.connect(self._cancel_waiting)
+        # Honest name: the core cannot cancel a running sign-in, this only hides the card.
+        self.hide_button = make_button("Hide this", "ghost", HIDE_TOOLTIP)
+        self.hide_button.clicked.connect(self._hide_waiting)
         row.addWidget(self.open_again_button)
         row.addWidget(self.copy_link_button)
         row.addStretch(1)
-        row.addWidget(self.cancel_button)
+        row.addWidget(self.hide_button)
         card.body.addLayout(row)
         return card
 
@@ -317,9 +322,9 @@ class ChatGPTPage(Page):
         self._signed_in_card.setVisible(signed_in)
         self._waiting_card.setVisible(waiting)
         self._signed_out_card.setVisible(not signed_in and not waiting)
-        self._error_label.setText(self._error)
+        # The button keeps OpenAI's wording; the error and "try again" go above it.
+        self._error_label.setText(f"{self._error} Please try again." if self._error else "")
         self._error_label.setVisible(bool(self._error))
-        self.sign_in_button.setText("Try again" if self._error else SIGN_IN_BUTTON_TEXT)
         self.open_again_button.setEnabled(self._sign_in_url is not None)
         self.copy_link_button.setEnabled(self._sign_in_url is not None)
 
@@ -369,10 +374,12 @@ class ChatGPTPage(Page):
     def _start_sign_in(self) -> None:
         self._error = ""
         self._set_notice("")
-        self._sign_in_url = None
         self._phase = WAITING
-        if not self.bridge.start_sign_in():
-            self._error = ""
+        if self.bridge.start_sign_in():
+            self._sign_in_url = None  # the new sign-in sends its own address
+        else:
+            # An earlier sign-in still runs in the core (up to 5 minutes). Keep its address,
+            # so "Open the sign-in page again" and "Copy link" keep working.
             self._set_notice(BUSY_MESSAGE)
         self._refresh_cards()
 
@@ -385,9 +392,9 @@ class ChatGPTPage(Page):
             QApplication.clipboard().setText(self._sign_in_url)
             self._set_notice("Link copied. Paste it into your browser's address bar.")
 
-    def _cancel_waiting(self) -> None:
+    def _hide_waiting(self) -> None:
+        """Go back to the start. The address is kept: the browser page may still work."""
         self._phase = IDLE
-        self._sign_in_url = None
         self._set_notice("")
         self._refresh_cards()
 
