@@ -91,17 +91,64 @@ itself, while you play. When you close the window, the coach keeps running next 
   **Quit** in the tray icon's menu. Starting WoW Coach again just brings the window back:
   only one copy runs at a time.
 
+## Overlay mode: the coach on top of your game
+
+The overlay shows the coach as a see-through panel over the game, so you can ask a question
+without leaving it. Press one key and it appears with the cursor already in the question
+box. Type, press Enter, read the answer. Press **Esc** or the same key again and it goes away,
+and your game gets the keyboard back.
+
+- **The key:** **Ctrl+Shift+Space** at first. Change it in **Settings → Overlay**. There you
+  can also choose how see-through the panel is (60 to 100 %; 92 % at first).
+- **Other ways in:** the **Overlay** button at the top of the Coach page, and **Show or hide
+  the overlay** in the tray icon's menu.
+- **Move and resize it:** drag the bar at the top to move it; drag its edges or corners to
+  resize it. It remembers its size and place. The first time it opens on the right part of
+  the screen. **Open the full app** (in the bar) closes the overlay and opens the big window.
+- **It is just a window.** The overlay is a normal window of WoW Coach that stays on top of
+  other windows. It never touches the game: it sends no keys to the game, reads nothing from
+  it and does not ask it to do anything. For the game to look right under it, run WoW as a
+  window or borderless window (not true full screen).
+- **It never grabs the keyboard by itself.** It takes the keyboard only when you ask for it
+  (the key, the tray menu or the button). A new answer does not pop it up; the notification
+  and the **Keep on top of the game** card are for that.
+
+### How the key works on your system
+
+| System | What happens |
+|---|---|
+| **Linux** | WoW Coach asks your desktop for the key through the *global shortcuts portal* (the polite way programs ask the desktop to tell them about a key). The first time, KDE shows its own question; say yes. The desktop needs to know the app, so add WoW Coach to your app menu first (**Setup → App menu**). |
+| **Windows** | WoW Coach asks Windows for the key. If another program already uses it, pick a different one in Settings. |
+| **macOS** | There is no global key yet. Use the tray menu or the Overlay button, or the command below. |
+
+### If the key does not work: set it by hand
+
+The command **`wow-coach-app --toggle-overlay`** always works, on every system. It tells the
+running WoW Coach to show or hide the overlay (and starts WoW Coach first if it is not
+running). The **Setup** page has an **Overlay hotkey** card that shows whether the key works
+and, if not, the exact command for your computer with a **Copy command** button. To give the
+command a key:
+
+1. On KDE: open **System Settings → Keyboard → Shortcuts**.
+2. Choose **Add New → Command or Script**.
+3. Paste the command from the Setup card and pick your key (for example Ctrl+Shift+Space).
+
+On other Linux desktops, look for "custom shortcuts" in the keyboard settings and use the same
+command. On Windows, make a shortcut to the command and set its **Shortcut key** in the
+shortcut's Properties.
+
 ## The other pages
 
 - **Settings:** the **Coach tools** (let the coach look things up, search the web, update your
   notebook, and show what it looked up; all on at first), notifications, answering game questions by itself, when the
   coach tells you what changed after the game saves (**Coach on its own**: off, a free
-  notification, or a notification plus advice), and what is shared with the AI. Changes save
+  notification, or a notification plus advice), the **Overlay** key and how see-through it is,
+  and what is shared with the AI. Changes save
   by themselves. More: [the coach window guide](coach-window.md#when-the-game-saves).
 - **ChatGPT:** your sign-in, how many questions you asked in the last hour and day,
   **Manage usage** (your ChatGPT settings), the model, and **Sign out**.
-- **Setup:** the checks above, any time. After changing the game folder, click **Restart WoW
-  Coach**.
+- **Setup:** the checks above, any time, and the **Overlay hotkey** card. After changing the
+  game folder, click **Restart WoW Coach**.
 - **Privacy:** what stays on your computer and what is sent to ChatGPT. The full text:
   [privacy notice](privacy.md).
 

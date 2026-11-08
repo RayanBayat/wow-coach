@@ -8,6 +8,16 @@ All notable changes to this project are written here. The format follows
 
 ### Added
 
+- **Overlay mode: the coach on top of your game.** A key (**Ctrl+Shift+Space** at first)
+  shows or hides the coach as a see-through panel over the game, with the cursor in the
+  question box, so you can ask without leaving the game. Esc or the same key hides it and the
+  game gets the keyboard back. Move and resize it; it remembers its place. Change the key and
+  how see-through it is (60-100 %) in **Settings → Overlay**. It is just a window of WoW Coach:
+  it never touches the game. Also in the tray menu and as an **Overlay** button on the Coach
+  page. The key works by itself on Linux (through the desktop's global-shortcuts portal) and
+  Windows; the command `wow-coach-app --toggle-overlay` works everywhere (on macOS it is the
+  only way), and the Setup page has an **Overlay hotkey** card that shows the exact command
+  to bind by hand. See [the guide](docs/desktop-app.md#overlay-mode-the-coach-on-top-of-your-game).
 - **The coach uses tools, searches the web and shows its sources.** WoW Coach's own coach now
   works like your Claude coach: while it answers it can read your character's status, history
   and notes, look things up on the Warcraft Wiki, search the web and save your notebook (the
