@@ -79,9 +79,10 @@ def _names_from_ps() -> list[str]:
 
 def running_program_names() -> list[str]:
     """The names of the programs running on this computer."""
-    if sys.platform == "win32":
+    platform = sys.platform  # a plain variable, so type checkers keep all three branches
+    if platform == "win32":
         return _names_from_tasklist()
-    if sys.platform == "darwin":
+    if platform == "darwin":
         return _names_from_ps()
     return _names_from_proc()
 
