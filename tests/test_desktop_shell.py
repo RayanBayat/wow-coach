@@ -8,7 +8,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from desktop_support import make_bridge, start_in_another_thread
+from desktop_support import make_bridge, start_second_copy
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtNetwork import QHostInfo, QLocalServer
@@ -147,12 +147,11 @@ unix_sockets_only = pytest.mark.skipif(
 
 def test_the_second_copy_wakes_the_first_and_exits(qtbot: QtBot, tmp_path: Path) -> None:
     first = make_instance(tmp_path)
-    second = make_instance(tmp_path)
     try:
         assert first.claim() is True
-        # The second copy runs in its own thread, like a second program would.
-        result = start_in_another_thread(second.claim)
-        with qtbot.waitSignal(first.show_requested, timeout=3000):
+        # The second copy is a real second program, like when the player starts it again.
+        result = start_second_copy(instance_name(tmp_path), private_environ(tmp_path))
+        with qtbot.waitSignal(first.show_requested, timeout=5000):
             pass
         assert result() is False
     finally:
@@ -165,10 +164,10 @@ def test_the_toggle_message_reaches_the_running_copy(qtbot: QtBot, tmp_path: Pat
         assert first.claim() is True
         shown: list[bool] = []
         first.show_requested.connect(lambda: shown.append(True))
-        result = start_in_another_thread(
-            lambda: make_instance(tmp_path).claim(TOGGLE_OVERLAY_MESSAGE)
+        result = start_second_copy(
+            instance_name(tmp_path), private_environ(tmp_path), TOGGLE_OVERLAY_MESSAGE
         )
-        with qtbot.waitSignal(first.toggle_overlay_requested, timeout=3000):
+        with qtbot.waitSignal(first.toggle_overlay_requested, timeout=5000):
             pass
         assert result() is False
         assert shown == []  # a toggle is not also a "show the window"
@@ -184,16 +183,14 @@ def test_an_unknown_message_does_nothing(qtbot: QtBot, tmp_path: Path) -> None:
         first.show_requested.connect(lambda: seen.append("show"))
         first.toggle_overlay_requested.connect(lambda: seen.append("toggle"))
 
-        def two_more_copies() -> list[bool]:
-            return [
-                make_instance(tmp_path).claim(b"format-the-disk"),
-                make_instance(tmp_path).claim(),  # a real "show" follows
-            ]
-
-        results = start_in_another_thread(two_more_copies)
-        with qtbot.waitSignal(first.show_requested, timeout=3000):
+        name, environ = instance_name(tmp_path), private_environ(tmp_path)
+        unknown = start_second_copy(name, environ, b"format-the-disk")
+        qtbot.wait(1500)  # the unknown message arrives and is ignored
+        assert unknown() is False
+        show = start_second_copy(name, environ)  # a real "show" follows
+        with qtbot.waitSignal(first.show_requested, timeout=5000):
             pass
-        assert results() == [False, False]
+        assert show() is False
         assert seen == ["show"]
     finally:
         first.close()
@@ -208,8 +205,8 @@ def test_the_first_instance_raises_its_window(qtbot: QtBot, tmp_path: Path) -> N
         assert first.claim()
         first.show_requested.connect(window.bring_to_front)
         assert not window.isVisible()
-        result = start_in_another_thread(make_instance(tmp_path).claim)
-        qtbot.waitUntil(window.isVisible, timeout=3000)
+        result = start_second_copy(instance_name(tmp_path), private_environ(tmp_path))
+        qtbot.waitUntil(window.isVisible, timeout=5000)
         assert result() is False
     finally:
         first.close()
@@ -227,8 +224,8 @@ def test_only_one_of_two_copies_gets_the_lock_and_the_winner_keeps_its_socket(
         winner = copies[results.index(True)]
         if sys.platform != "win32":  # on Windows the address is a pipe name, not a file
             assert Path(winner.address).exists()  # the losers did not remove it
-        result = start_in_another_thread(make_instance(tmp_path).claim)
-        with qtbot.waitSignal(winner.show_requested, timeout=3000):
+        result = start_second_copy(instance_name(tmp_path), private_environ(tmp_path))
+        with qtbot.waitSignal(winner.show_requested, timeout=5000):
             pass
         assert result() is False
     finally:

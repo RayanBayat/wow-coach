@@ -5,8 +5,11 @@ Nothing here touches the network, the keychain or a real game folder. Each test 
 window did (``asked``, ``changes``...).
 """
 
-import threading
-from collections.abc import Callable
+import json
+import os
+import subprocess
+import sys
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
@@ -17,32 +20,50 @@ from wow_coach.desktop.bridge import CoreBridge
 KEY = "Testchar-Testrealm"
 
 
-def start_in_another_thread[T](work: Callable[[], T]) -> Callable[[], T]:
-    """Run ``work`` in a second thread; the returned function waits for it and gives the result.
+# The second copy in the one-copy tests: a small separate Python program. It must be a real
+# second program: inside one program, the second copy's waiting would also stop the first copy
+# from answering (Python runs one thread at a time), so the test would only show a timeout.
+_SECOND_COPY_SCRIPT = """
+import json, sys
+from PySide6.QtCore import QCoreApplication
+from wow_coach.desktop.single_instance import SingleInstance
+name, environ, message = sys.argv[1], json.loads(sys.argv[2]), sys.argv[3].encode()
+app = QCoreApplication([])
+print("won" if SingleInstance(name, environ=environ).claim(message) else "told")
+"""
 
-    Two copies of the app are two programs, so the first one keeps answering while the second
-    waits for it. In a test both live in one program: if the second copy waited on the main
-    thread, the first could not answer (on Windows, a named pipe is only served while the
-    event loop runs). So the "second copy" runs in its own thread, and the test lets Qt
-    process events (``qtbot.waitSignal``) before calling the returned function.
+
+def start_second_copy(
+    name: str, environ: Mapping[str, str], message: bytes = b"show"
+) -> Callable[[], bool]:
+    """Start a second copy of the app that sends ``message``; the returned function waits.
+
+    The returned function gives what the second copy's ``claim`` said: True when it won the
+    lock (it would have gone on running), False when it told the running copy and exited.
+    The test lets Qt process events (``qtbot.waitSignal``) before calling it, so the first
+    copy can answer.
     """
-    outcome: list[T] = []
-    errors: list[BaseException] = []
+    child_environ = {**os.environ, "QT_QPA_PLATFORM": "offscreen"}
+    process = subprocess.Popen(  # noqa: S603 - our own interpreter and our own script
+        [
+            sys.executable,
+            "-c",
+            _SECOND_COPY_SCRIPT,
+            name,
+            json.dumps(dict(environ)),
+            message.decode(),
+        ],
+        env=child_environ,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
 
-    def run() -> None:
-        try:
-            outcome.append(work())
-        except BaseException as error:
-            errors.append(error)
-
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
-
-    def wait() -> T:
-        thread.join(timeout=10)
-        if errors:
-            raise errors[0]
-        return outcome[0]
+    def wait() -> bool:
+        out, err = process.communicate(timeout=20)
+        if process.returncode != 0:
+            raise RuntimeError(f"the second copy failed: {err}")
+        return out.strip().endswith("won")
 
     return wait
 

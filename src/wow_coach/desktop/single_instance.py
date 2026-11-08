@@ -35,8 +35,14 @@ _log = logging.getLogger(__name__)
 
 SHOW_MESSAGE: Final = b"show"
 TOGGLE_OVERLAY_MESSAGE: Final = b"toggle-overlay"
+# The running copy answers every message with this, so the second copy knows it arrived
+# before it hangs up. Without the answer, on Windows the message could be lost: the pipe
+# closed before the running copy had read it.
+ANSWER: Final = b"ok"
+KNOWN_MESSAGES: Final = (SHOW_MESSAGE, TOGGLE_OVERLAY_MESSAGE)
 CONNECT_TIMEOUT_MS: Final = 500
-READ_TIMEOUT_MS: Final = 200
+ANSWER_TIMEOUT_MS: Final = 2_000  # how long the second copy waits for "ok"
+MAX_MESSAGE_BYTES: Final = 64  # our messages are a few bytes; anything longer is not ours
 LOCK_FILE_NAME: Final = "instance.lock"
 # A copy that just won the lock needs a moment before it listens. A losing copy asks a few
 # times, so it does not give up too early.
@@ -148,6 +154,8 @@ class SingleInstance(QObject):
         self._lock = QLockFile(str(data_folder(environ=environment) / LOCK_FILE_NAME))
         self._address = socket_address(self._name, environment, platform, fallback_root)
         self._server: QLocalServer | None = None
+        # Connections from second copies that are still open, with what they sent so far.
+        self._talking: dict[QLocalSocket, bytes] = {}
 
     @property
     def address(self) -> str:
@@ -196,6 +204,9 @@ class SingleInstance(QObject):
             socket.write(message)
             socket.flush()
             socket.waitForBytesWritten(CONNECT_TIMEOUT_MS)
+            # Wait for the running copy's "ok" before hanging up (see ANSWER). If it never
+            # comes, the message was most likely still delivered, so this copy exits anyway.
+            socket.waitForReadyRead(ANSWER_TIMEOUT_MS)
             socket.disconnectFromServer()
             return True
         return False
@@ -221,19 +232,41 @@ class SingleInstance(QObject):
     def _on_connection(self) -> None:
         server = self._server
         while server is not None and server.hasPendingConnections():
-            self._handle(server.nextPendingConnection())
+            socket = server.nextPendingConnection()
+            # The message may arrive a moment after the connection: read it when it does,
+            # without blocking the window. Each connection is kept in ``_talking`` until it
+            # closes, and cleaned up exactly once then.
+            self._talking[socket] = b""
+            socket.readyRead.connect(self._on_ready_read)
+            socket.disconnected.connect(self._on_hang_up)
+            if socket.bytesAvailable() > 0:
+                self._read(socket)
 
-    def _handle(self, socket: QLocalSocket) -> None:
-        """Read the one short message of a second copy, act on it and hang up.
+    def _on_ready_read(self) -> None:
+        socket = self.sender()
+        if isinstance(socket, QLocalSocket) and socket in self._talking:
+            self._read(socket)
 
-        The message is a few bytes on this computer only, so waiting a moment for it is
-        harmless and keeps the code simple (no connections to keep track of).
-        """
-        got_data = socket.bytesAvailable() > 0 or socket.waitForReadyRead(READ_TIMEOUT_MS)
-        message = bytes(socket.readAll().data()) if got_data else b""
+    def _on_hang_up(self) -> None:
+        socket = self.sender()
+        if isinstance(socket, QLocalSocket) and socket in self._talking:
+            del self._talking[socket]
+            socket.deleteLater()
+
+    def _read(self, socket: QLocalSocket) -> None:
+        """Read a second copy's message, act on it, answer "ok" and hang up."""
+        received = self._talking[socket] + bytes(socket.readAll().data())
+        self._talking[socket] = received[:MAX_MESSAGE_BYTES]
+        message = self._talking[socket]
+        if message not in KNOWN_MESSAGES:
+            if not any(known.startswith(message) for known in KNOWN_MESSAGES):
+                socket.disconnectFromServer()  # not one of ours: hang up at once
+            return  # else only part of a message so far: wait for the rest
+        self._talking[socket] = b""  # handled: a repeat read must not act twice
         if message == SHOW_MESSAGE:
             self.show_requested.emit()
-        elif message == TOGGLE_OVERLAY_MESSAGE:
+        else:
             self.toggle_overlay_requested.emit()
+        socket.write(ANSWER)
+        socket.flush()
         socket.disconnectFromServer()
-        socket.deleteLater()
