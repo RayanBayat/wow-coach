@@ -6,7 +6,7 @@ from pytestqt.qtbot import QtBot
 from wow_coach.desktop.main_window import MainWindow
 from wow_coach.desktop.run import platform_arguments
 from wow_coach.desktop.state import StateView, read_state
-from wow_coach.desktop.theme import DARK, LIGHT, stylesheet
+from wow_coach.desktop.theme import ASSETS_FOLDER, DARK, LIGHT, asset_url, stylesheet
 
 # ---- the typed state -----------------------------------------------------------------
 
@@ -148,6 +148,20 @@ def test_window_hands_new_state_to_the_pages(qtbot: QtBot) -> None:
 def test_both_color_schemes_make_a_stylesheet() -> None:
     assert DARK.accent in stylesheet(DARK)
     assert LIGHT.accent in stylesheet(LIGHT)
+
+
+def test_every_theme_picture_exists_and_matches_its_colors() -> None:
+    # The pictures are drawn in the theme's own colors, so they must change with the tokens.
+    for colors in (DARK, LIGHT):
+        for picture, color in (
+            ("chevron-down", colors.muted),
+            ("chevron-up", colors.muted),
+            ("check", colors.on_accent),
+        ):
+            name = asset_url(picture, colors).split(":", 1)[1]
+            svg = (ASSETS_FOLDER / name).read_text(encoding="utf-8")
+            assert color in svg, (name, color)
+            assert asset_url(picture, colors) in stylesheet(colors)
 
 
 def test_wayland_with_xwayland_runs_as_an_x11_app_so_keep_on_top_works() -> None:

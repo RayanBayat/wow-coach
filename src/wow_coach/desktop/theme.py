@@ -12,12 +12,17 @@ How to style a widget:
 * Text picks a look the same way: ``label.setProperty("role", "title")``. The roles are
   "title", "subtitle", "muted", "small" and "error".
 * Panels with a background use ``setProperty("role", "card")`` (a ``QFrame``).
+
+The small arrow and check-mark pictures used by drop-downs, number boxes and check boxes are
+SVG files in ``assets/`` (one set per color scheme). Qt finds them through the search path
+``wowcoach:``; ``apply_theme`` sets it up.
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Final
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QDir, Qt
 from PySide6.QtGui import QColor, QFont, QGuiApplication, QPalette
 from PySide6.QtWidgets import QApplication
 
@@ -37,6 +42,10 @@ BASE_FONT_POINTS: Final = 10.5
 FADE_MS: Final = 180  # a new message fading in
 SCROLL_MS: Final = 260  # the chat gliding to the newest message
 PAGE_MS: Final = 140  # switching pages
+
+# The folder with the theme's small pictures, and the name Qt stylesheets use for it.
+ASSETS_FOLDER: Final = Path(__file__).parent / "assets"
+ASSETS_SEARCH_PATH: Final = "wowcoach"
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,6 +68,7 @@ class Colors:
     warning: str
     danger: str
     info: str
+    name: str = "dark"  # "dark" or "light": picks the matching pictures in ``assets/``
 
 
 DARK: Final = Colors(
@@ -97,6 +107,7 @@ LIGHT: Final = Colors(
     warning="#9a6a07",
     danger="#b93a3a",
     info="#2b6fb3",
+    name="light",
 )
 
 
@@ -113,6 +124,7 @@ def apply_theme(app: QApplication) -> Colors:
     (``QGuiApplication.styleHints().colorSchemeChanged``).
     """
     colors = current_colors()
+    QDir.setSearchPaths(ASSETS_SEARCH_PATH, [str(ASSETS_FOLDER)])
     app.setStyle("Fusion")  # the same clean base look on Linux, Windows and macOS
     app.setPalette(_palette(colors))
     font = QFont(app.font())
@@ -143,6 +155,11 @@ def _palette(c: Colors) -> QPalette:
     for role, value in roles.items():
         palette.setColor(role, QColor(value))
     return palette
+
+
+def asset_url(picture: str, c: Colors) -> str:
+    """The stylesheet address of one of the theme's pictures, for example "chevron-down"."""
+    return f"{ASSETS_SEARCH_PATH}:{picture}-{c.name}.svg"
 
 
 def stylesheet(c: Colors) -> str:
@@ -201,9 +218,38 @@ QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QComboBox {{
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus, QComboBox:focus {{
     border-color: {c.accent};
 }}
-QComboBox QAbstractItemView {{ background: {c.surface}; border: 1px solid {c.border}; }}
+QComboBox {{ padding-right: 28px; }}
+QComboBox::drop-down {{
+    subcontrol-origin: padding; subcontrol-position: center right; width: 26px; border: none;
+}}
+QComboBox::down-arrow {{ image: url({asset_url("chevron-down", c)}); width: 12px; height: 12px; }}
+QComboBox QAbstractItemView {{
+    background: {c.surface}; border: 1px solid {c.border}; padding: 4px; outline: none;
+    selection-background-color: {c.surface_raised}; selection-color: {c.accent};
+}}
+
+QSpinBox {{ padding-right: 26px; }}
+QSpinBox::up-button, QSpinBox::down-button {{
+    subcontrol-origin: border; width: 24px; border: none; background: transparent;
+}}
+QSpinBox::up-button {{ subcontrol-position: top right; border-top-right-radius: {RADIUS_SMALL}px; }}
+QSpinBox::down-button {{
+    subcontrol-position: bottom right; border-bottom-right-radius: {RADIUS_SMALL}px;
+}}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {{ background: {c.surface_raised}; }}
+QSpinBox::up-arrow {{ image: url({asset_url("chevron-up", c)}); width: 10px; height: 10px; }}
+QSpinBox::down-arrow {{ image: url({asset_url("chevron-down", c)}); width: 10px; height: 10px; }}
 
 QCheckBox {{ spacing: 8px; }}
+QCheckBox::indicator {{
+    width: 16px; height: 16px; border: 1px solid {c.muted}; border-radius: 5px;
+    background: {c.surface};
+}}
+QCheckBox::indicator:hover {{ border-color: {c.accent}; }}
+QCheckBox::indicator:checked {{
+    background: {c.accent}; border-color: {c.accent}; image: url({asset_url("check", c)});
+}}
+QCheckBox::indicator:disabled {{ border-color: {c.border}; background: {c.surface_raised}; }}
 
 QScrollArea {{ background: transparent; border: none; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
