@@ -69,7 +69,7 @@ itself, while you play. When you close the window, the coach keeps running next 
   the newest answer. Drag it where you like; it remembers the spot. It never takes the
   keyboard away from the game.
 - **Questions from the game:** ask in the game's Coach panel as before. WoW Coach answers
-  within a few seconds, shows the answer, and can notify you or read it aloud. The answer is
+  within a few seconds, shows the answer, and can notify you. The answer is
   also in the Coach panel after your next `/reload`.
 - **Closing the window** keeps the coach running in the tray. To stop it completely, use
   **Quit** in the tray icon's menu. Starting WoW Coach again just brings the window back:
@@ -77,10 +77,9 @@ itself, while you play. When you close the window, the coach keeps running next 
 
 ## The other pages
 
-- **Settings:** notifications, read-aloud, answering game questions by itself, when the
+- **Settings:** notifications, answering game questions by itself, when the
   coach should speak up on its own (when you die, level up, need repairs...), quiet hours,
-  and limits. Changes save by themselves. A limit of **0 means no calls at all**, not "no
-  limit". More about speaking up: [the coach window guide](coach-window.md#when-the-coach-speaks-up-by-itself).
+  and what is shared with the AI. Changes save by themselves. More about speaking up: [the coach window guide](coach-window.md#when-the-coach-speaks-up-by-itself).
 - **ChatGPT:** your sign-in, how many questions you asked in the last hour and day,
   **Manage usage** (your ChatGPT settings), the model, and **Sign out**.
 - **Setup:** the checks above, any time. After changing the game folder, click **Restart WoW

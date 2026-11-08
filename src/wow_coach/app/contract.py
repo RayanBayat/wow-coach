@@ -33,7 +33,3 @@ class Alerts(Protocol):
     def notify(self, title: str, body: str) -> bool:
         """Show a desktop notification; False when this computer can't."""
         ...
-
-    def speak(self, text: str) -> bool:
-        """Read the text aloud; False when this computer can't."""
-        ...

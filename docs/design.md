@@ -371,13 +371,13 @@ ChatGPT plan. The pieces (the plan, the rules and the reasons: `docs/plans/coach
 | Piece | Code | Job |
 |---|---|---|
 | Sign-in | `ai/chatgpt_signin.py`, `keychain.py` | Sign in with ChatGPT: OAuth with PKCE, a one-shot loopback server on 127.0.0.1:1455, the refresh token in the system keychain (never a file), a refresh lock file, revoke on sign-out. Details and what a real sign-in showed: `docs/plans/chatgpt-signin-notes.md` |
-| The plan | `ai/chatgpt_plan.py`, `usage.py` | The Responses API with the plan token (`store: false`, streamed, JSON schema answers). Every attempt is counted in `usage.jsonl` before it is sent, against the player's caps |
+| The plan | `ai/chatgpt_plan.py`, `usage.py` | The Responses API with the plan token (`store: false`, streamed, JSON schema answers). Every attempt is counted in `usage.jsonl` before it is sent (only counted: wow-coach sets no limit of its own, the plan's own limit applies) |
 | The engine | `engine/` | The prompt (coaching rules from the skill, then fenced data blocks: status, history, journal, player notes, conversation, question; about 12 000 tokens at most). The notes are sent section by section, most useful first, and sections about the player's computer never (`engine/notes_digest.py`). Other players' names are replaced with "a player". The answer is JSON (title, steps, text, warnings), written to the Coach panel's file. The conversation is kept per character |
 | Putting it together | `companion.py` | One builder for the CLI and the window: the same keychain entry, usage log and refresh lock. `LiveCoach` reads `settings.json` before every answer |
 | Settings | `app_settings.py` | `settings.json` in the data folder, no secrets. Every value is checked; a damaged file gives the defaults |
 | When to speak | `triggers/` | Two saves give events (death, level-up, quest ready, bags...). The player's rules per event (off, notify, coach), quiet hours, quiet in instances, a cooldown, a timer, and an optional triage step with the smallest plan model. One save never costs more than one unasked AI call |
 | The window | `app/` | A page on 127.0.0.1 (see below), and a watcher that answers the Coach panel's questions and runs the triggers |
-| Alerts | `alerts.py` | Desktop notifications and read-aloud through the system's own programs (`notify-send`, `spd-say` or `espeak-ng`, `osascript` and `say`, PowerShell) |
+| Alerts | `alerts.py` | Desktop notifications through the system's own programs (`notify-send`, `osascript`, PowerShell) |
 
 **The window's safety rules** (`app/server.py`):
 - **Where it listens:** 127.0.0.1 only, on a random port. The Host header must be exactly

@@ -135,13 +135,11 @@ def _text_or_none(value: object) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def usage_counts(counter: CallCounter, settings: AppSettings) -> dict[str, int]:
-    """How many AI calls were made in the last hour and day, with the player's caps."""
+def usage_counts(counter: CallCounter) -> dict[str, int]:
+    """How many AI calls were made in the last hour and day."""
     return {
         "last_hour": counter.calls_in_last(HOUR_SECONDS),
         "last_day": counter.calls_in_last(DAY_SECONDS),
-        "hour_cap": settings.max_calls_per_hour,
-        "day_cap": settings.max_calls_per_day,
     }
 
 
@@ -164,7 +162,7 @@ def build_state(
         "selected": key,
         "answers": answers_for(game, key),
         "open_questions": [question_to_json(q) for q in open_questions_for(game, character)],
-        "usage": usage_counts(counter, settings),
+        "usage": usage_counts(counter),
         "last_save": saved_at(character),
         "character": character_summary(character),
         "alerts": alerts_available,

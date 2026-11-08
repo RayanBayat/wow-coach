@@ -160,19 +160,11 @@ def test_signed_in_shows_the_plan_line_and_manage_usage(qtbot: QtBot, opened: li
     assert opened == ["https://chatgpt.com/settings/usage"]
 
 
-def test_usage_meters_show_the_players_own_caps(qtbot: QtBot) -> None:
-    usage = {"last_hour": 5, "last_day": 40, "hour_cap": 20, "day_cap": 100}
+def test_usage_is_plain_text_without_limits(qtbot: QtBot) -> None:
+    usage = {"last_hour": 5, "last_day": 40}
     page, _bridge, _core = make_page(qtbot, usage=usage)
-    assert page.hour_meter.text.text() == "Last hour: 5 of 20 calls"
-    assert page.hour_meter.bar.maximum() == 20
-    assert page.hour_meter.bar.value() == 5
-    assert page.day_meter.text.text() == "Last day: 40 of 100 calls"
-
-
-def test_a_cap_of_zero_says_no_calls_are_allowed(qtbot: QtBot) -> None:
-    usage = {"last_hour": 0, "last_day": 0, "hour_cap": 0, "day_cap": 100}
-    page, _bridge, _core = make_page(qtbot, usage=usage)
-    assert "limit is 0" in page.hour_meter.text.text()
+    assert page.hour_used.text() == "Questions in the last hour: 5"
+    assert page.day_used.text() == "Questions today: 40"
 
 
 def test_models_load_once_and_recommended_maps_to_no_model(qtbot: QtBot) -> None:

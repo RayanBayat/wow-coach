@@ -252,8 +252,8 @@ function renderChatGpt() {
   }
   const usage = state.usage;
   $("usage-text").textContent =
-    "Calls in the last hour: " + usage.last_hour + " of " + usage.hour_cap +
-    ". Calls in the last day: " + usage.last_day + " of " + usage.day_cap + ".";
+    "Questions in the last hour: " + usage.last_hour +
+    ". Questions in the last day: " + usage.last_day + ".";
 }
 
 function renderSettings() {
@@ -268,7 +268,6 @@ function renderSettings() {
     }
   }
   $("notify-warning").hidden = state.alerts.notify;
-  $("speak-warning").hidden = state.alerts.speak;
 }
 
 function buildTriggerRules() {

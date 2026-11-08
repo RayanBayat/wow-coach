@@ -113,7 +113,7 @@ class ChatGPTPlan:
         Args:
             tokens: Gives access tokens (a ``ChatGPTSignIn``).
             transport: Replaces the real network (tests only).
-            usage_log: When given, every call is checked against the caps and then recorded.
+            usage_log: When given, every call is recorded.
             base_url: The API address (only tests change it).
         """
         self._tokens = tokens
@@ -135,7 +135,7 @@ class ChatGPTPlan:
     ) -> Answer:
         """Send the conversation and return the reply (see ``Provider.ask``)."""
         if self._usage_log is not None:
-            # Checks the caps and counts this ATTEMPT before sending, so a failed call counts too.
+            # Counts this ATTEMPT before sending, so a failed call counts too.
             self._usage_log.begin_call(model)
         body = build_request_body(messages, model=model, json_schema=json_schema)
         limit = max_output_tokens * CHARACTERS_PER_TOKEN

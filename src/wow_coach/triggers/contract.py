@@ -4,8 +4,8 @@ The game only hands data to wow-coach when it saves (/reload, /coach, logout, th
 panel's Ask). Each save is compared with the one before, which gives ``Event``s: you died,
 you levelled up, your bags are almost full... The player decides per kind of event what
 happens (``Mode``): nothing, a notification, or the coach looks at it and gives advice. A
-timer can also ask the coach every N minutes. Cooldowns, quiet times and the plan caps
-always come first, and the default is manual only: the coach only answers when asked.
+timer can also ask the coach every N minutes. Cooldowns and quiet times always
+come first, and the default is manual only: the coach only answers when asked.
 
 An optional small AI step (triage) reads the events and the player's own words ("only wake
 the coach if I die twice in 10 minutes") and decides which events are worth the bigger

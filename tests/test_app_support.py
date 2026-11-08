@@ -158,18 +158,13 @@ class FakeSignIn:
 class FakeAlerts:
     def __init__(self) -> None:
         self.notified: list[tuple[str, str]] = []
-        self.spoken: list[str] = []
 
     def notify(self, title: str, body: str) -> bool:
         self.notified.append((title, body))
         return True
 
-    def speak(self, text: str) -> bool:
-        self.spoken.append(text)
-        return True
-
     def available(self) -> dict[str, bool]:
-        return {"notify": True, "speak": False}
+        return {"notify": True}
 
 
 class FakeUsage:

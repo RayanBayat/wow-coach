@@ -28,7 +28,7 @@ def test_read_state_reads_a_full_state() -> None:
     assert view.selected == KEY
     assert view.answers[0].title == "Train your new spells"
     assert view.answers[0].steps == ("Hearth to Brill", "Visit the mage trainer")
-    assert view.usage.hour_cap == 30
+    assert view.usage.last_hour == 1
     assert view.last_save == 1_000
 
 
