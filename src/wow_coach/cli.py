@@ -14,13 +14,14 @@ import time
 from collections.abc import Callable, Sequence
 from pathlib import Path
 
+from wow_coach.characters import pick_character
 from wow_coach.check import run_check
 from wow_coach.config import config_path
 from wow_coach.errors import WowCoachError
 from wow_coach.gamedir import resolve_game_folder
 from wow_coach.report import format_history, format_progress, format_status
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
-from wow_coach.server import format_character_list, pick_character
+from wow_coach.server import format_character_list
 from wow_coach.server import main as run_mcp_server
 from wow_coach.setup import SetupChoices, SetupWorld, run_setup
 from wow_coach.watch import watch

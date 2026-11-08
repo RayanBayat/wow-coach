@@ -23,6 +23,7 @@ from mcp.types import ToolAnnotations
 from wow_coach.advice.contract import ADVICE_ADDON_NAME, ADVICE_FILE_NAME
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.advice.tools import answer_questions_from_game, answer_send_advice_to_game
+from wow_coach.characters import pick_character, snapshot_time
 from wow_coach.config import config_path
 from wow_coach.errors import WowCoachError
 from wow_coach.gamedir import resolve_game_folder
@@ -64,30 +65,6 @@ SERVER_INSTRUCTIONS = (
 logger = logging.getLogger(__name__)
 
 
-def _snapshot_time(character: Character) -> float:
-    """When the character's snapshot was saved (0 if unknown)."""
-    saved_at = character.snapshot.get("savedAt")
-    return float(saved_at) if isinstance(saved_at, (int, float)) else 0.0
-
-
-def pick_character(characters: dict[str, Character], wanted: str | None) -> Character | None:
-    """Choose a character: the newest snapshot by default, else a case-insensitive match.
-
-    ``wanted`` may be the bare name (``Testchar``) or the full key (``Testchar-Testrealm``).
-    Returns None when nothing matches.
-    """
-    if not characters:
-        return None
-    if wanted is None:
-        return max(characters.values(), key=_snapshot_time)
-    wanted_lower = wanted.strip().lower()
-    for character in characters.values():
-        bare_name = character.key.split("-", 1)[0]
-        if wanted_lower in (character.key.lower(), bare_name.lower()):
-            return character
-    return None
-
-
 def advice_file_path(wow_dir: Path) -> Path:
     """Where wow-coach writes the Coach panel's answers (the CoachLink_Advice addon)."""
     return wow_dir / "Interface" / "AddOns" / ADVICE_ADDON_NAME / ADVICE_FILE_NAME
@@ -124,7 +101,7 @@ def _unknown_character_message(wanted: str | None, characters: dict[str, Charact
 def _character_description(character: Character, now: float, journal_file: Path) -> str:
     """One line: ``Name-Realm: level 8 Undead Mage, Zone, last played 5 min ago, goal: ...``."""
     snap = character.snapshot
-    saved_at = _snapshot_time(character)
+    saved_at = snapshot_time(character)
     age = format_age(now - saved_at) if saved_at else "at an unknown time"
     kind = " ".join(str(snap[key]) for key in ("race", "class") if key in snap)
     if journal_file.is_file():
@@ -142,7 +119,7 @@ def format_character_list(
     characters: dict[str, Character], now: float, environ: Mapping[str, str]
 ) -> str:
     """One line per character, most recently played first (empty text if there are none)."""
-    newest_first = sorted(characters.values(), key=_snapshot_time, reverse=True)
+    newest_first = sorted(characters.values(), key=snapshot_time, reverse=True)
     return "\n".join(
         _character_description(character, now, journal_path(character.key, environ=environ))
         for character in newest_first

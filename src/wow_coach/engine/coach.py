@@ -26,6 +26,7 @@ from wow_coach.advice.reader import read_advice_file
 from wow_coach.advice.writer import interface_from_coachlink, update_advice
 from wow_coach.ai.base import Provider
 from wow_coach.app_settings import AppSettings
+from wow_coach.characters import pick_character
 from wow_coach.engine.answer import ANSWER_SCHEMA, parse_answer
 from wow_coach.engine.contract import CoachReply
 from wow_coach.engine.conversation import Turn, append_turns, conversation_path, load_turns
@@ -35,7 +36,6 @@ from wow_coach.errors import WowCoachError
 from wow_coach.notes import journal_path, notes_path
 from wow_coach.report import format_history, format_status
 from wow_coach.savedvars import Character, find_saved_variables, load_characters
-from wow_coach.server import pick_character
 
 MAX_OUTPUT_TOKENS: Final = 800
 HISTORY_EVENTS: Final = 10
