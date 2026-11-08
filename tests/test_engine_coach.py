@@ -255,3 +255,60 @@ def test_error_midway_keeps_the_questions_already_answered(tmp_path: Path) -> No
     assert advice is not None
     assert advice.characters[KEY].answered_ids == ("1793899900-1",)
     assert SAVE  # the save itself is untouched
+
+
+# ---- failed writes, remembered names, private notes ---------------------------------
+
+
+def block_the_advice_folder(world: World) -> None:
+    """Make writing Advice.lua fail: a plain file sits where the folder should be."""
+    blocker = world.wow_dir / "Interface" / "AddOns" / "CoachLink_Advice"
+    blocker.write_text("a file, not a folder", encoding="utf-8")
+
+
+def save_with_questions(world: World, count: int) -> None:
+    lines = "".join(
+        f'{{ ["id"] = "{1793899900 + n}-{n}", ["text"] = "Question {n}?", '
+        f'["askedAt"] = {1793899900 + n} }},\n'
+        for n in range(1, count + 1)
+    )
+    start = SAVE.index('["questions"] = {') + len('["questions"] = {\n')
+    end = SAVE.index("},\n},\n},\n}", start)
+    text = SAVE[:start] + lines + SAVE[end + 3 :]
+    save = world.wow_dir / "WTF" / "Account" / "ACCOUNT1" / "SavedVariables" / "CoachLink.lua"
+    save.write_text(text, encoding="utf-8")
+
+
+def test_unwritable_advice_does_not_make_old_questions_open_again(tmp_path: Path) -> None:
+    world = make_world(tmp_path)
+    block_the_advice_folder(world)
+    provider = FakeProvider([GOOD_REPLY] * 6)
+    coach = coach_for(world, provider)
+    for count in (1, 2, 3):  # three saves, one new question each
+        save_with_questions(world, count)
+        replies = coach.answer_open_questions()
+        assert len(replies) == 1
+        assert not replies[0].written_to_game
+    assert len(provider.requests) == 3
+
+
+def test_names_that_left_the_save_stay_hidden(tmp_path: Path) -> None:
+    world = make_world(tmp_path)
+    provider = FakeProvider([GOOD_REPLY, GOOD_REPLY])
+    coach = coach_for(world, provider)
+    coach.ask("first")  # Bobby is in the group here
+    save = world.wow_dir / "WTF" / "Account" / "ACCOUNT1" / "SavedVariables" / "CoachLink.lua"
+    save.write_text(SAVE.replace('["name"] = "Bobby"', '["name"] = "Someone"'), encoding="utf-8")
+    coach.ask("Tell me about Bobby, who was in my old group.")
+    assert "Bobby" not in prompt_text(provider, 1)
+
+
+def test_coach_notes_are_left_out_when_the_player_says_so(tmp_path: Path) -> None:
+    world = make_world(tmp_path)
+    notes = Path(world.environ["WOW_COACH_DATA_DIR"]) / "coach-notes.md"
+    notes.parent.mkdir(parents=True, exist_ok=True)
+    notes.write_text("PLAYER-NOTE-TEXT", encoding="utf-8")
+    for send, expected in ((True, True), (False, False)):
+        provider = FakeProvider([GOOD_REPLY])
+        coach_for(world, provider, AppSettings(send_coach_notes=send)).ask("hi")
+        assert ("PLAYER-NOTE-TEXT" in prompt_text(provider)) is expected
