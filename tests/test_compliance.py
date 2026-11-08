@@ -166,3 +166,26 @@ def test_the_lua_scan_finds_a_forbidden_call(tmp_path: Path) -> None:
     assert re.search(r"(?<![\w])CastSpellByName\s*\(", code)
     assert not re.search(r"(?<![\w])SendChatMessage\s*\(", code)
     assert not re.search(r"(?<![\w])RunMacro\s*\(", code)
+
+
+def _uses_a_shell(path: Path) -> list[int]:
+    """Lines that call something with shell=True (text could then run as a command)."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return [
+        node.lineno
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        for keyword in node.keywords
+        if keyword.arg == "shell"
+        and not (isinstance(keyword.value, ast.Constant) and keyword.value.value is False)
+    ]
+
+
+@pytest.mark.parametrize("path", PYTHON_FILES, ids=lambda path: path.name)
+def test_no_program_is_ever_run_through_a_shell(path: Path) -> None:
+    # Notifications and read-aloud pass AI text to system programs. As a list of
+    # arguments that text is only text; through a shell it could become a command.
+    lines = _uses_a_shell(path)
+    assert not lines, f"{path.name} uses shell=True on line(s) {lines}"
+    text = path.read_text(encoding="utf-8")
+    assert "os.system(" not in text and "os.popen(" not in text, f"{path.name} runs a shell"
