@@ -13,7 +13,7 @@ facts. Users' docs start at `README.md`.
 |---|---|
 | `addon/CoachLink/` | The WoW addon (Lua 5.1): `CoachLink.toc`, `CoachLink.lua` |
 | `addon/tests/run_addon_test.lua` | Runs the addon against a fake WoW API |
-| `src/wow_coach/` | Python package: Lua-table parser, saved-file finder and loader, report, `cli`, `watch`, `notes`, saved settings (`config`, `datafolder`), `setup` (the `wow-coach setup` command), packaged-file reader (`assets`), MCP `server`; game lookups: `web` (polite fetcher), `wiki` (search and read tools), `wikitext` (wiki markup to plain text) |
+| `src/wow_coach/` | Python package: Lua-table parser, saved-file finder and loader, report (`report*.py`, incl. `report_gear_hints`), `cli`, `watch`, `notes`, saved settings (`config`, `datafolder`), `setup` (the `wow-coach setup` command), packaged-file reader (`assets`), MCP `server`; game lookups: `web` (polite fetcher), `wiki` (search and read tools), `wikitext` (wiki markup to plain text) |
 | `tests/` | pytest. `test_addon_contract.py` runs the Lua test and reads its output with the Python code. `tests/fixtures/wiki/` holds real wiki responses; tests never use the network |
 | `src/wow_coach/assets/` | Claude files shipped inside the package so `wow-coach setup` can copy them: `skills/wow-coach/SKILL.md` (the Agent Skill; folder name must equal `name`) and `agents/wow-coach.md` (the Claude Code agent) |
 | `docs/` | User guides, `design.md` (how it works), `troubleshooting.md`, `glossary.md` |

@@ -128,6 +128,15 @@ game's words (`"Armor"`/`"Cloth"`, `"Tradeskill"`/`"Cloth"`); `equipSlot` (`"Che
 `stats` (a list of strings like `"+3 Stamina"`) only exist for things you can wear;
 `sellPrice` is copper for one item; `noValue` means vendors won't buy it.
 
+**Gear hints.** The report's "Gear hints" section (right after the bags; Python only, in
+`report_gear_hints.py`, nothing new is saved) compares bag items with the character. It
+lists armor and weapons whose type has no matching `Armor Proficiencies` or `Weapon Skills`
+line in `professions` (skipped when the save has no such lines), and "possible upgrades":
+a usable item whose `equipSlot` maps to a worn slot that is empty, holds a lower item
+level, or holds a gray item. Rings and trinkets are compared with the weaker worn one;
+one-hand, two-hand and main-hand weapons with the main hand. The section is only a hint:
+the coach makes the final call, and it is left out when there is nothing to say.
+
 **Remembered fields.** The bank, the mailbox and the recipe lists can only be read while
 that window is open, and play time only arrives when the player types `/played`. The addon
 reads them at that moment and copies the last thing it saw (with `seenAt`, Unix time) into

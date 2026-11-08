@@ -278,3 +278,33 @@ def test_old_snapshot_without_category_dedupes_by_name() -> None:
     text = format_status(snapshot, now=NOW)
     assert "**Professions:**\n- Mining: 3/75\n- Defense: 36/40" in text
     assert "Weapon skills" not in text
+
+
+def test_full_report_shows_gear_hints_after_the_bags() -> None:
+    snapshot: Table = {
+        **FULL,
+        "professions": [
+            {"name": "Cloth", "rank": 1, "maxRank": 1, "category": "Armor Proficiencies"}
+        ],
+        "bags": {
+            "free": 10,
+            "total": 16,
+            "containers": [
+                {
+                    "bag": 0,
+                    "items": [
+                        {
+                            "name": "Heavy Helm",
+                            "type": "Armor",
+                            "subType": "Plate",
+                            "equipSlot": "Head",
+                            "itemLevel": 9,
+                        }
+                    ],
+                }
+            ],
+        },
+    }
+    text = format_status(snapshot, now=NOW)
+    assert text.index("**Bags:**") < text.index("**Gear hints**")
+    assert "Can't use: Heavy Helm" in text
