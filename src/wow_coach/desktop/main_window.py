@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
 
         for page in self.pages:
             self._stack.addWidget(page)
+            page.navigate.connect(self.show_page)
         if self.pages:
             self.show_page(self.pages[0].name)
 

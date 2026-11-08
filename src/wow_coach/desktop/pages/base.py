@@ -5,12 +5,15 @@ A page is one screen on the right of the sidebar (the Coach chat, Settings...). 
 * gets the ``CoreBridge`` and does every action through it;
 * redraws itself in ``show_state`` (called after every change, so keep it quick);
 * may react to single live events in ``on_event`` (for example "an answer arrived");
-* may restyle custom-painted parts in ``on_theme_changed`` (light or dark mode changed).
+* may restyle custom-painted parts in ``on_theme_changed`` (light or dark mode changed);
+* may ask the window to show another page by emitting ``navigate`` with that page's name
+  (for example a "Sign in" button on the Coach page emits ``navigate("chatgpt")``).
 """
 
 from collections.abc import Mapping
 from typing import ClassVar
 
+from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QWidget
 
 from wow_coach.desktop.bridge import CoreBridge
@@ -22,6 +25,9 @@ class Page(QWidget):
 
     name: ClassVar[str] = ""  # a short id, for example "coach"
     title: ClassVar[str] = ""  # the label in the sidebar, for example "Coach"
+
+    # Emit with a page's name to switch to that page.
+    navigate = Signal(str)
 
     def __init__(self, bridge: CoreBridge, parent: QWidget | None = None) -> None:
         super().__init__(parent)

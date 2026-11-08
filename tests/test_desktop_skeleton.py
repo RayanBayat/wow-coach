@@ -121,6 +121,16 @@ def test_window_lists_every_page_and_switches_between_them(qtbot: QtBot) -> None
     assert page.name == "settings"
 
 
+def test_a_page_can_ask_the_window_to_show_another_page(qtbot: QtBot) -> None:
+    bridge, _core = make_bridge()
+    window = MainWindow(bridge)
+    qtbot.addWidget(window)
+    window.pages[0].navigate.emit("chatgpt")
+    page = window.current_page()
+    assert page is not None
+    assert page.name == "chatgpt"
+
+
 def test_window_hands_new_state_to_the_pages(qtbot: QtBot) -> None:
     seen: list[StateView] = []
     bridge, _core = make_bridge()
