@@ -3,7 +3,8 @@
 The file is split in two layers:
 
 * ``answer_*`` functions do the work (find file, load, format) and return plain text.
-  They take ``wow_dir`` and ``now`` as arguments, so tests can call them directly.
+  They live in ``wow_coach.tools.answers`` (and ``wow_coach.wiki``), shared with wow-coach's
+  own coach, and take ``wow_dir`` and ``now`` as arguments, so tests can call them directly.
 * ``build_server`` wraps them in thin MCP tools. The tool docstrings are what
   Claude reads when deciding which tool to call.
 
@@ -23,21 +24,23 @@ from mcp.types import ToolAnnotations
 from wow_coach.advice.paths import advice_file_path
 from wow_coach.advice.reader import read_advice_file
 from wow_coach.advice.tools import answer_questions_from_game, answer_send_advice_to_game
-from wow_coach.characters import pick_character, snapshot_time
+from wow_coach.characters import pick_character
 from wow_coach.config import config_path
 from wow_coach.errors import WowCoachError
 from wow_coach.gamedir import resolve_game_folder
-from wow_coach.notes import (
-    PLAYER_NOTES_MISSING,
-    journal_goal,
-    journal_missing_message,
-    journal_path,
-    notes_path,
-    read_notes,
-    save_notes,
+from wow_coach.notes import journal_path, notes_path
+from wow_coach.savedvars import Character
+from wow_coach.tools.answers import (
+    answer_character_status,
+    answer_list_characters,
+    answer_progress_summary,
+    answer_read_notes,
+    answer_recent_history,
+    answer_save_notes,
+    format_character_list,
+    load_all,
+    unknown_character_message,
 )
-from wow_coach.report import format_age, format_history, format_progress, format_status
-from wow_coach.savedvars import Character, find_saved_variables, load_characters
 from wow_coach.web import Fetch, PoliteFetcher, build_user_agent
 from wow_coach.wiki import (
     DEFAULT_MAX_CHARS,
@@ -69,136 +72,6 @@ def _saved_at(character: Character) -> int | None:
     """The snapshot's savedAt as a whole number, or None."""
     value = character.snapshot.get("savedAt")
     return int(value) if isinstance(value, (int, float)) else None
-
-
-def _load_all(wow_dir: Path) -> dict[str, Character] | str:
-    """Load every character, or return a friendly error message instead."""
-    try:
-        return load_characters(find_saved_variables(wow_dir))
-    except WowCoachError as error:
-        logger.warning("Could not load CoachLink data: %s", error)
-        return str(error)
-    except OSError as error:
-        logger.warning("Could not read CoachLink data: %s", error)
-        return f"Could not read the CoachLink file: {error}"
-
-
-def _known_names(characters: dict[str, Character]) -> str:
-    return ", ".join(sorted(characters)) or "(none)"
-
-
-def _unknown_character_message(wanted: str | None, characters: dict[str, Character]) -> str:
-    if not characters:
-        return "The CoachLink file contains no characters yet. Type /coach in game."
-    return f"No character matches {wanted!r}. Known characters: {_known_names(characters)}"
-
-
-def _character_description(character: Character, now: float, journal_file: Path) -> str:
-    """One line: ``Name-Realm: level 8 Undead Mage, Zone, last played 5 min ago, goal: ...``."""
-    snap = character.snapshot
-    saved_at = snapshot_time(character)
-    age = format_age(now - saved_at) if saved_at else "at an unknown time"
-    kind = " ".join(str(snap[key]) for key in ("race", "class") if key in snap)
-    if journal_file.is_file():
-        goal = journal_goal(journal_file)
-        journal = f"goal: {goal}" if goal else "journal has no goal yet"
-    else:
-        journal = "no journal yet"
-    return (
-        f"- {character.key}: level {snap.get('level', '?')} {kind or '?'}, "
-        f"{snap.get('zone', 'unknown zone')}, last played {age}, {journal}"
-    )
-
-
-def format_character_list(
-    characters: dict[str, Character], now: float, environ: Mapping[str, str]
-) -> str:
-    """One line per character, most recently played first (empty text if there are none)."""
-    newest_first = sorted(characters.values(), key=snapshot_time, reverse=True)
-    return "\n".join(
-        _character_description(character, now, journal_path(character.key, environ=environ))
-        for character in newest_first
-    )
-
-
-def answer_list_characters(wow_dir: Path, now: float, environ: Mapping[str, str]) -> str:
-    """Text for the ``list_characters`` tool: most recently played first."""
-    loaded = _load_all(wow_dir)
-    if isinstance(loaded, str):
-        return loaded
-    if not loaded:
-        return "The CoachLink file contains no characters yet. Type /coach in game."
-    return format_character_list(loaded, now, environ)
-
-
-def answer_character_status(wow_dir: Path, character: str | None, now: float) -> str:
-    """Text for the ``character_status`` tool."""
-    loaded = _load_all(wow_dir)
-    if isinstance(loaded, str):
-        return loaded
-    chosen = pick_character(loaded, character)
-    if chosen is None:
-        return _unknown_character_message(character, loaded)
-    return format_status(chosen.snapshot, now=now)
-
-
-def answer_recent_history(wow_dir: Path, character: str | None, limit: int, now: float) -> str:
-    """Text for the ``recent_history`` tool."""
-    loaded = _load_all(wow_dir)
-    if isinstance(loaded, str):
-        return loaded
-    chosen = pick_character(loaded, character)
-    if chosen is None:
-        return _unknown_character_message(character, loaded)
-    return format_history(chosen.history, limit=max(limit, 1), now=now)
-
-
-def answer_progress_summary(wow_dir: Path, character: str | None, days: int, now: float) -> str:
-    """Text for the ``progress_summary`` tool."""
-    loaded = _load_all(wow_dir)
-    if isinstance(loaded, str):
-        return loaded
-    chosen = pick_character(loaded, character)
-    if chosen is None:
-        return _unknown_character_message(character, loaded)
-    return format_progress(chosen.progress, chosen.history, days=days, now=now)
-
-
-def _read_file_or_explain(path: Path, missing_message: str) -> str:
-    """The file's text, the missing message, or a sentence about why it can't be read."""
-    try:
-        return read_notes(path, missing_message=missing_message)
-    except OSError as error:
-        return f"Could not read {path}: {error}"
-
-
-def answer_read_notes(player_file: Path, journal_file: Path | None, character_key: str) -> str:
-    """Text for the ``read_coach_notes`` tool: the player notes, then the character journal.
-
-    ``journal_file`` is None when the character could not be found; ``character_key`` then
-    holds the explanation instead of a name.
-    """
-    player = _read_file_or_explain(player_file, PLAYER_NOTES_MISSING)
-    if journal_file is None:
-        journal = character_key
-        heading = "# Character journal"
-    else:
-        journal = _read_file_or_explain(journal_file, journal_missing_message(character_key))
-        heading = f"# Character journal: {character_key}"
-    return f"# Player notes (shared by all characters)\n\n{player}\n\n---\n\n{heading}\n\n{journal}"
-
-
-def answer_save_notes(notes_file: Path, text: str, what: str) -> str:
-    """Text for the two save tools (errors become messages the AI can act on).
-
-    ``what`` names the kind of notes in the confirmation, for example ``"journal"``.
-    """
-    try:
-        return save_notes(notes_file, text, what=what)
-    except WowCoachError as error:
-        return str(error)
-    except OSError as error:
-        return f"Could not save the {what} to {notes_file}: {error}"
 
 
 def build_server(
@@ -244,11 +117,11 @@ def build_server(
         folder = game_folder()
         if isinstance(folder, str):
             return folder
-        loaded = _load_all(folder)
+        loaded = load_all(folder)
         if isinstance(loaded, str):
             return loaded
         chosen = pick_character(loaded, wanted)
-        return chosen if chosen is not None else _unknown_character_message(wanted, loaded)
+        return chosen if chosen is not None else unknown_character_message(wanted, loaded)
 
     @server.tool(annotations=read_only)
     def list_characters() -> str:
@@ -503,3 +376,20 @@ def main(wow_dir_flag: Path | None = None) -> None:
     """Entry point: run the server over stdio."""
     logging.basicConfig(level=logging.INFO, stream=sys.stderr)
     build_server(wow_dir_flag).run(transport="stdio")
+
+
+__all__ = [
+    "SERVER_INSTRUCTIONS",
+    "SERVER_NAME",
+    "advice_file_path",
+    "answer_character_status",
+    "answer_list_characters",
+    "answer_progress_summary",
+    "answer_read_notes",
+    "answer_recent_history",
+    "answer_save_notes",
+    "build_server",
+    "format_character_list",
+    "main",
+    "pick_character",
+]

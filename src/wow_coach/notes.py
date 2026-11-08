@@ -21,7 +21,9 @@ package as a dependency.
 """
 
 import re
+import time
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from pathlib import Path
 
 from wow_coach.datafolder import data_folder
@@ -29,6 +31,8 @@ from wow_coach.errors import NotesTooLarge
 
 NOTES_FILE_VARIABLE = "WOW_COACH_NOTES_FILE"
 MAX_NOTES_BYTES = 100 * 1024
+MAX_BACKUPS = 20  # how many earlier versions of one notes file are kept
+HISTORY_FOLDER = ".history"  # next to the notes file; holds the earlier versions
 _FILE = "coach-notes.md"
 _JOURNAL_FOLDER = "characters"
 
@@ -108,13 +112,62 @@ def read_notes(path: Path, *, missing_message: str = PLAYER_NOTES_MISSING) -> st
     return path.read_text(encoding="utf-8")
 
 
-def save_notes(path: Path, text: str, *, what: str = "player notes") -> str:
+def _backup_name_pattern(stem: str) -> re.Pattern[str]:
+    """Matches the backup names of ``stem``: ``<stem>-20261108-153000[-2].md``."""
+    return re.compile(rf"{re.escape(stem)}-(\d{{8}}-\d{{6}})(?:-(\d+))?\.md")
+
+
+def _keep_previous_version(path: Path, new_text: str, now: float) -> None:
+    """Copy the current file into ``.history/`` before it is overwritten.
+
+    Why: the AI replaces a whole notes file in one go. If it saves something bad (a short
+    or confused text), the player can still find the earlier version here. Only the newest
+    ``MAX_BACKUPS`` versions of each file are kept, so the folder never grows without end.
+    Nothing is copied when the file is new or the text does not change.
+    """
+    if not path.is_file():
+        return
+    old_text = path.read_text(encoding="utf-8")
+    if old_text == new_text:
+        return
+    folder = path.parent / HISTORY_FOLDER
+    folder.mkdir(exist_ok=True)
+    stamp = datetime.fromtimestamp(now, tz=UTC).strftime("%Y%m%d-%H%M%S")
+    target = folder / f"{path.stem}-{stamp}.md"
+    counter = 2  # two saves in the same second get -2, -3, ... so none is lost
+    while target.exists():
+        target = folder / f"{path.stem}-{stamp}-{counter}.md"
+        counter += 1
+    target.write_text(old_text, encoding="utf-8")
+    _forget_old_versions(folder, path.stem)
+
+
+def _forget_old_versions(folder: Path, stem: str) -> None:
+    """Delete the oldest backups of ``stem`` until only ``MAX_BACKUPS`` are left."""
+    pattern = _backup_name_pattern(stem)
+    found: list[tuple[str, int, Path]] = []
+    for candidate in folder.iterdir():
+        match = pattern.fullmatch(candidate.name)
+        if match:
+            found.append((match.group(1), int(match.group(2) or 1), candidate))
+    found.sort()  # oldest first: by time stamp, then by the same-second counter
+    for _stamp, _counter, old in found[:-MAX_BACKUPS]:
+        old.unlink()
+
+
+def save_notes(
+    path: Path, text: str, *, what: str = "player notes", now: float | None = None
+) -> str:
     """Replace the file with ``text`` and return a confirmation naming it.
+
+    The version being replaced is first kept in a ``.history`` folder next to the file
+    (newest ``MAX_BACKUPS`` versions), so a bad save can always be undone.
 
     Args:
         path: The file to write (its folders are created).
         text: The complete new content.
         what: Words for the confirmation, for example ``"player notes"``.
+        now: The time for the backup's name (seconds since 1970; default: the real time).
 
     Raises:
         NotesTooLarge: If the text is bigger than 100 KB.
@@ -126,6 +179,7 @@ def save_notes(path: Path, text: str, *, what: str = "player notes") -> str:
             "Shorten them (keep what matters) and save again."
         )
     path.parent.mkdir(parents=True, exist_ok=True)
+    _keep_previous_version(path, text, time.time() if now is None else now)
     path.write_text(text, encoding="utf-8")
     return f"Saved {size} bytes of {what} to {path}."
 
